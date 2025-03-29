@@ -1,16 +1,16 @@
-use serde::Serialize;
 use derive_new::new;
+use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Serialize)]
 #[allow(non_camel_case_types)]
 pub enum Role {
     user,
     developer,
-    assistant,
+    model,
 }
 
-#[derive(Serialize)]
-#[derive(new)]
+#[derive(Serialize, new)]
 pub struct InlineData<'a> {
     mime_type: &'a str,
     data: &'a str,
@@ -23,15 +23,15 @@ pub enum Part<'a> {
     inline_data(InlineData<'a>),
 }
 
-#[derive(Serialize)]
-#[derive(new)]
+#[derive(Serialize, new)]
 pub struct Chat<'a> {
     role: Role,
     parts: &'a [Part<'a>],
 }
 
-#[derive(Serialize)]
-#[derive(new)]
+#[derive(Serialize, new)]
 pub struct GeminiBody<'a> {
     contents: &'a [Chat<'a>],
+    system_instruction: Option<&'a [Part<'a>]>,
+    generation_config: Option<&'a Value>,
 }
