@@ -9,11 +9,15 @@ pub struct Gemini<'a> {
     client: Client,
     api_key: &'a str,
     model: &'a str,
-    sys_prompt: Option<&'a [Part<'a>]>,
+    sys_prompt: Option<SystemInstruction<'a>>,
     generation_config: Option<Value>,
 }
 impl<'a> Gemini<'a> {
-    pub fn new(api_key: &'a str, model: &'a str, sys_prompt: Option<&'a [Part<'a>]>) -> Gemini<'a> {
+    pub fn new(
+        api_key: &'a str,
+        model: &'a str,
+        sys_prompt: Option<SystemInstruction<'a>>,
+    ) -> Gemini<'a> {
         Self {
             client: Client::builder().timeout(Duration::from_secs(30)).finish(),
             api_key,
@@ -49,8 +53,8 @@ impl<'a> Gemini<'a> {
             .client
             .post(req_url)
             .send_json(&GeminiBody::new(
+                self.sys_prompt.as_ref(),
                 &[Chat::new(Role::user, &[Part::text(question)])],
-                self.sys_prompt,
                 self.generation_config.as_ref(),
             ))
             .await?
@@ -64,7 +68,7 @@ impl<'a> Gemini<'a> {
     }
     pub fn get_response_json(response: &Value) -> Result<Value, serde_json::Error> {
         let string = response["candidates"][0]["content"]["parts"][0]["text"].to_string();
-        let unescaped_str = string.replace("\\\"", "\"");
+        let unescaped_str = string.replace("\\\"", "\"").replace("\\n", "\n");
         serde_json::from_str(&unescaped_str[1..unescaped_str.len() - 1])
     }
 }

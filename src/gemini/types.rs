@@ -30,8 +30,13 @@ pub struct Chat<'a> {
 }
 
 #[derive(Serialize, new)]
+pub struct SystemInstruction<'a> {
+    parts: &'a [Part<'a>],
+}
+
+#[derive(Serialize, new)]
 pub struct GeminiBody<'a> {
+    system_instruction: Option<&'a SystemInstruction<'a>>,
     contents: &'a [Chat<'a>],
-    system_instruction: Option<&'a [Part<'a>]>,
     generation_config: Option<&'a Value>,
 }
