@@ -63,12 +63,17 @@ impl<'a> Gemini<'a> {
 
         Ok(response)
     }
-    pub fn get_response_string(response: &Value) -> String {
-        response["candidates"][0]["content"]["parts"][0]["text"].to_string()
+    pub fn get_response_string(response: &Value) -> Result<&str, String> {
+        response["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .ok_or(format!("Failed to get_response_json from: {:#?}", response))
     }
-    pub fn get_response_json(response: &Value) -> Result<Value, serde_json::Error> {
-        let string = response["candidates"][0]["content"]["parts"][0]["text"].to_string();
+    pub fn get_response_json(response: &Value) -> Result<Value, String> {
+        let string = response["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .ok_or(format!("Failed to get_response_json from: {:#?}", response))?;
         let unescaped_str = string.replace("\\\"", "\"").replace("\\n", "\n");
-        serde_json::from_str(&unescaped_str[1..unescaped_str.len() - 1])
+        serde_json::from_str::<Value>(&unescaped_str)
+            .map_err(|_| format!("Response has invalid JSON: {:#?}", unescaped_str))
     }
 }

@@ -12,7 +12,7 @@ async fn ask_string() {
     .ask_string("Hi")
     .await
     .unwrap();
-    println!("{}", Gemini::get_response_string(&response));
+    println!("{}", Gemini::get_response_string(&response).unwrap());
 }
 
 #[actix_web::test]
