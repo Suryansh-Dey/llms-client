@@ -1,5 +1,5 @@
-use llms_client::gemini::ask::Gemini;
-use llms_client::gemini::types::{Part, SystemInstruction};
+use crate::gemini::ask::Gemini;
+use crate::gemini::types::{Part, SystemInstruction};
 use serde_json::json;
 
 #[actix_web::test]
@@ -12,7 +12,7 @@ async fn ask_string() {
     .ask_string("Hi")
     .await
     .unwrap();
-    println!("{}", Gemini::get_response_string(&response).unwrap());
+    println!("{}", response.get_response_string().unwrap());
 }
 
 #[actix_web::test]
@@ -39,5 +39,5 @@ async fn ask_string_for_json() {
 ")
     .await
     .unwrap();
-    println!("{:?}", Gemini::get_response_json(&response).unwrap());
+    println!("{:?}", response.get_response_json().unwrap());
 }

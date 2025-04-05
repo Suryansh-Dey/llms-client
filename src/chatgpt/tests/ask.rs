@@ -1,4 +1,4 @@
-use llms_client::chatgpt::ask::ChatGpt;
+use crate::chatgpt::ask::ChatGpt;
 
 #[actix_web::test]
 async fn it_works() {

@@ -3,7 +3,30 @@ use awc::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
 
+const API_TIMEOUT:Duration = Duration::from_secs(30);
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+
+pub struct GeminiResponse(Value);
+impl GeminiResponse {
+    fn new(value: Value) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &Value {
+        &self.0
+    }
+    pub fn get_response_string(&self) -> Result<&str, &Value> {
+        self.get()["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .ok_or(self.get())
+    }
+    pub fn get_response_json(&self) -> Result<Value, &Value> {
+        let string = self.get()["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .ok_or(self.get())?;
+        let unescaped_str = string.replace("\\\"", "\"").replace("\\n", "\n");
+        serde_json::from_str::<Value>(&unescaped_str).map_err(|_| self.get())
+    }
+}
 
 pub struct Gemini<'a> {
     client: Client,
@@ -17,9 +40,9 @@ impl<'a> Gemini<'a> {
         api_key: &'a str,
         model: &'a str,
         sys_prompt: Option<SystemInstruction<'a>>,
-    ) -> Gemini<'a> {
+    ) -> Self {
         Self {
-            client: Client::builder().timeout(Duration::from_secs(30)).finish(),
+            client: Client::builder().timeout(API_TIMEOUT).finish(),
             api_key,
             model,
             sys_prompt,
@@ -42,8 +65,10 @@ impl<'a> Gemini<'a> {
         }
         self
     }
-
-    pub async fn ask_string(&self, question: &str) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn ask_string(
+        &self,
+        question: &str,
+    ) -> Result<GeminiResponse, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:generateContent?key={}",
             self.model, self.api_key
@@ -61,19 +86,6 @@ impl<'a> Gemini<'a> {
             .json()
             .await?;
 
-        Ok(response)
-    }
-    pub fn get_response_string(response: &Value) -> Result<&str, String> {
-        response["candidates"][0]["content"]["parts"][0]["text"]
-            .as_str()
-            .ok_or(format!("Failed to get_response_json from: {:#?}", response))
-    }
-    pub fn get_response_json(response: &Value) -> Result<Value, String> {
-        let string = response["candidates"][0]["content"]["parts"][0]["text"]
-            .as_str()
-            .ok_or(format!("Failed to get_response_json from: {:#?}", response))?;
-        let unescaped_str = string.replace("\\\"", "\"").replace("\\n", "\n");
-        serde_json::from_str::<Value>(&unescaped_str)
-            .map_err(|_| format!("Response has invalid JSON: {:#?}", unescaped_str))
+        Ok(GeminiResponse::new(response))
     }
 }
