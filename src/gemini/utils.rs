@@ -13,27 +13,30 @@ impl<'a> MarkdownToParts<'a> {
             markdown,
         }
     }
-    pub fn process(&'a mut self, default_mime_type: &'a String) -> Vec<Part<'a>> {
+    pub fn process(self, default_mime_type: String) -> Vec<Part> {
         let image_detect = utils::get_image_regex();
         let mut parts: Vec<Part> = Vec::new();
         let mut i = 0;
-        while let Some(image) = image_detect.find(&self.markdown) {
+        let mut markdown = self.markdown;
+        while let Some(image) = image_detect.find(&markdown) {
             let start = image.start();
             let image_markdown = image.as_str();
-            let text = &self.markdown[..start + image_markdown.len()];
+            let text = &markdown[..start + image_markdown.len()];
 
-            parts.push(Part::text(text));
+            parts.push(Part::text(text.to_string()));
             if let (mime, Some(base64)) = &self.base64s[i] {
                 parts.push(Part::inline_data(InlineData::new(
-                    mime.as_ref().unwrap_or(default_mime_type),
-                    &base64,
+                    mime.as_ref().unwrap_or(&default_mime_type).to_string(),
+                    base64.to_string(),
                 )));
             }
 
-            self.markdown = &self.markdown[start + image_markdown.len()..];
+            markdown = &markdown[start + image_markdown.len()..];
             i += 1;
         }
-        parts.push(Part::text(&self.markdown));
+        if markdown.len() != 0 {
+            parts.push(Part::text(markdown.to_string()));
+        }
         parts
     }
 }
