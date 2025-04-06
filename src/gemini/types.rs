@@ -65,9 +65,9 @@ impl Session {
     pub fn get_history_length(&self) -> usize {
         self.history.len()
     }
-    pub fn get_chat_mut(&mut self, chat_previous_no: usize) -> Option<&mut Chat> {
+    pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Vec<Part>> {
         let history_length = self.get_history_length();
-        self.history.get_mut(history_length - chat_previous_no)
+        self.history.get_mut(history_length - chat_previous_no).map(|chat| &mut chat.parts)
     }
     fn add_chat(&mut self, chat: Chat) -> &mut Self {
         self.history.push_back(chat);
