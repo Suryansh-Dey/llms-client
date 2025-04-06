@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use super::ask::GeminiResponse;
 use derive_new::new;
 use serde::Serialize;
@@ -38,46 +40,53 @@ pub struct SystemInstruction<'a> {
 #[derive(Serialize, new)]
 pub struct GeminiBody<'a> {
     system_instruction: Option<&'a SystemInstruction<'a>>,
-    contents: &'a [Chat],
+    contents: &'a [&'a Chat],
     generation_config: Option<&'a Value>,
 }
 
 #[derive(Serialize)]
 pub struct Session {
-    history: Vec<Chat>,
+    history: VecDeque<Chat>,
     history_limit: usize,
     chat_no: usize,
 }
 impl Session {
     pub fn new(history_limit: usize) -> Self {
         Self {
-            history: Vec::new(),
+            history: VecDeque::new(),
             history_limit,
             chat_no: 0,
         }
     }
-    pub fn get_history(&self) -> &Vec<Chat> {
-        &self.history
+    pub fn get_history(&self) -> Vec<&Chat> {
+        let (left, right) = self.history.as_slices();
+        left.iter().chain(right.iter()).collect()
+    }
+    pub fn get_history_length(&self) -> usize {
+        self.history.len()
     }
     pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Chat> {
-        let history_length = self.get_history().len();
+        let history_length = self.get_history_length();
         self.history.get_mut(history_length - chat_previous_no)
     }
-    pub fn ask(&mut self, parts: Vec<Part>) -> &Self {
-        self.history.push(Chat::new(Role::user, parts));
+    fn add_chat(&mut self, chat: Chat) -> &Self {
+        self.history.push_back(chat);
         self.chat_no += 1;
+        if self.get_history_length() > self.history_limit {
+            self.history.pop_front();
+        }
         self
     }
+    pub fn ask(&mut self, parts: Vec<Part>) -> &Self {
+        self.add_chat(Chat::new(Role::user, parts))
+    }
     pub fn ask_string(&mut self, prompt: String) -> &Self {
-        self.history
-            .push(Chat::new(Role::user, vec![Part::text(prompt)]));
-        self.chat_no += 1;
-        self
+        self.add_chat(Chat::new(Role::user, vec![Part::text(prompt)]))
     }
     pub fn update(&mut self, response: GeminiResponse) -> Result<(), Value> {
         let history = &mut self.history;
         let reply = response.get_as_string().map_err(|value| value.clone())?;
-        if let Some(chat) = history.last_mut() {
+        if let Some(chat) = history.back_mut() {
             if let Role::model = chat.role {
                 if let Some(Part::text(data)) = chat.parts.last_mut() {
                     data.push_str(reply);
@@ -86,7 +95,7 @@ impl Session {
                 }
             }
         } else {
-            history.push(Chat::new(Role::model, vec![Part::text(reply.to_string())]));
+            history.push_back(Chat::new(Role::model, vec![Part::text(reply.to_string())]));
         }
         Ok(())
     }
