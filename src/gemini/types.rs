@@ -56,17 +56,38 @@ impl Session {
             chat_no: 0,
         }
     }
-    pub fn get_history(& self) -> &Vec<Chat> {
+    pub fn get_history(&self) -> &Vec<Chat> {
         &self.history
     }
-    pub fn get_history_mut(& mut self) -> & mut Vec<Chat> {
-        &mut self.history
+    pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Chat> {
+        let history_length = self.get_history().len();
+        self.history.get_mut(history_length - chat_previous_no)
     }
-    pub fn update(& mut self, reply: GeminiResponse)->Result<(), Value> {
-        self.get_history_mut().push(Chat::new(
-            Role::model,
-            vec![Part::text(reply.get_as_string().map_err(|value| value.clone())?.to_string())],
-        ));
+    pub fn ask(&mut self, parts: Vec<Part>) -> &Self {
+        self.history.push(Chat::new(Role::user, parts));
+        self.chat_no += 1;
+        self
+    }
+    pub fn ask_string(&mut self, prompt: String) -> &Self {
+        self.history
+            .push(Chat::new(Role::user, vec![Part::text(prompt)]));
+        self.chat_no += 1;
+        self
+    }
+    pub fn update(&mut self, response: GeminiResponse) -> Result<(), Value> {
+        let history = &mut self.history;
+        let reply = response.get_as_string().map_err(|value| value.clone())?;
+        if let Some(chat) = history.last_mut() {
+            if let Role::model = chat.role {
+                if let Some(Part::text(data)) = chat.parts.last_mut() {
+                    data.push_str(reply);
+                } else {
+                    chat.parts.push(Part::text(reply.to_string()));
+                }
+            }
+        } else {
+            history.push(Chat::new(Role::model, vec![Part::text(reply.to_string())]));
+        }
         Ok(())
     }
 }

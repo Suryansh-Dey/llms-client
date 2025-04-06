@@ -83,15 +83,15 @@ impl<'a> Gemini<'a> {
             generation_config: None,
         }
     }
+    pub fn set_generation_config(&mut self, generation_config: Value) -> &mut Self {
+        self.generation_config = Some(generation_config);
+        self
+    }
     pub fn set_model(&mut self, model: String) {
         self.model = model;
     }
     pub fn set_api_key(&mut self, api_key: String) {
         self.api_key = api_key;
-    }
-    pub fn set_generation_config(&mut self, generation_config: Value) -> &mut Self {
-        self.generation_config = Some(generation_config);
-        self
     }
     pub fn set_json_mode(&mut self, schema: Value) -> &Self {
         if let None = self.generation_config {
@@ -106,47 +106,21 @@ impl<'a> Gemini<'a> {
         self
     }
 
-    pub async fn ask_string(
-        &self,
-        question: String,
-    ) -> Result<GeminiResponse, Box<dyn std::error::Error>> {
-        let req_url = format!(
-            "{BASE_URL}/{}:generateContent?key={}",
-            self.model, self.api_key
-        );
-
-        let response: Value = self
-            .client
-            .post(req_url)
-            .send_json(&GeminiBody::new(
-                self.sys_prompt.as_ref(),
-                &[Chat::new(Role::user, vec![Part::text(question)])],
-                self.generation_config.as_ref(),
-            ))
-            .await?
-            .json()
-            .await?;
-
-        Ok(GeminiResponse(response))
-    }
     pub async fn ask(
         &self,
-        session: &'a mut Session,
-        question: Vec<Part>,
+        session: &Session,
     ) -> Result<GeminiResponse, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:generateContent?key={}",
             self.model, self.api_key
         );
-        let history = session.get_history_mut();
-        history.push(Chat::new(Role::user, question));
 
         let response: Value = self
             .client
             .post(req_url)
             .send_json(&GeminiBody::new(
                 self.sys_prompt.as_ref(),
-                history.as_slice(),
+                &session.get_history().as_slice(),
                 self.generation_config.as_ref(),
             ))
             .await?
@@ -157,22 +131,19 @@ impl<'a> Gemini<'a> {
     }
     pub async fn ask_as_stream(
         &self,
-        session: &'a mut Session,
-        question: Vec<Part>,
+        session: &Session,
     ) -> Result<GeminiResponseStream, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?key={}",
             self.model, self.api_key
         );
-        let history = session.get_history_mut();
-        history.push(Chat::new(Role::user, question));
 
         let response = self
             .client
             .post(req_url)
             .send_json(&GeminiBody::new(
                 self.sys_prompt.as_ref(),
-                history.as_slice(),
+                session.get_history().as_slice(),
                 self.generation_config.as_ref(),
             ))
             .await?;
