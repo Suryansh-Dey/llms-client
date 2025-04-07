@@ -1,4 +1,4 @@
-use crate::gemini::ask::Gemini;
+use crate::gemini::ask::{Gemini, GeminiResponseStream};
 use crate::gemini::types::{Part, Session, SystemInstruction};
 use futures::StreamExt;
 use serde_json::json;
@@ -14,7 +14,7 @@ async fn ask_string() {
     .ask(session.ask_string("Hi".to_string()))
     .await
     .unwrap();
-    println!("{}", response.get_as_string().unwrap());
+    println!("{}", response);
 }
 
 #[actix_web::test]
@@ -42,23 +42,21 @@ async fn ask_string_for_json() {
 ".to_string()))
     .await
     .unwrap();
-    println!("{:?}", response.get_as_json().unwrap());
+    println!("{}", GeminiResponseStream::parse_json(response).unwrap());
 }
 
 #[actix_web::test]
 async fn ask_streamed() {
     let mut session = Session::new(5);
-    session.ask_string("How to learn machine learning".to_string());
+    session.ask_string("How are you".to_string());
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-1.5-flash".to_string(),
         None,
     );
-    let mut response_stream = ai
-        .ask_as_stream(&session)
-        .await
-        .unwrap();
+    let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap().get_as_string().unwrap());
+        println!("{}", response.unwrap());
     }
+    println!("Last reply: {}", session.last_reply().unwrap());
 }

@@ -12,49 +12,55 @@ use std::{
 const API_TIMEOUT: Duration = Duration::from_secs(30);
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
-pub struct GeminiResponse(Value);
-impl GeminiResponse {
-    pub fn get(&self) -> &Value {
-        &self.0
-    }
-    pub fn get_as_string(&self) -> Result<&str, &Value> {
-        self.get()["candidates"][0]["content"]["parts"][0]["text"]
-            .as_str()
-            .ok_or(self.get())
-    }
-    pub fn get_as_json(&self) -> Result<Value, &Value> {
-        let string = self.get()["candidates"][0]["content"]["parts"][0]["text"]
-            .as_str()
-            .ok_or(self.get())?;
-        let unescaped_str = string.replace("\\\"", "\"").replace("\\n", "\n");
-        serde_json::from_str::<Value>(&unescaped_str).map_err(|_| self.get())
-    }
-}
 pin_project_lite::pin_project! {
-    pub struct GeminiResponseStream{
+    pub struct GeminiResponseStream<'a>{
         #[pin]
         response_stream:ClientResponse<Decompress<Payload>>,
+        reply_storage: &'a mut String
     }
 }
-impl GeminiResponseStream {
-    fn new(response_stream: ClientResponse<Decompress<Payload>>) -> Self {
-        Self { response_stream }
+impl<'a> GeminiResponseStream<'a> {
+    fn new(
+        response_stream: ClientResponse<Decompress<Payload>>,
+        reply_storage: &'a mut String,
+    ) -> Self {
+        Self {
+            response_stream,
+            reply_storage,
+        }
+    }
+    pub fn parse_json(text: &str) -> Result<Value, serde_json::Error> {
+        let unescaped_str = text.replace("\\\"", "\"").replace("\\n", "\n");
+        serde_json::from_str::<Value>(&unescaped_str)
+    }
+    fn get_response_text(response: &Value) -> Option<&str> {
+        response["candidates"][0]["content"]["parts"][0]["text"].as_str()
     }
 }
-impl Stream for GeminiResponseStream {
-    type Item = Result<GeminiResponse, Box<dyn std::error::Error>>;
+impl<'a> Stream for GeminiResponseStream<'a> {
+    type Item = Result<String, Box<dyn std::error::Error>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
         match this.response_stream.poll_next(cx) {
             Poll::Ready(Some(Ok(bytes))) => {
-                let text = String::from_utf8_lossy(&bytes).to_string();
+                let text = String::from_utf8_lossy(&bytes);
                 if text == "]" {
                     Poll::Ready(None)
                 } else {
                     match serde_json::from_str(text[1..].trim()) {
-                        Ok(response) => Poll::Ready(Some(Ok(GeminiResponse(response)))),
+                        Ok(ref response) => {
+                            let reply = GeminiResponseStream::get_response_text(response)
+                                .map(|response| {
+                                    this.reply_storage.push_str(response);
+                                    response.to_string()
+                                })
+                                .ok_or(
+                                    format!("Gemini API sent invalid response:\n{response}").into(),
+                                );
+                            Poll::Ready(Some(reply))
+                        }
                         Err(error) => Poll::Ready(Some(Err(error.into()))),
                     }
                 }
@@ -106,10 +112,7 @@ impl<'a> Gemini<'a> {
         self
     }
 
-    pub async fn ask(
-        &self,
-        session: &Session,
-    ) -> Result<GeminiResponse, Box<dyn std::error::Error>> {
+    pub async fn ask<'b>(&self, session: &'b mut Session) -> Result<&'b str, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:generateContent?key={}",
             self.model, self.api_key
@@ -126,13 +129,21 @@ impl<'a> Gemini<'a> {
             .await?
             .json()
             .await?;
+        let reply = GeminiResponseStream::get_response_text(&response)
+            .ok_or::<Box<dyn std::error::Error>>(format!("Gemini API sent invalid response:\n{response}").into())?;
+        session.update(reply);
 
-        Ok(GeminiResponse(response))
+        let destination_string = session
+            .last_reply_mut()
+            .ok_or::<Box<dyn std::error::Error>>(
+                "Something went wrong in ask_as_stream, sorry".into(),
+            )?;
+        Ok(destination_string)
     }
-    pub async fn ask_as_stream(
+    pub async fn ask_as_stream<'b>(
         &self,
-        session: &Session,
-    ) -> Result<GeminiResponseStream, Box<dyn std::error::Error>> {
+        session: &'b mut Session,
+    ) -> Result<GeminiResponseStream<'b>, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?key={}",
             self.model, self.api_key
@@ -154,7 +165,13 @@ impl<'a> Gemini<'a> {
             )
             .into());
         }
+        session.update("");
+        let destination_string = session
+            .last_reply_mut()
+            .ok_or::<Box<dyn std::error::Error>>(
+                "Something went wrong in ask_as_stream, sorry".into(),
+            )?;
 
-        Ok(GeminiResponseStream::new(response))
+        Ok(GeminiResponseStream::new(response, destination_string))
     }
 }

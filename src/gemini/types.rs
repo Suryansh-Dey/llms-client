@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 
-use super::ask::GeminiResponse;
 use derive_new::new;
 use serde::Serialize;
 use serde_json::Value;
@@ -58,6 +57,12 @@ impl Session {
             chat_no: 0,
         }
     }
+    pub fn get_history_as_vecdeque(&self) -> &VecDeque<Chat> {
+        &self.history
+    }
+    pub(super) fn get_history_as_vecdeque_mut(&mut self) -> &mut VecDeque<Chat> {
+        &mut self.history
+    }
     pub fn get_history(&self) -> Vec<&Chat> {
         let (left, right) = self.history.as_slices();
         left.iter().chain(right.iter()).collect()
@@ -67,7 +72,9 @@ impl Session {
     }
     pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Vec<Part>> {
         let history_length = self.get_history_length();
-        self.history.get_mut(history_length - chat_previous_no).map(|chat| &mut chat.parts)
+        self.history
+            .get_mut(history_length - chat_previous_no)
+            .map(|chat| &mut chat.parts)
     }
     fn add_chat(&mut self, chat: Chat) -> &mut Self {
         self.history.push_back(chat);
@@ -77,15 +84,14 @@ impl Session {
         }
         self
     }
-    pub fn ask(&mut self, parts: Vec<Part>) -> &Self {
+    pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::user, parts))
     }
-    pub fn ask_string(&mut self, prompt: String) -> &Self {
+    pub fn ask_string(&mut self, prompt: String) -> &mut Self {
         self.add_chat(Chat::new(Role::user, vec![Part::text(prompt)]))
     }
-    pub fn update(&mut self, response: GeminiResponse) -> Result<(), Value> {
+    pub(super) fn update(&mut self, reply: &str) {
         let history = &mut self.history;
-        let reply = response.get_as_string().map_err(|value| value.clone())?;
         if let Some(chat) = history.back_mut() {
             if let Role::model = chat.role {
                 if let Some(Part::text(data)) = chat.parts.last_mut() {
@@ -93,10 +99,35 @@ impl Session {
                 } else {
                     chat.parts.push(Part::text(reply.to_string()));
                 }
+            } else {
+                history.push_back(Chat::new(Role::model, vec![Part::text(reply.to_string())]));
             }
         } else {
-            history.push_back(Chat::new(Role::model, vec![Part::text(reply.to_string())]));
+            panic!("Cannot update an empty session");
         }
-        Ok(())
+    }
+    pub fn last_reply(&self) -> Option<&String> {
+        if let Some(Part::text(reply)) = self
+            .get_history_as_vecdeque()
+            .back()
+            .map(|chat| chat.parts.get(0))
+            .flatten()
+        {
+            Some(reply)
+        } else {
+            None
+        }
+    }
+    pub(super) fn last_reply_mut(&mut self) -> Option<&mut String> {
+        if let Some(Part::text(reply)) = self
+            .get_history_as_vecdeque_mut()
+            .back_mut()
+            .map(|chat| chat.parts.get_mut(0))
+            .flatten()
+        {
+            Some(reply)
+        } else {
+            None
+        }
     }
 }
