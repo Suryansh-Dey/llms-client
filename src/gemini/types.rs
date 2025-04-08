@@ -131,10 +131,12 @@ impl Session {
     }
     pub fn forget_last_conversation(&mut self) {
         self.history.pop_back();
-        if let Some(chat) = self.history.back() {
-            if let Role::user = chat.role {
-                self.history.pop_back();
-            }
+        if let Some(Chat {
+            role: Role::user,
+            parts: _,
+        }) = self.history.back()
+        {
+            self.history.pop_back();
         }
     }
 }
