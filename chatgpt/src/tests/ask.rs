@@ -1,4 +1,4 @@
-use crate::chatgpt::ask::ChatGpt;
+use crate::ask::ChatGpt;
 
 #[actix_web::test]
 async fn it_works() {

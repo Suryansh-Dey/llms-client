@@ -617,6 +617,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gemini-client-api"
+version = "0.1.1"
+dependencies = [
+ "actix-web",
+ "awc",
+ "base64",
+ "derive-new",
+ "futures",
+ "pin-project-lite",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -911,21 +926,6 @@ name = "litemap"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23fb14cb19457329c82206317a5663005a4d404783dc74f4252769b0d5f42856"
-
-[[package]]
-name = "llms-client"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "awc",
- "base64",
- "derive-new",
- "futures",
- "pin-project-lite",
- "regex",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "local-channel"
