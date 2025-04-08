@@ -1,8 +1,7 @@
-use std::collections::VecDeque;
-
 use derive_new::new;
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::VecDeque;
 
 #[derive(Serialize)]
 #[allow(non_camel_case_types)]
@@ -128,6 +127,14 @@ impl Session {
             Some(reply)
         } else {
             None
+        }
+    }
+    pub fn forget_last_conversation(&mut self) {
+        self.history.pop_back();
+        if let Some(chat) = self.history.back() {
+            if let Role::user = chat.role {
+                self.history.pop_back();
+            }
         }
     }
 }

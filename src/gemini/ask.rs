@@ -134,7 +134,7 @@ impl<'a> Gemini<'a> {
         session.update(reply);
 
         let destination_string = session
-            .last_reply_mut()
+            .last_reply()
             .ok_or::<Box<dyn std::error::Error>>(
                 "Something went wrong in ask_as_stream, sorry".into(),
             )?;
