@@ -1,7 +1,9 @@
 use derive_new::new;
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, from_value};
 use std::collections::VecDeque;
+
+use super::ask::GeminiResponse;
 
 #[derive(Serialize)]
 #[allow(non_camel_case_types)]
@@ -11,17 +13,31 @@ pub enum Role {
     model,
 }
 
-#[derive(Serialize, new)]
+#[derive(Serialize, Deserialize, Clone, new)]
 pub struct InlineData {
     mime_type: String,
     data: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, new)]
+pub struct ExecutableCode {
+    language: String,
+    code: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, new)]
+pub struct CodeExecuteResult {
+    outcome: String,
+    output: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 #[allow(non_camel_case_types)]
 pub enum Part {
     text(String),
     inline_data(InlineData),
+    executable_code(ExecutableCode),
+    code_execute_result(CodeExecuteResult),
 }
 
 #[derive(Serialize, new)]
@@ -62,6 +78,9 @@ impl Session {
     pub(super) fn get_history_as_vecdeque_mut(&mut self) -> &mut VecDeque<Chat> {
         &mut self.history
     }
+    pub fn get_chat_no(&self) -> usize {
+        self.chat_no
+    }
     pub fn get_history(&self) -> Vec<&Chat> {
         let (left, right) = self.history.as_slices();
         left.iter().chain(right.iter()).collect()
@@ -83,52 +102,75 @@ impl Session {
         }
         self
     }
+    /// `parts` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
     pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::user, parts))
     }
     pub fn ask_string(&mut self, prompt: String) -> &mut Self {
         self.add_chat(Chat::new(Role::user, vec![Part::text(prompt)]))
     }
-    pub(super) fn update(&mut self, reply: &str) {
+    pub(super) fn update(
+        &mut self,
+        response: &GeminiResponse,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let history = &mut self.history;
+        let reply_parts = response.get_parts_as_value();
+
         if let Some(chat) = history.back_mut() {
             if let Role::model = chat.role {
-                if let Some(Part::text(data)) = chat.parts.last_mut() {
-                    data.push_str(reply);
-                } else {
-                    chat.parts.push(Part::text(reply.to_string()));
-                }
+                concatinate_parts(
+                    &mut chat.parts,
+                    reply_parts.ok_or::<Box<dyn std::error::Error>>(
+                        "Invalid response with no parts arrary".into(),
+                    )?,
+                )?;
             } else {
-                history.push_back(Chat::new(Role::model, vec![Part::text(reply.to_string())]));
+                history.push_back(Chat::new(
+                    Role::model,
+                    reply_parts
+                        .ok_or("Failed to parse into parts")?
+                        .iter()
+                        .map(|part| from_value(part.to_owned()))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ));
             }
         } else {
             panic!("Cannot update an empty session");
         }
+        Ok(())
     }
-    pub fn last_reply(&self) -> Option<&String> {
-        if let Some(Part::text(reply)) = self
-            .get_history_as_vecdeque()
-            .back()
-            .map(|chat| chat.parts.get(0))
-            .flatten()
-        {
-            Some(reply)
+    pub fn last_reply(&self) -> Option<&[Part]> {
+        if let Some(reply) = self.get_history_as_vecdeque().back() {
+            Some(&reply.parts)
         } else {
             None
         }
     }
-    pub(super) fn last_reply_mut(&mut self) -> Option<&mut String> {
-        if let Some(Part::text(reply)) = self
-            .get_history_as_vecdeque_mut()
-            .back_mut()
-            .map(|chat| chat.parts.get_mut(0))
-            .flatten()
-        {
-            Some(reply)
+    pub(super) fn last_reply_mut(&mut self) -> Option<&mut [Part]> {
+        if let Some(reply) = self.get_history_as_vecdeque_mut().back_mut() {
+            Some(reply.parts.as_mut_slice())
         } else {
             None
         }
     }
+    ///`seperator` used to concatinate all text parts. TL;DR use "\n" as seperator.
+    pub fn last_reply_text(&self, seperator: &str) -> Option<String> {
+        let parts = self.last_reply();
+        if let Some(parts) = parts {
+            let mut concatinated_string = String::new();
+            for part in parts {
+                if let Part::text(text) = part {
+                    concatinated_string.push_str(text);
+                    concatinated_string.push_str(seperator);
+                }
+            }
+            Some(concatinated_string)
+        } else {
+            None
+        }
+    }
+    /// If last message is a question from user then only that is removed else the model reply and
+    /// the user's question (just before model reply)
     pub fn forget_last_conversation(&mut self) {
         self.history.pop_back();
         if let Some(Chat {
@@ -139,4 +181,47 @@ impl Session {
             self.history.pop_back();
         }
     }
+}
+pub(super) fn concatinate_parts(
+    updating: &mut Vec<Part>,
+    updator: &[Value],
+) -> Result<(), Box<dyn std::error::Error>> {
+    for updator_part in updator {
+        if let Some(updator_text) = updator_part["text"].as_str() {
+            if let Some(Part::text(updating_text)) =
+                updating.iter_mut().find(|e| matches!(e, Part::text(_)))
+            {
+                updating_text.push_str(updator_text);
+                continue;
+            }
+        } else if let Some(updator_data) = updator_part["inline_data"]["data"].as_str() {
+            if let Some(Part::inline_data(updating_data)) = updating
+                .iter_mut()
+                .find(|e| matches!(e, Part::inline_data(_)))
+            {
+                updating_data.data.push_str(updator_data);
+                continue;
+            }
+        } else if let Some(updator_data) = updator_part["executable_code"]["code"].as_str() {
+            if let Some(Part::executable_code(updating_data)) = updating
+                .iter_mut()
+                .find(|e| matches!(e, Part::executable_code(_)))
+            {
+                updating_data.code.push_str(updator_data);
+                continue;
+            }
+        } else if let Some(updator_data) = updator_part["code_execute_result"]["output"].as_str() {
+            if let Some(Part::code_execute_result(updating_data)) = updating
+                .iter_mut()
+                .find(|e| matches!(e, Part::code_execute_result(_)))
+            {
+                updating_data.output.push_str(updator_data);
+                continue;
+            }
+        } else {
+            return Err(format!("Unsupported part found: {updator_part}").into());
+        }
+        updating.push(from_value(updator_part.to_owned())?);
+    }
+    Ok(())
 }

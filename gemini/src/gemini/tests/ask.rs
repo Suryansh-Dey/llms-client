@@ -1,4 +1,4 @@
-use crate::gemini::ask::{Gemini, GeminiResponseStream};
+use crate::gemini::ask::Gemini;
 use crate::gemini::types::{Part, Session, SystemInstruction};
 use futures::StreamExt;
 use serde_json::json;
@@ -14,7 +14,7 @@ async fn ask_string() {
     .ask(session.ask_string("Hi".to_string()))
     .await
     .unwrap();
-    println!("{}", response);
+    println!("{}", session.last_reply_text("").unwrap());
 }
 
 #[actix_web::test]
@@ -42,7 +42,7 @@ async fn ask_string_for_json() {
 ".to_string()))
     .await
     .unwrap();
-    println!("{}", GeminiResponseStream::parse_json(response).unwrap());
+    println!("{}", session.last_reply_text("").unwrap());
 }
 
 #[actix_web::test]
@@ -56,7 +56,7 @@ async fn ask_streamed() {
     );
     let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap());
+        println!("{}", response.unwrap().get_text("").unwrap());
     }
-    println!("Last reply: {}", session.last_reply().unwrap());
+    println!("Complete reply: {}", session.last_reply_text("").unwrap());
 }
