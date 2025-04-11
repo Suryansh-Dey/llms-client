@@ -3,7 +3,7 @@ use actix_web::dev::{Decompress, Payload};
 use awc::{Client, ClientResponse};
 use derive_new::new;
 use futures::Stream;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     pin::Pin,
@@ -14,19 +14,31 @@ use std::{
 const API_TIMEOUT: Duration = Duration::from_secs(30);
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
-#[derive(Serialize, new)]
+#[derive(Serialize, Deserialize, new)]
+#[allow(non_snake_case)]
+pub struct Candidate {
+    content: Chat,
+    pub finishReason: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[allow(non_snake_case)]
 pub struct GeminiResponse {
-    response: Value,
+    candidates: Vec<Candidate>,
+    pub usageMetadata: Value,
+    pub modelVersion: String,
 }
 impl GeminiResponse {
-    pub fn get(&self) -> &Value {
-        &self.response
+    async fn new(
+        mut response: ClientResponse<Decompress<Payload>>,
+    ) -> Result<GeminiResponse, awc::error::JsonPayloadError> {
+        response.json().await
     }
-    pub fn get_parts_as_value(&self) -> Option<&Vec<Value>> {
-        self.response["candidates"][0]["content"]["parts"].as_array()
+    fn from(string: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(string)
     }
-    pub fn get_parts(&self) -> Result<Vec<Part>, serde_json::Error> {
-        serde_json::from_value(self.response["candidates"][0]["content"]["parts"].to_owned())
+    pub fn get_parts(&self) -> &Vec<Part> {
+        self.candidates[0].content.parts()
     }
     pub fn parse_json(text: &str) -> Result<Value, serde_json::Error> {
         let unescaped_str = text.replace("\\\"", "\"").replace("\\n", "\n");
@@ -43,9 +55,8 @@ impl GeminiResponse {
         concatinated_string
     }
     ///`seperator` used to concatinate all text parts. TL;DR use "" as seperator.
-    ///[!Warning] try to rather use `session.last_reply_text()` for efficiency
-    pub fn get_text(&self, seperator: &str) -> Result<String, serde_json::Error> {
-        Ok(Self::extract_text(&self.get_parts()?, seperator))
+    pub fn get_text(&self, seperator: &str) -> String {
+        Self::extract_text(&self.get_parts(), seperator)
     }
 }
 
@@ -69,15 +80,9 @@ impl<'a> Stream for GeminiResponseStream<'a> {
                 if text == "]" {
                     Poll::Ready(None)
                 } else {
-                    let result = match serde_json::from_str(text[1..].trim()) {
-                        Ok(response) => {
-                            let response = GeminiResponse::new(response);
-                            this.session.update(&response)?;
-                            Ok(response)
-                        }
-                        Err(error) => Err(error.into()),
-                    };
-                    Poll::Ready(Some(result))
+                    let response = GeminiResponse::from(text[1..].trim())?;
+                    this.session.update(&response)?;
+                    Poll::Ready(Some(Ok(response)))
                 }
             }
             Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e.into()))),
@@ -93,6 +98,7 @@ pub struct Gemini<'a> {
     model: String,
     sys_prompt: Option<SystemInstruction<'a>>,
     generation_config: Option<Value>,
+    tools: Option<Vec<Value>>,
 }
 impl<'a> Gemini<'a> {
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
@@ -103,6 +109,7 @@ impl<'a> Gemini<'a> {
             model,
             sys_prompt,
             generation_config: None,
+            tools: None,
         }
     }
     /// The generation config Schema should follow [Gemini docs](https://ai.google.dev/gemini-api/docs/text-generation#configuration-parameters)
@@ -129,6 +136,21 @@ impl<'a> Gemini<'a> {
         }
         self
     }
+    pub fn unset_json_mode(&mut self) -> &Self {
+        if let Some(ref mut generation_config) = self.generation_config {
+            generation_config["response_schema"] = None::<Value>.into();
+            generation_config["response_mime_type"] = None::<Value>.into();
+        }
+        self
+    }
+    pub fn set_code_execution_mode(&mut self) -> &Self {
+        self.tools = Some(vec![json!({ "code_execution":{} })]);
+        self
+    }
+    pub fn unset_code_execution_mode(&mut self) -> &Self {
+        self.tools.take();
+        self
+    }
 
     pub async fn ask<'b>(
         &self,
@@ -139,18 +161,17 @@ impl<'a> Gemini<'a> {
             self.model, self.api_key
         );
 
-        let response: Value = self
+        let response = self
             .client
             .post(req_url)
             .send_json(&GeminiBody::new(
                 self.sys_prompt.as_ref(),
+                self.tools.as_deref(),
                 &session.get_history().as_slice(),
                 self.generation_config.as_ref(),
             ))
-            .await?
-            .json()
             .await?;
-        let reply = GeminiResponse::new(response);
+        let reply = GeminiResponse::new(response).await?;
         session.update(&reply)?;
         Ok(reply)
     }
@@ -168,6 +189,7 @@ impl<'a> Gemini<'a> {
             .post(req_url)
             .send_json(&GeminiBody::new(
                 self.sys_prompt.as_ref(),
+                self.tools.as_deref(),
                 session.get_history().as_slice(),
                 self.generation_config.as_ref(),
             ))

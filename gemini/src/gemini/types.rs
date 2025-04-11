@@ -1,11 +1,12 @@
 use derive_new::new;
+use getset::Getters;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, from_value};
+use serde_json::Value;
 use std::collections::VecDeque;
 
 use super::ask::GeminiResponse;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum Role {
     user,
@@ -13,21 +14,27 @@ pub enum Role {
     model,
 }
 
-#[derive(Serialize, Deserialize, Clone, new)]
+#[derive(Serialize, Deserialize, Clone, new, Getters)]
 pub struct InlineData {
+    #[get = "pub"]
     mime_type: String,
+    #[get = "pub"]
     data: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, new)]
+#[derive(Serialize, Deserialize, Clone, new, Getters)]
 pub struct ExecutableCode {
+    #[get = "pub"]
     language: String,
+    #[get = "pub"]
     code: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, new)]
+#[derive(Serialize, Deserialize, Clone, new, Getters)]
 pub struct CodeExecuteResult {
+    #[get = "pub"]
     outcome: String,
+    #[get = "pub"]
     output: String,
 }
 
@@ -40,9 +47,11 @@ pub enum Part {
     code_execute_result(CodeExecuteResult),
 }
 
-#[derive(Serialize, new)]
+#[derive(Serialize, Deserialize, new, Getters)]
 pub struct Chat {
+    #[get = "pub"]
     role: Role,
+    #[get = "pub"]
     parts: Vec<Part>,
 }
 
@@ -54,6 +63,7 @@ pub struct SystemInstruction<'a> {
 #[derive(Serialize, new)]
 pub struct GeminiBody<'a> {
     system_instruction: Option<&'a SystemInstruction<'a>>,
+    tools: Option<&'a [Value]>,
     contents: &'a [&'a Chat],
     generation_config: Option<&'a Value>,
 }
@@ -114,25 +124,13 @@ impl Session {
         response: &GeminiResponse,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let history = &mut self.history;
-        let reply_parts = response.get_parts_as_value();
+        let reply_parts = response.get_parts();
 
         if let Some(chat) = history.back_mut() {
             if let Role::model = chat.role {
-                concatinate_parts(
-                    &mut chat.parts,
-                    reply_parts.ok_or::<Box<dyn std::error::Error>>(
-                        "Invalid response with no parts arrary".into(),
-                    )?,
-                )?;
+                concatinate_parts(&mut chat.parts, reply_parts)?;
             } else {
-                history.push_back(Chat::new(
-                    Role::model,
-                    reply_parts
-                        .ok_or("Failed to parse into parts")?
-                        .iter()
-                        .map(|part| from_value(part.to_owned()))
-                        .collect::<Result<Vec<_>, _>>()?,
-                ));
+                history.push_back(Chat::new(Role::model, reply_parts.clone()));
             }
         } else {
             panic!("Cannot update an empty session");
@@ -184,44 +182,47 @@ impl Session {
 }
 pub(super) fn concatinate_parts(
     updating: &mut Vec<Part>,
-    updator: &[Value],
+    updator: &[Part],
 ) -> Result<(), Box<dyn std::error::Error>> {
     for updator_part in updator {
-        if let Some(updator_text) = updator_part["text"].as_str() {
-            if let Some(Part::text(updating_text)) =
-                updating.iter_mut().find(|e| matches!(e, Part::text(_)))
-            {
-                updating_text.push_str(updator_text);
-                continue;
+        match updator_part {
+            Part::text(updator_text) => {
+                if let Some(Part::text(updating_text)) =
+                    updating.iter_mut().find(|e| matches!(e, Part::text(_)))
+                {
+                    updating_text.push_str(updator_text);
+                    continue;
+                }
             }
-        } else if let Some(updator_data) = updator_part["inline_data"]["data"].as_str() {
-            if let Some(Part::inline_data(updating_data)) = updating
-                .iter_mut()
-                .find(|e| matches!(e, Part::inline_data(_)))
-            {
-                updating_data.data.push_str(updator_data);
-                continue;
+            Part::inline_data(updator_data) => {
+                if let Some(Part::inline_data(updating_data)) = updating
+                    .iter_mut()
+                    .find(|e| matches!(e, Part::inline_data(_)))
+                {
+                    updating_data.data.push_str(&updator_data.data());
+                    continue;
+                }
             }
-        } else if let Some(updator_data) = updator_part["executable_code"]["code"].as_str() {
-            if let Some(Part::executable_code(updating_data)) = updating
-                .iter_mut()
-                .find(|e| matches!(e, Part::executable_code(_)))
-            {
-                updating_data.code.push_str(updator_data);
-                continue;
+            Part::executable_code(updator_data) => {
+                if let Some(Part::executable_code(updating_data)) = updating
+                    .iter_mut()
+                    .find(|e| matches!(e, Part::executable_code(_)))
+                {
+                    updating_data.code.push_str(&updator_data.code());
+                    continue;
+                }
             }
-        } else if let Some(updator_data) = updator_part["code_execute_result"]["output"].as_str() {
-            if let Some(Part::code_execute_result(updating_data)) = updating
-                .iter_mut()
-                .find(|e| matches!(e, Part::code_execute_result(_)))
-            {
-                updating_data.output.push_str(updator_data);
-                continue;
+            Part::code_execute_result(updator_data) => {
+                if let Some(Part::code_execute_result(updating_data)) = updating
+                    .iter_mut()
+                    .find(|e| matches!(e, Part::code_execute_result(_)))
+                {
+                    updating_data.output.push_str(&updator_data.output());
+                    continue;
+                }
             }
-        } else {
-            return Err(format!("Unsupported part found: {updator_part}").into());
         }
-        updating.push(from_value(updator_part.to_owned())?);
+        updating.push(updator_part.clone());
     }
     Ok(())
 }
