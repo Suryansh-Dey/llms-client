@@ -82,7 +82,7 @@ impl<'a> Gemini<'a> {
         let response = self
             .client
             .post(req_url)
-            .send_json(&GeminiBody::new(
+            .send_json(&GeminiRequestBody::new(
                 self.sys_prompt.as_ref(),
                 self.tools.as_deref(),
                 &session.get_history().as_slice(),
@@ -105,7 +105,7 @@ impl<'a> Gemini<'a> {
         let response = self
             .client
             .post(req_url)
-            .send_json(&GeminiBody::new(
+            .send_json(&GeminiRequestBody::new(
                 self.sys_prompt.as_ref(),
                 self.tools.as_deref(),
                 session.get_history().as_slice(),

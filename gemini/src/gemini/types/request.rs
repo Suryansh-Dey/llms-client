@@ -113,7 +113,7 @@ pub struct SystemInstruction<'a> {
 }
 
 #[derive(Serialize, new)]
-pub struct GeminiBody<'a> {
+pub struct GeminiRequestBody<'a> {
     system_instruction: Option<&'a SystemInstruction<'a>>,
     tools: Option<&'a [Tool]>,
     contents: &'a [&'a Chat],

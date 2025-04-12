@@ -67,9 +67,12 @@ impl GeminiResponse {
     pub fn get_parts(&self) -> &Vec<Part> {
         self.candidates[0].content.parts()
     }
-    pub fn parse_json(text: &str) -> Result<Value, serde_json::Error> {
-        let unescaped_str = text.replace("\\\"", "\"").replace("\\n", "\n");
-        serde_json::from_str::<Value>(&unescaped_str)
+    pub fn get_json<T>(&self) -> Result<T, serde_json::Error>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let unescaped_str = self.get_text("").replace("\\\"", "\"").replace("\\n", "\n");
+        serde_json::from_str::<T>(&unescaped_str)
     }
     pub fn extract_text(parts: &[Part], seperator: &str) -> String {
         let mut concatinated_string = String::new();

@@ -2,7 +2,7 @@ use crate::gemini::ask::Gemini;
 use crate::gemini::types::request::{Part, SystemInstruction, Tool};
 use crate::gemini::types::sessions::Session;
 use futures::StreamExt;
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[actix_web::test]
 async fn ask_string() {
@@ -43,7 +43,8 @@ async fn ask_string_for_json() {
 ".to_string()))
     .await
     .unwrap();
-    println!("{}", response.get_text(""));
+    let json: Value = response.get_json().unwrap();
+    println!("{}", json);
 }
 
 #[actix_web::test]
