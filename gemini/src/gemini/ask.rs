@@ -5,7 +5,7 @@ use awc::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
 
-const API_TIMEOUT: Duration = Duration::from_secs(30);
+const API_TIMEOUT: Duration = Duration::from_secs(60);
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
 pub struct Gemini<'a> {
@@ -79,7 +79,7 @@ impl<'a> Gemini<'a> {
             self.model, self.api_key
         );
 
-        let response = self
+        let mut response = self
             .client
             .post(req_url)
             .send_json(&GeminiRequestBody::new(
@@ -89,6 +89,13 @@ impl<'a> Gemini<'a> {
                 self.generation_config.as_ref(),
             ))
             .await?;
+
+        if !response.status().is_success() {
+            let body = response.body().await?;
+            let text = std::str::from_utf8(&body)?;
+            return Err(text.into());
+        }
+
         let reply = GeminiResponse::new(response).await?;
         session.update(&reply);
         Ok(reply)
@@ -102,7 +109,7 @@ impl<'a> Gemini<'a> {
             self.model, self.api_key
         );
 
-        let response = self
+        let mut response = self
             .client
             .post(req_url)
             .send_json(&GeminiRequestBody::new(
@@ -112,12 +119,11 @@ impl<'a> Gemini<'a> {
                 self.generation_config.as_ref(),
             ))
             .await?;
+
         if !response.status().is_success() {
-            return Err(format!(
-                "Found status due to {} from Gemini endpoint",
-                response.status()
-            )
-            .into());
+            let body = response.body().await?;
+            let text = std::str::from_utf8(&body)?;
+            return Err(text.into());
         }
 
         Ok(GeminiResponseStream::new(response, session))

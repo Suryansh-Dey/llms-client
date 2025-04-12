@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 #[actix_web::test]
 async fn ask_string() {
-    let mut session = Session::new(5);
+    let mut session = Session::new(6);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-1.5-flash".to_string(),
@@ -20,7 +20,7 @@ async fn ask_string() {
 
 #[actix_web::test]
 async fn ask_string_for_json() {
-    let mut session = Session::new(5);
+    let mut session = Session::new(6);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-1.5-flash".to_string(),
@@ -43,13 +43,14 @@ async fn ask_string_for_json() {
 ".to_string()))
     .await
     .unwrap();
+
     let json: Value = response.get_json().unwrap();
     println!("{}", json);
 }
 
 #[actix_web::test]
 async fn ask_streamed() {
-    let mut session = Session::new(5);
+    let mut session = Session::new(6);
     session.ask_string("How are you".to_string());
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
@@ -60,12 +61,15 @@ async fn ask_streamed() {
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_text(""));
     }
-    println!("Complete reply: {}", session.get_last_reply_text("").unwrap());
+    println!(
+        "Complete reply: {}",
+        session.get_last_reply_text("").unwrap()
+    );
 }
 
 #[actix_web::test]
 async fn ask_with_tools() {
-    let mut session = Session::new(5);
+    let mut session = Session::new(6);
     session.ask_string("find sum of first 100 prime number using code".to_string());
     let mut ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
@@ -79,5 +83,8 @@ async fn ask_with_tools() {
             println!("{}", response.get_text(""));
         }
     }
-    println!("Complete reply: {}", json!(session.get_last_reply().unwrap()));
+    println!(
+        "Complete reply: {:#?}",
+        json!(session.get_last_reply().unwrap())
+    );
 }

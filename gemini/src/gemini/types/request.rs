@@ -132,32 +132,24 @@ pub enum Tool {
 }
 
 pub(super) fn concatinate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
-    for updator_part in updator {
+    if let Some(updator_part) = updator.first() {
         match updator_part {
             Part::text(updator_text) => {
-                if let Some(Part::text(updating_text)) =
-                    updating.iter_mut().find(|e| matches!(e, Part::text(_)))
-                {
+                if let Some(Part::text(updating_text)) = updating.last_mut() {
                     updating_text.push_str(updator_text);
-                    continue;
+                    return;
                 }
             }
             Part::inline_data(updator_data) => {
-                if let Some(Part::inline_data(updating_data)) = updating
-                    .iter_mut()
-                    .find(|e| matches!(e, Part::inline_data(_)))
-                {
+                if let Some(Part::inline_data(updating_data)) = updating.last_mut() {
                     updating_data.data.push_str(&updator_data.data());
-                    continue;
+                    return;
                 }
             }
             Part::executable_code(updator_data) => {
-                if let Some(Part::executable_code(updating_data)) = updating
-                    .iter_mut()
-                    .find(|e| matches!(e, Part::executable_code(_)))
-                {
+                if let Some(Part::executable_code(updating_data)) = updating.last_mut() {
                     updating_data.code.push_str(&updator_data.code());
-                    continue;
+                    return;
                 }
             }
             Part::code_execution_result(updator_data) => {
@@ -172,12 +164,12 @@ pub(super) fn concatinate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
                     } else {
                         updating_data.output = updator_data.output.clone();
                     }
-                    continue;
+                    return;
                 }
             }
             _ => {
                 updating.push(updator_part.clone());
-                continue;
+                return;
             }
         }
         updating.push(updator_part.clone());
