@@ -54,23 +54,19 @@ impl Session {
     pub fn ask_string(&mut self, prompt: String) -> &mut Self {
         self.add_chat(Chat::new(Role::user, vec![Part::text(prompt)]))
     }
-    pub(crate) fn update(
-        &mut self,
-        response: &GeminiResponse,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn update(&mut self, response: &GeminiResponse) {
         let history = &mut self.history;
         let reply_parts = response.get_parts();
 
         if let Some(chat) = history.back_mut() {
             if let Role::model = chat.role() {
-                concatinate_parts(chat.parts_mut(), reply_parts)?;
+                concatinate_parts(chat.parts_mut(), reply_parts);
             } else {
                 history.push_back(Chat::new(Role::model, reply_parts.clone()));
             }
         } else {
             panic!("Cannot update an empty session");
         }
-        Ok(())
     }
     pub fn last_reply(&self) -> Option<&Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque().back() {

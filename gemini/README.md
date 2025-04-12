@@ -1,7 +1,8 @@
 # Basic usage
 ```rust
-use crate::gemini::ask::{Gemini, GeminiResponseStream};
-use crate::gemini::types::{Part, Session, SystemInstruction};
+use crate::gemini::ask::Gemini;
+use crate::gemini::types::request::{Part, SystemInstruction, Tool};
+use crate::gemini::types::sessions::Session;
 use futures::StreamExt;
 use serde_json::json;
 
@@ -15,7 +16,7 @@ async fn ask_string() {
     .ask(session.ask_string("Hi".to_string()))
     .await
     .unwrap();
-    println!("{}", response);
+    println!("{}", response.get_text(""));
 }
 
 async fn ask_string_for_json() {
@@ -42,12 +43,12 @@ async fn ask_string_for_json() {
 ".to_string()))
     .await
     .unwrap();
-    println!("{}", GeminiResponseStream::parse_json(response).unwrap());
+    println!("{}", response.get_text(""));
 }
 
 async fn ask_streamed() {
     let mut session = Session::new(5);
-    session.ask_string("How are you?".to_string());
+    session.ask_string("How are you".to_string());
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-1.5-flash".to_string(),
@@ -55,8 +56,25 @@ async fn ask_streamed() {
     );
     let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap());
+        println!("{}", response.unwrap().get_text(""));
     }
-    println!("Last reply: {}", session.last_reply().unwrap());
+    println!("Complete reply: {}", session.last_reply_text("").unwrap());
 }
+
+async fn tools() {
+    let mut session = Session::new(5);
+    session.ask_string("find sum of first 100 prime number using code".to_string());
+    let mut ai = Gemini::new(
+        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
+        "gemini-2.0-flash".to_string(),
+        None,
+    );
+    ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
+    let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
+    while let Some(response) = response_stream.next().await {
+        if let Ok(response) = response {
+            println!("{}", response.get_text(""));
+        }
+    }
+    println!("Complete reply: {}", json!(session.last_reply().unwrap()));
 ```

@@ -1,5 +1,5 @@
 use crate::gemini::ask::Gemini;
-use crate::gemini::types::request::{Part, SystemInstruction};
+use crate::gemini::types::request::{Part, SystemInstruction, Tool};
 use crate::gemini::types::sessions::Session;
 use futures::StreamExt;
 use serde_json::json;
@@ -60,4 +60,23 @@ async fn ask_streamed() {
         println!("{}", response.unwrap().get_text(""));
     }
     println!("Complete reply: {}", session.last_reply_text("").unwrap());
+}
+
+#[actix_web::test]
+async fn tools() {
+    let mut session = Session::new(5);
+    session.ask_string("find sum of first 100 prime number using code".to_string());
+    let mut ai = Gemini::new(
+        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
+        "gemini-2.0-flash".to_string(),
+        None,
+    );
+    ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
+    let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
+    while let Some(response) = response_stream.next().await {
+        if let Ok(response) = response {
+            println!("{}", response.get_text(""));
+        }
+    }
+    println!("Complete reply: {}", json!(session.last_reply().unwrap()));
 }

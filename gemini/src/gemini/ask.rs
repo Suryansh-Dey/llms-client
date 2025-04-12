@@ -1,6 +1,6 @@
 use super::types::request::*;
-use super::types::sessions::Session;
 use super::types::response::*;
+use super::types::sessions::Session;
 use awc::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -14,7 +14,7 @@ pub struct Gemini<'a> {
     model: String,
     sys_prompt: Option<SystemInstruction<'a>>,
     generation_config: Option<Value>,
-    tools: Option<Vec<Value>>,
+    tools: Option<Vec<Tool>>,
 }
 impl<'a> Gemini<'a> {
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
@@ -59,8 +59,10 @@ impl<'a> Gemini<'a> {
         }
         self
     }
-    pub fn set_code_execution_mode(&mut self) -> &Self {
-        self.tools = Some(vec![json!({ "code_execution":{} })]);
+    ///- `tools` can be None to unset tools from using.  
+    ///- Or Vec tools to be allowed
+    pub fn set_tools(&mut self, tools: Option<Vec<Tool>>) -> &Self {
+        self.tools = tools;
         self
     }
     pub fn unset_code_execution_mode(&mut self) -> &Self {
@@ -88,7 +90,7 @@ impl<'a> Gemini<'a> {
             ))
             .await?;
         let reply = GeminiResponse::new(response).await?;
-        session.update(&reply)?;
+        session.update(&reply);
         Ok(reply)
     }
     pub async fn ask_as_stream<'b>(
