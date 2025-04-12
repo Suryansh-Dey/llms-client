@@ -60,11 +60,11 @@ async fn ask_streamed() {
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_text(""));
     }
-    println!("Complete reply: {}", session.last_reply_text("").unwrap());
+    println!("Complete reply: {}", session.get_last_reply_text("").unwrap());
 }
 
 #[actix_web::test]
-async fn tools() {
+async fn ask_with_tools() {
     let mut session = Session::new(5);
     session.ask_string("find sum of first 100 prime number using code".to_string());
     let mut ai = Gemini::new(
@@ -79,5 +79,5 @@ async fn tools() {
             println!("{}", response.get_text(""));
         }
     }
-    println!("Complete reply: {}", json!(session.last_reply().unwrap()));
+    println!("Complete reply: {}", json!(session.get_last_reply().unwrap()));
 }

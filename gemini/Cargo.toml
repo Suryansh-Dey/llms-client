@@ -1,6 +1,6 @@
 [package]
 name = "gemini-client-api"
-version = "2.2.3"
+version = "2.3.3"
 edition = "2024"
 repository = "https://github.com/Suryansh-Dey/llms-client"
 description = "Rust SDK to easily use streaming api will all tools(code, search, function calling) of Gemini"

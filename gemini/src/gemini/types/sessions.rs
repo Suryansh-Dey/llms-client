@@ -10,6 +10,9 @@ pub struct Session {
     chat_no: usize,
 }
 impl Session {
+    /// `history_limit`: Total number of chat of user and model allowed.  
+    /// ## Example
+    /// new(2) will allow only 1 question and 1 reply to be stored.
     pub fn new(history_limit: usize) -> Self {
         Self {
             history: VecDeque::new(),
@@ -23,6 +26,7 @@ impl Session {
     pub(super) fn get_history_as_vecdeque_mut(&mut self) -> &mut VecDeque<Chat> {
         &mut self.history
     }
+    /// Count of all the chats of user and model. Divide by 2 to get No. of question reply pairs.
     pub fn get_chat_no(&self) -> usize {
         self.chat_no
     }
@@ -68,14 +72,14 @@ impl Session {
             panic!("Cannot update an empty session");
         }
     }
-    pub fn last_reply(&self) -> Option<&Vec<Part>> {
+    pub fn get_last_reply(&self) -> Option<&Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque().back() {
             Some(&reply.parts())
         } else {
             None
         }
     }
-    pub(super) fn last_reply_mut(&mut self) -> Option<&mut Vec<Part>> {
+    pub fn get_last_reply_mut(&mut self) -> Option<&mut Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque_mut().back_mut() {
             Some(reply.parts_mut())
         } else {
@@ -83,8 +87,8 @@ impl Session {
         }
     }
     ///`seperator` used to concatinate all text parts. TL;DR use "\n" as seperator.
-    pub fn last_reply_text(&self, seperator: &str) -> Option<String> {
-        let parts = self.last_reply();
+    pub fn get_last_reply_text(&self, seperator: &str) -> Option<String> {
+        let parts = self.get_last_reply();
         if let Some(parts) = parts {
             let mut concatinated_string = String::new();
             for part in parts {
