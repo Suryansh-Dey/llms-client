@@ -1,5 +1,6 @@
 use crate::gemini::ask::Gemini;
-use crate::gemini::types::{Part, Session, SystemInstruction};
+use crate::gemini::types::request::{Part, SystemInstruction};
+use crate::gemini::types::sessions::Session;
 use futures::StreamExt;
 use serde_json::json;
 

@@ -1,4 +1,4 @@
-use super::types::*;
+use super::types::request::*;
 use crate::utils;
 
 ///Converts markdown to parts considering `![image](line)` means Gemini will be see the images too
