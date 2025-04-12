@@ -38,22 +38,22 @@ pub struct ExecutableCode {
 
 #[derive(Serialize, Deserialize, Clone, new, Getters)]
 pub struct FunctionCall {
-    id: String,
+    id: Option<String>,
     name: String,
-    args: Value,
+    args: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters)]
 pub struct FunctionResponse {
-    id: String,
+    id: Option<String>,
     name: String,
-    args: Value,
+    response: Value,
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters)]
 #[allow(non_snake_case)]
 pub struct FileData {
-    mimeType: String,
+    mimeType: Option<String>,
     fileUrl: String,
 }
 
@@ -76,7 +76,7 @@ pub struct CodeExecuteResult {
     #[get = "pub"]
     outcome: Outcome,
     #[get = "pub"]
-    output: String,
+    output: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -165,7 +165,13 @@ pub(super) fn concatinate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
                     .iter_mut()
                     .find(|e| matches!(e, Part::code_execution_result(_)))
                 {
-                    updating_data.output.push_str(&updator_data.output());
+                    if let Some(ref mut updating_output) = updating_data.output {
+                        if let Some(updator_output) = updator_data.output() {
+                            updating_output.push_str(updator_output);
+                        }
+                    } else {
+                        updating_data.output = updator_data.output.clone();
+                    }
                     continue;
                 }
             }
