@@ -74,6 +74,16 @@ impl GeminiResponse {
         let unescaped_str = self.get_text("").replace("\\\"", "\"").replace("\\n", "\n");
         serde_json::from_str::<T>(&unescaped_str)
     }
+    pub fn parse_json<T>(parts: &[Part]) -> Result<T, serde_json::Error>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let unescaped_str = Self::extract_text(parts, "")
+            .replace("\\\"", "\"")
+            .replace("\\n", "\n");
+        serde_json::from_str::<T>(&unescaped_str)
+    }
+    ///`seperator` used to concatinate all text parts. TL;DR use "" as seperator.
     pub fn extract_text(parts: &[Part], seperator: &str) -> String {
         let mut concatinated_string = String::new();
         for part in parts {
