@@ -108,13 +108,20 @@ impl Chat {
 }
 
 #[derive(Serialize, new)]
-pub struct SystemInstruction<'a> {
-    parts: &'a [Part],
+pub struct SystemInstruction {
+    parts: Vec<Part>,
+}
+impl SystemInstruction {
+    pub fn from_str(prompt: String) -> Self {
+        Self {
+            parts: vec![Part::text(prompt)],
+        }
+    }
 }
 
 #[derive(Serialize, new)]
 pub struct GeminiRequestBody<'a> {
-    system_instruction: Option<&'a SystemInstruction<'a>>,
+    system_instruction: Option<&'a SystemInstruction>,
     tools: Option<&'a [Tool]>,
     contents: &'a [&'a Chat],
     generation_config: Option<&'a Value>,

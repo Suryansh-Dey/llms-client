@@ -1,7 +1,7 @@
 # Basic usage
 ```rust
 use crate::gemini::ask::Gemini;
-use crate::gemini::types::request::{Part, SystemInstruction, Tool};
+use crate::gemini::types::request::{SystemInstruction, Tool};
 use crate::gemini::types::sessions::Session;
 use gemini_client_api::gemini::utils::MarkdownToParts;
 use futures::StreamExt;
@@ -16,7 +16,7 @@ async fn see_markdown() {
     );
 
     let response1 = ai.ask(session.ask_string("Hi, can you tell me which one of two bowls has more healty item?".to_string())).await.unwrap();
-    println!("{}", response1.get_text(""));
+    println!("{}", response1.get_text("")); //Question and reply both automatically gets stored in `session` for context.
 
     let parser = MarkdownToParts::new("Here is their image ![but fire](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way").await;
     let parts = parser.process("image/png".to_string());
@@ -33,7 +33,7 @@ async fn ask_string_for_json() {
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-1.5-flash".to_string(),
-        Some(SystemInstruction::new(&[Part::text("Calssify the given words".to_string())])),
+        Some(SystemInstruction::from_str("Calssify the given words".to_string())),
     )
     .set_json_mode(json!({
         "type": "object",

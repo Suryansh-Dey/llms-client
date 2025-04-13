@@ -61,7 +61,7 @@ impl GeminiResponse {
     ) -> Result<GeminiResponse, awc::error::JsonPayloadError> {
         response.json().await
     }
-    pub(crate) fn from(string: &str) -> Result<Self, serde_json::Error> {
+    pub(crate) fn from_str(string: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(string)
     }
     pub fn get_parts(&self) -> &Vec<Part> {
@@ -120,8 +120,9 @@ impl<'a> Stream for GeminiResponseStream<'a> {
                 if text == "]" {
                     Poll::Ready(None)
                 } else {
+                    let json_string = text[1..].trim();
                     let response =
-                        GeminiResponse::from(text[1..].trim()).map_err(|_| text[1..].trim())?;
+                        GeminiResponse::from_str(json_string).map_err(|_| json_string)?;
                     this.session.update(&response);
                     Poll::Ready(Some(Ok(response)))
                 }

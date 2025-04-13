@@ -8,17 +8,17 @@ use std::time::Duration;
 const API_TIMEOUT: Duration = Duration::from_secs(60);
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
-pub struct Gemini<'a> {
+pub struct Gemini {
     client: Client,
     api_key: String,
     model: String,
-    sys_prompt: Option<SystemInstruction<'a>>,
+    sys_prompt: Option<SystemInstruction>,
     generation_config: Option<Value>,
     tools: Option<Vec<Tool>>,
 }
-impl<'a> Gemini<'a> {
+impl Gemini {
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
-    pub fn new(api_key: String, model: String, sys_prompt: Option<SystemInstruction<'a>>) -> Self {
+    pub fn new(api_key: String, model: String, sys_prompt: Option<SystemInstruction>) -> Self {
         Self {
             client: Client::builder().timeout(API_TIMEOUT).finish(),
             api_key,
