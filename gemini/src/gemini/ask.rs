@@ -33,14 +33,16 @@ impl<'a> Gemini<'a> {
         self.generation_config = Some(generation_config);
         self
     }
-    pub fn set_model(&mut self, model: String) {
+    pub fn set_model(&mut self, model: String) -> &mut Self {
         self.model = model;
+        self
     }
-    pub fn set_api_key(&mut self, api_key: String) {
+    pub fn set_api_key(&mut self, api_key: String) -> &mut Self {
         self.api_key = api_key;
+        self
     }
     /// `schema` should follow [Schema of gemini](https://ai.google.dev/api/caching#Schema)
-    pub fn set_json_mode(&mut self, schema: Value) -> &Self {
+    pub fn set_json_mode(&mut self, schema: Value) -> &mut Self {
         if let None = self.generation_config {
             self.generation_config = Some(json!({
                 "response_mime_type": "application/json",
@@ -52,7 +54,7 @@ impl<'a> Gemini<'a> {
         }
         self
     }
-    pub fn unset_json_mode(&mut self) -> &Self {
+    pub fn unset_json_mode(&mut self) -> &mut Self {
         if let Some(ref mut generation_config) = self.generation_config {
             generation_config["response_schema"] = None::<Value>.into();
             generation_config["response_mime_type"] = None::<Value>.into();
@@ -61,11 +63,11 @@ impl<'a> Gemini<'a> {
     }
     ///- `tools` can be None to unset tools from using.  
     ///- Or Vec tools to be allowed
-    pub fn set_tools(&mut self, tools: Option<Vec<Tool>>) -> &Self {
+    pub fn set_tools(&mut self, tools: Option<Vec<Tool>>) -> &mut Self {
         self.tools = tools;
         self
     }
-    pub fn unset_code_execution_mode(&mut self) -> &Self {
+    pub fn unset_code_execution_mode(&mut self) -> &mut Self {
         self.tools.take();
         self
     }

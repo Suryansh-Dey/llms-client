@@ -58,6 +58,8 @@ impl Session {
     pub fn ask_string(&mut self, prompt: String) -> &mut Self {
         self.add_chat(Chat::new(Role::user, vec![Part::text(prompt)]))
     }
+    /// ## Panics
+    /// If called on empty session
     pub(crate) fn update(&mut self, response: &GeminiResponse) {
         let history = &mut self.history;
         let reply_parts = response.get_parts();
@@ -104,12 +106,13 @@ impl Session {
     }
     /// If last message is a question from user then only that is removed else the model reply and
     /// the user's question (just before model reply)
-    pub fn forget_last_conversation(&mut self) {
+    pub fn forget_last_conversation(&mut self) -> &mut Self {
         self.history.pop_back();
         if let Some(chat) = self.history.back() {
             if let Role::user = chat.role() {
                 self.history.pop_back();
             }
         }
+        self
     }
 }

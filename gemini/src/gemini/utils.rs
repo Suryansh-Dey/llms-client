@@ -13,7 +13,7 @@ impl<'a> MarkdownToParts<'a> {
             markdown,
         }
     }
-    pub fn process(self, default_mime_type: String) -> Vec<Part> {
+    pub fn process(self, fallback_mime_type: String) -> Vec<Part> {
         let image_detect = utils::get_image_regex();
         let mut parts: Vec<Part> = Vec::new();
         let mut i = 0;
@@ -26,7 +26,7 @@ impl<'a> MarkdownToParts<'a> {
             parts.push(Part::text(text.to_string()));
             if let (mime, Some(base64)) = &self.base64s[i] {
                 parts.push(Part::inline_data(InlineData::new(
-                    mime.as_ref().unwrap_or(&default_mime_type).to_string(),
+                    mime.as_ref().unwrap_or(&fallback_mime_type).to_string(),
                     base64.to_string(),
                 )));
             }
