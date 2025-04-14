@@ -27,9 +27,10 @@ impl<'a> MarkdownToParts<'a> {
     }
     pub fn process(mut self) -> Vec<Part> {
         let mut parts: Vec<Part> = Vec::new();
+        let mut removed_length = 0;
         for file in self.base64s {
             if let Some(file) = file {
-                let end = file.index + file.length;
+                let end = file.index + file.length - removed_length;
                 let text = &self.markdown[..end];
                 parts.push(Part::text(text.to_string()));
                 parts.push(Part::inline_data(InlineData::new(
@@ -38,6 +39,7 @@ impl<'a> MarkdownToParts<'a> {
                 )));
 
                 self.markdown = &self.markdown[end..];
+                removed_length += end;
             }
         }
         if self.markdown.len() != 0 {
