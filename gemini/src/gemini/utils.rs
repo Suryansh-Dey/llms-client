@@ -47,7 +47,7 @@ impl<'a> MarkdownToParts<'a> {
             if let MatchedFiles {
                 index,
                 length,
-                mime_type,
+                mime_type: Some(mime_type),
                 base64: Some(base64),
             } = file
             {
