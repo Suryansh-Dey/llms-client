@@ -13,8 +13,9 @@ pub struct MatchedFiles {
     pub mime_type: String,
     pub base64: String,
 }
-/// `regex` must have a Regex with atleast 1 capture group with file URL as first capture group  
-/// Else it PANICS
+/// # Panics
+/// `regex` must have a Regex with atleast 1 capture group with file URL as first capture group, else it PANICS
+/// # Arguments
 /// `mime_type_guess` is used to detect mimi_type of URL pointing to file system or web resource
 /// with no "Content-Type" header.
 pub async fn get_file_base64s(

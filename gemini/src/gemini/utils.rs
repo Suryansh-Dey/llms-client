@@ -7,6 +7,15 @@ pub struct MarkdownToParts<'a> {
     markdown: &'a str,
 }
 impl<'a> MarkdownToParts<'a> {
+    ///# Panics
+    /// `regex` must have a Regex with atleast 1 capture group with file URL as first capture group, else it PANICS.
+    /// # Arguments
+    /// `mime_type_guess` is used to detect mimi_type of URL pointing to file system or web resource
+    /// with no "Content-Type" header.
+    /// # Example
+    /// ```rust
+    /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_| "image/png".to_string())
+    /// ```
     pub async fn from_regex(
         markdown: &'a str,
         regex: Regex,
@@ -17,7 +26,13 @@ impl<'a> MarkdownToParts<'a> {
             markdown,
         }
     }
-    ///Converts markdown to parts considering `![image](link)` means Gemini will be see the images too. `link` can be URL or file path.
+    ///Converts markdown to parts considering `![image](link)` means Gemini will be see the images too. `link` can be URL or file path.  
+    /// `mime_type_guess` is used to detect mimi_type of URL pointing to file system or web resource
+    /// with no "Content-Type" header.
+    /// # Example
+    /// ```rust
+    /// new("Your markdown string...", |_| "image/png".to_string())
+    /// ```
     pub async fn new(markdown: &'a str, guess_mime_type: fn(url: &str) -> String) -> Self {
         let image_regex = Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap();
         Self {
