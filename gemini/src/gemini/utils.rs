@@ -3,7 +3,7 @@ use crate::utils::{self, MatchedFiles};
 use regex::Regex;
 
 pub struct MarkdownToParts<'a> {
-    base64s: Vec<Option<MatchedFiles>>,
+    base64s: Vec<MatchedFiles>,
     markdown: &'a str,
 }
 impl<'a> MarkdownToParts<'a> {
@@ -13,7 +13,7 @@ impl<'a> MarkdownToParts<'a> {
     /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
     /// with no "Content-Type" header.
     /// # Example
-    /// ```rust
+    /// ```ignore
     /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_| "image/png".to_string())
     /// ```
     pub async fn from_regex(
@@ -30,7 +30,7 @@ impl<'a> MarkdownToParts<'a> {
     /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
     /// with no "Content-Type" header.
     /// # Example
-    /// ```rust
+    /// ```ignore
     /// new("Your markdown string...", |_| "image/png".to_string())
     /// ```
     pub async fn new(markdown: &'a str, guess_mime_type: fn(url: &str) -> String) -> Self {
@@ -44,14 +44,17 @@ impl<'a> MarkdownToParts<'a> {
         let mut parts: Vec<Part> = Vec::new();
         let mut removed_length = 0;
         for file in self.base64s {
-            if let Some(file) = file {
-                let end = file.index + file.length - removed_length;
+            if let MatchedFiles {
+                index,
+                length,
+                mime_type,
+                base64: Some(base64),
+            } = file
+            {
+                let end = index + length - removed_length;
                 let text = &self.markdown[..end];
                 parts.push(Part::text(text.to_string()));
-                parts.push(Part::inline_data(InlineData::new(
-                    file.mime_type,
-                    file.base64,
-                )));
+                parts.push(Part::inline_data(InlineData::new(mime_type, base64)));
 
                 self.markdown = &self.markdown[end..];
                 removed_length += end;

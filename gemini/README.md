@@ -14,7 +14,7 @@ async fn see_markdown() {
     let mut session = Session::new(6);
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-1.5-flash".to_string(),
+        "gemini-2.0-flash".to_string(),
         None,
     );
 
@@ -35,7 +35,7 @@ async fn ask_string_for_json() {
     let mut session = Session::new(6);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-1.5-flash".to_string(),
+        "gemini-2.0-flash".to_string(),
         Some(SystemInstruction::from_str("Calssify the given words".to_string())),
     )
     .set_json_mode(json!({
@@ -63,7 +63,7 @@ async fn ask_streamed() {
     session.ask_string("How are you".to_string());
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-1.5-flash".to_string(),
+        "gemini-2.5-pro-exp-03-25".to_string(),
         None,
     );
     let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
@@ -73,7 +73,7 @@ async fn ask_streamed() {
     println!("Complete reply: {}", session.last_reply_text("").unwrap());
 }
 
-async fn ask_with_tools() {
+async fn ask_streamed_with_tools() {
     let mut session = Session::new(6);
     session.ask_string("find sum of first 100 prime number using code".to_string());
     let mut ai = Gemini::new(

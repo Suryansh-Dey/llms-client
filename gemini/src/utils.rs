@@ -11,7 +11,7 @@ pub struct MatchedFiles {
     pub index: usize,
     pub length: usize,
     pub mime_type: String,
-    pub base64: String,
+    pub base64: Option<String>,
 }
 /// # Panics
 /// `regex` must have a Regex with atleast 1 capture group with file URL as first capture group, else it PANICS
@@ -22,7 +22,7 @@ pub async fn get_file_base64s(
     markdown: &str,
     regex: Regex,
     guess_mime_type: fn(url: &str) -> String,
-) -> Vec<Option<MatchedFiles>> {
+) -> Vec<MatchedFiles> {
     let client = Client::builder().timeout(REQ_TIMEOUT).finish();
     let mut tasks: Vec<_> = Vec::new();
 
@@ -32,18 +32,22 @@ pub async fn get_file_base64s(
         tasks.push((async |capture: regex::Match<'_>| {
             let (mime_type, base64) = if url.starts_with("https://") || url.starts_with("http://") {
                 let response = client.get(&url).send().await;
-                let mut data = match response {
-                    Err(_) => return None,
-                    Ok(data) => data,
-                };
-                (
-                    data.mime_type()
-                        .ok()
-                        .flatten()
-                        .map(|mime| mime.to_string())
-                        .unwrap_or_else(|| guess_mime_type(&url)),
-                    data.body().await.ok().map(|bytes| STANDARD.encode(bytes)),
-                )
+                match response {
+                    Ok(mut response) => (
+                        response
+                            .mime_type()
+                            .ok()
+                            .flatten()
+                            .map(|mime| mime.to_string())
+                            .unwrap_or_else(|| guess_mime_type(&url)),
+                        response
+                            .body()
+                            .await
+                            .ok()
+                            .map(|bytes| STANDARD.encode(bytes)),
+                    ),
+                    Err(_) => (guess_mime_type(&url), None),
+                }
             } else {
                 (
                     guess_mime_type(&url),
@@ -53,15 +57,11 @@ pub async fn get_file_base64s(
                         .map(|bytes| STANDARD.encode(&bytes)),
                 )
             };
-            if let Some(base64) = base64 {
-                Some(MatchedFiles {
-                    index: capture.start(),
-                    length: capture.len(),
-                    mime_type,
-                    base64,
-                })
-            } else {
-                None
+            MatchedFiles {
+                index: capture.start(),
+                length: capture.len(),
+                mime_type,
+                base64,
             }
         })(capture));
     }
