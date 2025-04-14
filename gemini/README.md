@@ -1,9 +1,12 @@
+**Main function should use `#[actix_web::main]` instead of `#[tokio::main]`. Don't worry, your all tokio function will still run fine.**
 # Basic usage
 ```rust
-use crate::gemini::ask::Gemini;
-use crate::gemini::types::request::{SystemInstruction, Tool};
-use crate::gemini::types::sessions::Session;
-use gemini_client_api::gemini::utils::MarkdownToParts;
+use gemini_client_api::gemini::{
+    ask::Gemini,
+    types::request::{SystemInstruction, Tool},
+    types::sessions::Session,
+    utils::MarkdownToParts,
+};
 use futures::StreamExt;
 use serde_json::json;
 

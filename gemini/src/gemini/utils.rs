@@ -10,7 +10,7 @@ impl<'a> MarkdownToParts<'a> {
     ///# Panics
     /// `regex` must have a Regex with atleast 1 capture group with file URL as first capture group, else it PANICS.
     /// # Arguments
-    /// `mime_type_guess` is used to detect mimi_type of URL pointing to file system or web resource
+    /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
     /// with no "Content-Type" header.
     /// # Example
     /// ```rust
@@ -27,7 +27,7 @@ impl<'a> MarkdownToParts<'a> {
         }
     }
     ///Converts markdown to parts considering `![image](link)` means Gemini will be see the images too. `link` can be URL or file path.  
-    /// `mime_type_guess` is used to detect mimi_type of URL pointing to file system or web resource
+    /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
     /// with no "Content-Type" header.
     /// # Example
     /// ```rust
