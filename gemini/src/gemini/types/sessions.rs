@@ -2,8 +2,9 @@ use super::request::*;
 use super::response::GeminiResponse;
 use serde::Serialize;
 use std::collections::VecDeque;
+use std::mem::discriminant;
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct Session {
     history: VecDeque<Chat>,
     history_limit: usize,
@@ -44,6 +45,13 @@ impl Session {
             .map(|chat| chat.parts_mut())
     }
     fn add_chat(&mut self, chat: Chat) -> &mut Self {
+        if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
+            if discriminant(last_chat.role()) == discriminant(chat.role()) {
+                concatenate_parts(last_chat.parts_mut(), &chat.parts());
+                return self;
+            }
+        }
+
         self.history.push_back(chat);
         self.chat_no += 1;
         if self.get_history_length() > self.history_limit {
@@ -51,12 +59,21 @@ impl Session {
         }
         self
     }
-    /// `parts` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
+    /// If ask is called more than once without passing through `gemini.ask(&mut session)`, the
+    /// parts is concatenated with the previous parts.
     pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::user, parts))
     }
+    /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`, the
+    /// prompt string is concatenated with the previous prompt.
     pub fn ask_string(&mut self, prompt: String) -> &mut Self {
         self.add_chat(Chat::new(Role::user, vec![Part::text(prompt)]))
+    }
+    pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
+        self.add_chat(Chat::new(Role::model, parts))
+    }
+    pub fn reply_string(&mut self, prompt: String) -> &mut Self {
+        self.add_chat(Chat::new(Role::model, vec![Part::text(prompt)]))
     }
     /// ## Panics
     /// If called on empty session
@@ -66,7 +83,7 @@ impl Session {
 
         if let Some(chat) = history.back_mut() {
             if let Role::model = chat.role() {
-                concatinate_parts(chat.parts_mut(), reply_parts);
+                concatenate_parts(chat.parts_mut(), reply_parts);
             } else {
                 history.push_back(Chat::new(Role::model, reply_parts.clone()));
             }
@@ -74,32 +91,32 @@ impl Session {
             panic!("Cannot update an empty session");
         }
     }
-    pub fn get_last_reply(&self) -> Option<&Vec<Part>> {
+    pub fn get_last_message(&self) -> Option<&Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque().back() {
-            Some(&reply.parts())
+            Some(reply.parts())
         } else {
             None
         }
     }
-    pub fn get_last_reply_mut(&mut self) -> Option<&mut Vec<Part>> {
+    pub fn get_last_message_mut(&mut self) -> Option<&mut Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque_mut().back_mut() {
             Some(reply.parts_mut())
         } else {
             None
         }
     }
-    ///`seperator` used to concatinate all text parts. TL;DR use "\n" as seperator.
-    pub fn get_last_reply_text(&self, seperator: &str) -> Option<String> {
-        let parts = self.get_last_reply();
+    ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
+    pub fn get_last_message_text(&self, seperator: &str) -> Option<String> {
+        let parts = self.get_last_message();
         if let Some(parts) = parts {
-            let mut concatinated_string = String::new();
+            let mut concatenated_string = String::new();
             for part in parts {
                 if let Part::text(text) = part {
-                    concatinated_string.push_str(text);
-                    concatinated_string.push_str(seperator);
+                    concatenated_string.push_str(text);
+                    concatenated_string.push_str(seperator);
                 }
             }
-            Some(concatinated_string)
+            Some(concatenated_string)
         } else {
             None
         }

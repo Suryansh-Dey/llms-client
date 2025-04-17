@@ -8,6 +8,7 @@ use std::time::Duration;
 const API_TIMEOUT: Duration = Duration::from_secs(60);
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
+#[derive(Clone, Default)]
 pub struct Gemini {
     client: Client,
     api_key: String,

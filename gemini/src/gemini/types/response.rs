@@ -83,18 +83,18 @@ impl GeminiResponse {
             .replace("\\n", "\n");
         serde_json::from_str::<T>(&unescaped_str)
     }
-    ///`seperator` used to concatinate all text parts. TL;DR use "" as seperator.
+    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
     pub fn extract_text(parts: &[Part], seperator: &str) -> String {
-        let mut concatinated_string = String::new();
+        let mut concatenated_string = String::new();
         for part in parts {
             if let Part::text(text) = part {
-                concatinated_string.push_str(text);
-                concatinated_string.push_str(seperator);
+                concatenated_string.push_str(text);
+                concatenated_string.push_str(seperator);
             }
         }
-        concatinated_string
+        concatenated_string
     }
-    ///`seperator` used to concatinate all text parts. TL;DR use "" as seperator.
+    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
     pub fn get_text(&self, seperator: &str) -> String {
         Self::extract_text(&self.get_parts(), seperator)
     }

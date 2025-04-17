@@ -63,7 +63,7 @@ async fn ask_streamed() {
     }
     println!(
         "Complete reply: {}",
-        session.get_last_reply_text("").unwrap()
+        session.get_last_message_text("").unwrap()
     );
 }
 
@@ -85,6 +85,6 @@ async fn ask_streamed_with_tools() {
     }
     println!(
         "Complete reply: {:#?}",
-        json!(session.get_last_reply().unwrap())
+        json!(session.get_last_message().unwrap())
     );
 }

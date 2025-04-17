@@ -3,7 +3,7 @@ use getset::Getters;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[allow(non_camel_case_types)]
 pub enum Role {
     user,
@@ -11,7 +11,7 @@ pub enum Role {
     model,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters)]
+#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct InlineData {
     #[get = "pub"]
     mime_type: String,
@@ -19,7 +19,7 @@ pub struct InlineData {
     data: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum Language {
     ///Unspecified language. This value should not be used.
@@ -28,7 +28,7 @@ pub enum Language {
     PYTHON,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters)]
+#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct ExecutableCode {
     #[get = "pub"]
     language: Language,
@@ -36,28 +36,28 @@ pub struct ExecutableCode {
     code: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters)]
+#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionCall {
     id: Option<String>,
     name: String,
     args: Option<Value>,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters)]
+#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionResponse {
     id: Option<String>,
     name: String,
     response: Value,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters)]
+#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 #[allow(non_snake_case)]
 pub struct FileData {
     mimeType: Option<String>,
     fileUrl: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum Outcome {
     /// Unspecified status. This value should not be used.
@@ -71,7 +71,7 @@ pub enum Outcome {
     OUTCOME_DEADLINE_EXCEEDED,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters)]
+#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct CodeExecuteResult {
     #[get = "pub"]
     outcome: Outcome,
@@ -79,7 +79,7 @@ pub struct CodeExecuteResult {
     output: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum Part {
     text(String),
@@ -94,7 +94,7 @@ pub enum Part {
     fileData(FileData),
 }
 
-#[derive(Serialize, Deserialize, new, Getters)]
+#[derive(Serialize, Deserialize, new, Getters, Debug, Clone)]
 pub struct Chat {
     #[get = "pub"]
     role: Role,
@@ -107,7 +107,7 @@ impl Chat {
     }
 }
 
-#[derive(Serialize, new)]
+#[derive(Serialize, new, Debug, Clone)]
 pub struct SystemInstruction {
     parts: Vec<Part>,
 }
@@ -127,7 +127,7 @@ pub struct GeminiRequestBody<'a> {
     generation_config: Option<&'a Value>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug, Clone)]
 #[allow(non_camel_case_types)]
 pub enum Tool {
     /// Generally it can be `Tool::google_search(json!({}))`
@@ -138,7 +138,7 @@ pub enum Tool {
     code_execution(Value),
 }
 
-pub(super) fn concatinate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
+pub(super) fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
     if let Some(updator_part) = updator.first() {
         match updator_part {
             Part::text(updator_text) => {
