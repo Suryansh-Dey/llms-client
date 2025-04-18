@@ -75,21 +75,10 @@ impl Session {
     pub fn reply_string(&mut self, prompt: String) -> &mut Self {
         self.add_chat(Chat::new(Role::model, vec![Part::text(prompt)]))
     }
-    /// ## Panics
-    /// If called on empty session
-    pub(crate) fn update(&mut self, response: &GeminiResponse) {
-        let history = &mut self.history;
+    pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> &'b Vec<Part> {
         let reply_parts = response.get_parts();
-
-        if let Some(chat) = history.back_mut() {
-            if let Role::model = chat.role() {
-                concatenate_parts(chat.parts_mut(), reply_parts);
-            } else {
-                self.add_chat(Chat::new(Role::model, reply_parts.clone()));
-            }
-        } else {
-            panic!("Cannot update an empty session");
-        }
+        self.add_chat(Chat::new(Role::model, reply_parts.clone()));
+        reply_parts
     }
     pub fn get_last_message(&self) -> Option<&Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque().back() {

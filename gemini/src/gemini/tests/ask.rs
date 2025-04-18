@@ -51,12 +51,14 @@ async fn ask_string_for_json() {
 #[actix_web::test]
 async fn ask_streamed() {
     let mut session = Session::new(6);
-    session.ask_string("How are you".to_string());
+    session.ask_string("Can you explain me something in one line?".to_string());
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.5-pro-exp-03-25".to_string(),
         None,
     );
+    ai.ask(&mut session).await.unwrap();
+    session.ask_string("machine learning".to_string());
     let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_text(""));
