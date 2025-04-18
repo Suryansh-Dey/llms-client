@@ -7,7 +7,6 @@ use serde_json::Value;
 #[allow(non_camel_case_types)]
 pub enum Role {
     user,
-    developer,
     model,
 }
 

@@ -85,7 +85,7 @@ impl Session {
             if let Role::model = chat.role() {
                 concatenate_parts(chat.parts_mut(), reply_parts);
             } else {
-                history.push_back(Chat::new(Role::model, reply_parts.clone()));
+                self.add_chat(Chat::new(Role::model, reply_parts.clone()));
             }
         } else {
             panic!("Cannot update an empty session");
