@@ -1,4 +1,4 @@
-**Main function should use `#[actix_web::main]` instead of `#[tokio::main]`. Don't worry, your all tokio function will still run fine.**
+**Main function should use `#[actix_web::main]` instead of `#[tokio::main]`.** Don't worry, your all tokio functions will work the same!
 # Basic usage
 ```rust
 use gemini_client_api::gemini::{

@@ -138,7 +138,7 @@ pub enum Tool {
     code_execution(Value),
 }
 
-pub(super) fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
+pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
     if let Some(updator_part) = updator.first() {
         match updator_part {
             Part::text(updator_text) => {
