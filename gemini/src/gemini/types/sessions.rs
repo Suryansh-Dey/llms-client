@@ -9,6 +9,7 @@ pub struct Session {
     history: VecDeque<Chat>,
     history_limit: usize,
     chat_no: usize,
+    remember_reply: bool,
 }
 impl Session {
     /// `history_limit`: Total number of chat of user and model allowed.  
@@ -19,7 +20,12 @@ impl Session {
             history: VecDeque::new(),
             history_limit,
             chat_no: 0,
+            remember_reply: true,
         }
+    }
+    pub fn set_remember_reply(&mut self, remember: bool) -> &mut Self {
+        self.remember_reply = remember;
+        self
     }
     pub fn get_history_as_vecdeque(&self) -> &VecDeque<Chat> {
         &self.history
@@ -43,6 +49,9 @@ impl Session {
         self.history
             .get_mut(history_length - chat_previous_no)
             .map(|chat| chat.parts_mut())
+    }
+    pub fn get_remember_reply(&self) -> bool {
+        self.remember_reply
     }
     fn add_chat(&mut self, chat: Chat) -> &mut Self {
         if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
@@ -75,10 +84,15 @@ impl Session {
     pub fn reply_string(&mut self, prompt: String) -> &mut Self {
         self.add_chat(Chat::new(Role::model, vec![Part::text(prompt)]))
     }
-    pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> &'b Vec<Part> {
-        let reply_parts = response.get_parts();
-        self.add_chat(Chat::new(Role::model, reply_parts.clone()));
-        reply_parts
+    pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
+        if self.get_remember_reply() {
+            let reply_parts = response.get_parts();
+            self.add_chat(Chat::new(Role::model, reply_parts.clone()));
+            Some(reply_parts)
+        } else {
+            self.get_history_as_vecdeque_mut().pop_back();
+            None
+        }
     }
     pub fn get_last_message(&self) -> Option<&Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque().back() {
