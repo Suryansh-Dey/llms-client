@@ -14,11 +14,11 @@ async fn see_markdown() {
     let mut session = Session::new(6);
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash".to_string(),
+        "gemini-2.0-flash",
         None,
     );
 
-    let response1 = ai.ask(session.ask_string("Hi, can you tell me which one of two bowls has more healty item?".to_string())).await.unwrap();
+    let response1 = ai.ask(session.ask_string("Hi, can you tell me which one of two bowls has more healty item?")).await.unwrap();
     println!("{}", response1.get_text("")); //Question and reply both automatically gets stored in `session` for context.
 
     let parser = MarkdownToParts::new("Here is their ![image](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way", |_|"image/png".to_string()).await;
@@ -34,10 +34,11 @@ async fn see_markdown() {
 
 async fn ask_string_for_json() {
     let mut session = Session::new(6);
+    session.set_remember_reply(false);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash".to_string(),
-        Some(SystemInstruction::from_str("Calssify the given words".to_string())),
+        "gemini-2.0-flash",
+        Some(SystemInstruction::from_str("Calssify the given words")),
     )
     .set_json_mode(json!({
         "type": "object",
@@ -53,7 +54,7 @@ async fn ask_string_for_json() {
         }
     }))
     .ask(session.ask_string("[\"Joy\", \"Success\", \"Love\", \"Hope\", \"Confidence\", \"Peace\", \"Victory\", \"Harmony\", \"Inspiration\", \"Gratitude\", \"Prosperity\", \"Strength\", \"Freedom\", \"Comfort\", \"Brilliance\" \"Fear\", \"Failure\", \"Hate\", \"Doubt\", \"Pain\", \"Suffering\", \"Loss\", \"Anxiety\", \"Despair\", \"Betrayal\", \"Weakness\", \"Chaos\", \"Misery\", \"Frustration\", \"Darkness\"]
-".to_string()))
+"))
     .await
     .unwrap();
     println!("{}", response.get_text(""));
@@ -61,10 +62,10 @@ async fn ask_string_for_json() {
 
 async fn ask_streamed() {
     let mut session = Session::new(6);
-    session.ask_string("How are you".to_string());
+    session.ask_string("How are you");
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-pro-exp-03-25".to_string(),
+        "gemini-2.5-pro-exp-03-25",
         None,
     );
     let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
@@ -76,10 +77,10 @@ async fn ask_streamed() {
 
 async fn ask_streamed_with_tools() {
     let mut session = Session::new(6);
-    session.ask_string("find sum of first 100 prime number using code".to_string());
+    session.ask_string("find sum of first 100 prime number using code");
     let mut ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash".to_string(),
+        "gemini-2.0-flash",
         None,
     );
     ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));

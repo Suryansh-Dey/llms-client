@@ -3,6 +3,7 @@ use super::response::GeminiResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::mem::discriminant;
+use std::usize;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
@@ -27,6 +28,9 @@ impl Session {
         self.remember_reply = remember;
         self
     }
+    pub fn get_history_limit(&self) -> usize {
+        self.history_limit
+    }
     pub fn get_history_as_vecdeque(&self) -> &VecDeque<Chat> {
         &self.history
     }
@@ -44,6 +48,10 @@ impl Session {
     pub fn get_history_length(&self) -> usize {
         self.history.len()
     }
+    ///`chat_previous_no` is ith last message.
+    ///# Example
+    ///- session.get_parts_mut(1) return last message
+    ///- session.get_parts_mut(2) return 2nd last message
     pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Vec<Part>> {
         let history_length = self.get_history_length();
         self.history
@@ -63,18 +71,18 @@ impl Session {
 
         self.history.push_back(chat);
         self.chat_no += 1;
-        if self.get_history_length() > self.history_limit {
+        if self.get_history_length() > self.get_history_limit() {
             self.history.pop_front();
         }
         self
     }
-    /// If ask is called more than once without passing through `gemini.ask(&mut session)`, the
-    /// parts is concatenated with the previous parts.
+    /// If ask is called more than once without passing through `gemini.ask(&mut session)`
+    /// or `session.reply("ok")`, the parts is concatenated with the previous parts.
     pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::user, parts))
     }
-    /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`, the
-    /// prompt string is concatenated with the previous prompt.
+    /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`
+    /// or `session.reply("opportunist")`, the prompt string is concatenated with the previous prompt.
     pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
         self.add_chat(Chat::new(Role::user, vec![Part::text(prompt.into())]))
     }
