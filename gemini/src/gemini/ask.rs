@@ -19,11 +19,15 @@ pub struct Gemini {
 }
 impl Gemini {
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
-    pub fn new(api_key: String, model: String, sys_prompt: Option<SystemInstruction>) -> Self {
+    pub fn new(
+        api_key: impl Into<String>,
+        model: impl Into<String>,
+        sys_prompt: Option<SystemInstruction>,
+    ) -> Self {
         Self {
             client: Client::builder().timeout(API_TIMEOUT).finish(),
-            api_key,
-            model,
+            api_key: api_key.into(),
+            model: model.into(),
             sys_prompt,
             generation_config: None,
             tools: None,
@@ -34,12 +38,12 @@ impl Gemini {
         self.generation_config = Some(generation_config);
         self
     }
-    pub fn set_model(&mut self, model: String) -> &mut Self {
-        self.model = model;
+    pub fn set_model(&mut self, model: impl Into<String>) -> &mut Self {
+        self.model = model.into();
         self
     }
-    pub fn set_api_key(&mut self, api_key: String) -> &mut Self {
-        self.api_key = api_key;
+    pub fn set_api_key(&mut self, api_key: impl Into<String>) -> &mut Self {
+        self.api_key = api_key.into();
         self
     }
     /// `schema` should follow [Schema of gemini](https://ai.google.dev/api/caching#Schema)

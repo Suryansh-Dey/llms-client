@@ -9,10 +9,10 @@ async fn ask_string() {
     let mut session = Session::new(6);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash".to_string(),
+        "gemini-2.0-flash",
         None,
     )
-    .ask(session.ask_string("Hi".to_string()))
+    .ask(session.ask_string("Hi"))
     .await
     .unwrap();
     println!("{}", response.get_text(""));
@@ -21,10 +21,11 @@ async fn ask_string() {
 #[actix_web::test]
 async fn ask_string_for_json() {
     let mut session = Session::new(6);
+    session.set_remember_reply(false);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash".to_string(),
-        Some(SystemInstruction::from_str("Calssify the given words".to_string())),
+        "gemini-2.0-flash",
+        Some(SystemInstruction::from_str("Calssify the given words")),
     )
     .set_json_mode(json!({
         "type": "object",
@@ -40,7 +41,7 @@ async fn ask_string_for_json() {
         }
     }))
     .ask(session.ask_string("[\"Joy\", \"Success\", \"Love\", \"Hope\", \"Confidence\", \"Peace\", \"Victory\", \"Harmony\", \"Inspiration\", \"Gratitude\", \"Prosperity\", \"Strength\", \"Freedom\", \"Comfort\", \"Brilliance\" \"Fear\", \"Failure\", \"Hate\", \"Doubt\", \"Pain\", \"Suffering\", \"Loss\", \"Anxiety\", \"Despair\", \"Betrayal\", \"Weakness\", \"Chaos\", \"Misery\", \"Frustration\", \"Darkness\"]
-".to_string()))
+"))
     .await
     .unwrap();
 
@@ -51,14 +52,14 @@ async fn ask_string_for_json() {
 #[actix_web::test]
 async fn ask_streamed() {
     let mut session = Session::new(6);
-    session.ask_string("Can you explain me something in one line?".to_string());
+    session.ask_string("Can you explain me something in one line?");
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-pro-exp-03-25".to_string(),
+        "gemini-2.5-pro-exp-03-25",
         None,
     );
     ai.ask(&mut session).await.unwrap();
-    session.ask_string("machine learning".to_string());
+    session.ask_string("machine learning");
     let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_text(""));
@@ -72,10 +73,10 @@ async fn ask_streamed() {
 #[actix_web::test]
 async fn ask_streamed_with_tools() {
     let mut session = Session::new(6);
-    session.ask_string("find sum of first 100 prime number using code".to_string());
+    session.ask_string("find sum of first 100 prime number using code");
     let mut ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash".to_string(),
+        "gemini-2.0-flash",
         None,
     );
     ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));

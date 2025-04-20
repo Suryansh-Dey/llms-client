@@ -106,14 +106,14 @@ impl Chat {
     }
 }
 
-#[derive(Serialize, new, Debug, Clone)]
+#[derive(Serialize, Deserialize, new, Debug, Clone)]
 pub struct SystemInstruction {
     parts: Vec<Part>,
 }
 impl SystemInstruction {
-    pub fn from_str(prompt: String) -> Self {
+    pub fn from_str(prompt: impl Into<String>) -> Self {
         Self {
-            parts: vec![Part::text(prompt)],
+            parts: vec![Part::text(prompt.into())],
         }
     }
 }

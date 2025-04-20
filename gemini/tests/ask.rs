@@ -10,7 +10,7 @@ async fn see_web_markdown() {
     let mut session = Session::new(6);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-1.5-flash".to_string(),
+        "gemini-1.5-flash",
         None,
     )
     .ask(session.ask(parts))
@@ -31,7 +31,7 @@ async fn see_fs_markdown() {
     let mut session = Session::new(6);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-1.5-flash".to_string(),
+        "gemini-1.5-flash",
         None,
     )
     .ask(session.ask(parts))

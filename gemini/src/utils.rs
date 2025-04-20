@@ -19,14 +19,14 @@ pub struct MatchedFiles {
 /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
 /// with no "Content-Type" header.
 pub async fn get_file_base64s(
-    markdown: &str,
+    markdown: impl AsRef<str>,
     regex: Regex,
     guess_mime_type: fn(url: &str) -> String,
 ) -> Vec<MatchedFiles> {
     let client = Client::builder().timeout(REQ_TIMEOUT).finish();
     let mut tasks: Vec<_> = Vec::new();
 
-    for file in regex.captures_iter(&markdown) {
+    for file in regex.captures_iter(markdown.as_ref()) {
         let capture = file.get(0).unwrap();
         let url = file[1].to_string();
         tasks.push((async |capture: regex::Match<'_>, url: String| {

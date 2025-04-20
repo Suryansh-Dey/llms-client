@@ -1,10 +1,10 @@
 use super::request::*;
 use super::response::GeminiResponse;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::mem::discriminant;
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
     history: VecDeque<Chat>,
     history_limit: usize,
@@ -75,14 +75,14 @@ impl Session {
     }
     /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`, the
     /// prompt string is concatenated with the previous prompt.
-    pub fn ask_string(&mut self, prompt: String) -> &mut Self {
-        self.add_chat(Chat::new(Role::user, vec![Part::text(prompt)]))
+    pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
+        self.add_chat(Chat::new(Role::user, vec![Part::text(prompt.into())]))
     }
     pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::model, parts))
     }
-    pub fn reply_string(&mut self, prompt: String) -> &mut Self {
-        self.add_chat(Chat::new(Role::model, vec![Part::text(prompt)]))
+    pub fn reply_string(&mut self, prompt: impl Into<String>) -> &mut Self {
+        self.add_chat(Chat::new(Role::model, vec![Part::text(prompt.into())]))
     }
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
         if self.get_remember_reply() {
@@ -109,14 +109,14 @@ impl Session {
         }
     }
     ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
-    pub fn get_last_message_text(&self, seperator: &str) -> Option<String> {
+    pub fn get_last_message_text(&self, seperator: impl AsRef<str>) -> Option<String> {
         let parts = self.get_last_message();
         if let Some(parts) = parts {
             let mut concatenated_string = String::new();
             for part in parts {
                 if let Part::text(text) = part {
                     concatenated_string.push_str(text);
-                    concatenated_string.push_str(seperator);
+                    concatenated_string.push_str(seperator.as_ref());
                 }
             }
             Some(concatenated_string)

@@ -61,8 +61,8 @@ impl GeminiResponse {
     ) -> Result<GeminiResponse, awc::error::JsonPayloadError> {
         response.json().await
     }
-    pub(crate) fn from_str(string: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(string)
+    pub(crate) fn from_str(string: impl AsRef<str>) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(string.as_ref())
     }
     pub fn get_parts(&self) -> &Vec<Part> {
         self.candidates[0].content.parts()
@@ -84,19 +84,19 @@ impl GeminiResponse {
         serde_json::from_str::<T>(&unescaped_str)
     }
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
-    pub fn extract_text(parts: &[Part], seperator: &str) -> String {
+    pub fn extract_text(parts: &[Part], seperator: impl AsRef<str>) -> String {
         let mut concatenated_string = String::new();
         for part in parts {
             if let Part::text(text) = part {
                 concatenated_string.push_str(text);
-                concatenated_string.push_str(seperator);
+                concatenated_string.push_str(seperator.as_ref());
             }
         }
         concatenated_string
     }
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
-    pub fn get_text(&self, seperator: &str) -> String {
-        Self::extract_text(&self.get_parts(), seperator)
+    pub fn get_text(&self, seperator: impl AsRef<str>) -> String {
+        Self::extract_text(&self.get_parts(), seperator.as_ref())
     }
 }
 
