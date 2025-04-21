@@ -111,7 +111,8 @@ impl Gemini {
     /// You must read the response stream to get reply stored context in sessions.
     /// # Example
     ///```ignore
-    ///let mut response_stream = gemini.ask_as_stream(&mut session).await.unwrap();
+    ///use futures::StreamExt
+    ///let mut response_stream = gemini.ask_as_stream(session).await.unwrap();
     ///while let Some(response) = response_stream.next().await {
     ///    if let Ok(response) = response {
     ///        println!("{}", response.get_text(""));
