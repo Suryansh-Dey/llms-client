@@ -118,10 +118,10 @@ impl Gemini {
     ///    }
     ///}
     ///```
-    pub async fn ask_as_stream<'b>(
+    pub async fn ask_as_stream(
         &self,
-        session: &'b mut Session,
-    ) -> Result<GeminiResponseStream<'b>, Box<dyn std::error::Error>> {
+        session: Session,
+    ) -> Result<GeminiResponseStream, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?key={}",
             self.model, self.api_key

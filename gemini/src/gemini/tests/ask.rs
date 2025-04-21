@@ -24,7 +24,7 @@ async fn ask_string_for_json() {
     session.set_remember_reply(false);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
         Some(SystemInstruction::from_str("Calssify the given words")),
     )
     .set_json_mode(json!({
@@ -34,14 +34,13 @@ async fn ask_string_for_json() {
                 "type":"array",
                 "items":{"type":"string"}
             },
-            "negetive":{
+            "negative":{
                 "type":"array",
                 "items":{"type":"string"}
             }
         }
     }))
-    .ask(session.ask_string("[\"Joy\", \"Success\", \"Love\", \"Hope\", \"Confidence\", \"Peace\", \"Victory\", \"Harmony\", \"Inspiration\", \"Gratitude\", \"Prosperity\", \"Strength\", \"Freedom\", \"Comfort\", \"Brilliance\" \"Fear\", \"Failure\", \"Hate\", \"Doubt\", \"Pain\", \"Suffering\", \"Loss\", \"Anxiety\", \"Despair\", \"Betrayal\", \"Weakness\", \"Chaos\", \"Misery\", \"Frustration\", \"Darkness\"]
-"))
+    .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance" "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
     .await
     .unwrap();
 
@@ -60,10 +59,11 @@ async fn ask_streamed() {
     );
     ai.ask(&mut session).await.unwrap();
     session.ask_string("machine learning");
-    let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
+    let mut response_stream = ai.ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_text(""));
     }
+    let session = response_stream.get_session();
     println!(
         "Complete reply: {}",
         session.get_last_message_text("").unwrap()
@@ -80,7 +80,7 @@ async fn ask_streamed_with_tools() {
         None,
     );
     ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
-    let mut response_stream = ai.ask_as_stream(&mut session).await.unwrap();
+    let mut response_stream = ai.ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
         if let Ok(response) = response {
             println!("{}", response.get_text(""));
@@ -88,6 +88,6 @@ async fn ask_streamed_with_tools() {
     }
     println!(
         "Complete reply: {:#?}",
-        json!(session.get_last_message().unwrap())
+        json!(response_stream.get_session().get_last_message().unwrap())
     );
 }

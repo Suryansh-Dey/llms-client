@@ -102,13 +102,13 @@ impl GeminiResponse {
 
 pin_project_lite::pin_project! {
 #[derive(new)]
-    pub struct GeminiResponseStream<'a>{
+    pub struct GeminiResponseStream{
         #[pin]
         response_stream:ClientResponse<Decompress<Payload>>,
-        session: &'a mut Session
+        session: Session
     }
 }
-impl<'a> Stream for GeminiResponseStream<'a> {
+impl Stream for GeminiResponseStream {
     type Item = Result<GeminiResponse, Value>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -131,5 +131,10 @@ impl<'a> Stream for GeminiResponseStream<'a> {
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+impl GeminiResponseStream {
+    pub fn get_session(self) -> Session {
+        self.session
     }
 }
