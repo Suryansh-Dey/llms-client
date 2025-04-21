@@ -63,7 +63,7 @@ async fn ask_streamed() {
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_text(""));
     }
-    let session = response_stream.get_session();
+    session = response_stream.get_session_owned();
     println!(
         "Complete reply: {}",
         session.get_last_message_text("").unwrap()

@@ -134,7 +134,10 @@ impl Stream for GeminiResponseStream {
     }
 }
 impl GeminiResponseStream {
-    pub fn get_session(self) -> Session {
+    pub fn get_session(&self) -> &Session {
+        &self.session
+    }
+    pub fn get_session_owned(self) -> Session {
         self.session
     }
 }
