@@ -77,9 +77,9 @@ impl Gemini {
         self
     }
 
-    pub async fn ask<'b>(
+    pub async fn ask(
         &self,
-        session: &'b mut Session,
+        session: &mut Session,
     ) -> Result<GeminiResponse, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:generateContent?key={}",
@@ -109,20 +109,24 @@ impl Gemini {
     }
     /// # Warining
     /// You must read the response stream to get reply stored context in sessions.
+    /// `data_extractor` is used to extract data that you get as a stream of futures.
     /// # Example
     ///```ignore
     ///use futures::StreamExt
-    ///let mut response_stream = gemini.ask_as_stream(session).await.unwrap();
+    ///let mut response_stream = gemini.ask_as_stream(session, 
+    ///|_session, gemini_response| gemini_response).await.unwrap();
+    ///
     ///while let Some(response) = response_stream.next().await {
     ///    if let Ok(response) = response {
     ///        println!("{}", response.get_text(""));
     ///    }
     ///}
     ///```
-    pub async fn ask_as_stream(
+    pub async fn ask_as_stream<T>(
         &self,
         session: Session,
-    ) -> Result<GeminiResponseStream, Box<dyn std::error::Error>> {
+        data_extractor: StreamDataExtractor<T>,
+    ) -> Result<GeminiResponseStream<T>, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?key={}",
             self.model, self.api_key
@@ -145,6 +149,6 @@ impl Gemini {
             return Err(text.into());
         }
 
-        Ok(GeminiResponseStream::new(response, session))
+        Ok(GeminiResponseStream::new(response, session, data_extractor))
     }
 }

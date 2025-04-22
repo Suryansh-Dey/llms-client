@@ -100,16 +100,18 @@ impl GeminiResponse {
     }
 }
 
+pub type StreamDataExtractor<T> = fn(session: &Session, GeminiResponse) -> T;
 pin_project_lite::pin_project! {
 #[derive(new)]
-    pub struct GeminiResponseStream{
+    pub struct GeminiResponseStream<T>{
         #[pin]
         response_stream:ClientResponse<Decompress<Payload>>,
-        session: Session
+        session: Session,
+        data_extractor: StreamDataExtractor<T>
     }
 }
-impl Stream for GeminiResponseStream {
-    type Item = Result<GeminiResponse, Value>;
+impl<T> Stream for GeminiResponseStream<T> {
+    type Item = Result<T, Value>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -124,7 +126,8 @@ impl Stream for GeminiResponseStream {
                     let response =
                         GeminiResponse::from_str(json_string).map_err(|_| json_string)?;
                     this.session.update(&response);
-                    Poll::Ready(Some(Ok(response)))
+                    let data = (this.data_extractor)(&this.session, response);
+                    Poll::Ready(Some(Ok(data)))
                 }
             }
             Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e.to_string().into()))),
@@ -133,7 +136,7 @@ impl Stream for GeminiResponseStream {
         }
     }
 }
-impl GeminiResponseStream {
+impl<T> GeminiResponseStream<T> {
     pub fn get_session(&self) -> &Session {
         &self.session
     }

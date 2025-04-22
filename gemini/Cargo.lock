@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "gemini-client-api"
-version = "2.6.4"
+version = "3.6.4"
 dependencies = [
  "actix-web",
  "awc",

@@ -59,7 +59,10 @@ async fn ask_streamed() {
     );
     ai.ask(&mut session).await.unwrap();
     session.ask_string("machine learning");
-    let mut response_stream = ai.ask_as_stream(session).await.unwrap();
+    let mut response_stream = ai
+        .ask_as_stream(session, |_, gemini_response| gemini_response)
+        .await
+        .unwrap();
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_text(""));
     }
@@ -80,7 +83,10 @@ async fn ask_streamed_with_tools() {
         None,
     );
     ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
-    let mut response_stream = ai.ask_as_stream(session).await.unwrap();
+    let mut response_stream = ai
+        .ask_as_stream(session, |_, gemini_response| gemini_response)
+        .await
+        .unwrap();
     while let Some(response) = response_stream.next().await {
         if let Ok(response) = response {
             println!("{}", response.get_text(""));
