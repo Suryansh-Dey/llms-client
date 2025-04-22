@@ -103,6 +103,7 @@ impl GeminiResponse {
 pub type StreamDataExtractor<T> = fn(session: &Session, GeminiResponse) -> T;
 pin_project_lite::pin_project! {
 #[derive(new)]
+    ///In case of response of invalid format received, response string is returned as Err.
     pub struct GeminiResponseStream<T>{
         #[pin]
         response_stream:ClientResponse<Decompress<Payload>>,
@@ -111,7 +112,7 @@ pin_project_lite::pin_project! {
     }
 }
 impl<T> Stream for GeminiResponseStream<T> {
-    type Item = Result<T, Value>;
+    type Item = Result<T, Box<dyn std::error::Error>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -130,7 +131,7 @@ impl<T> Stream for GeminiResponseStream<T> {
                     Poll::Ready(Some(Ok(data)))
                 }
             }
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e.to_string().into()))),
+            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e.into()))),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
