@@ -37,13 +37,16 @@ pub struct ExecutableCode {
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionCall {
+    #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     args: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     name: String,
     response: Value,
@@ -52,6 +55,7 @@ pub struct FunctionResponse {
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 #[allow(non_snake_case)]
 pub struct FileData {
+    #[serde(skip_serializing_if = "Option::is_none")]
     mimeType: Option<String>,
     fileUrl: String,
 }
@@ -74,6 +78,7 @@ pub enum Outcome {
 pub struct CodeExecuteResult {
     #[get = "pub"]
     outcome: Outcome,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[get = "pub"]
     output: Option<String>,
 }
@@ -121,8 +126,10 @@ impl SystemInstruction {
 #[derive(Serialize, new)]
 pub struct GeminiRequestBody<'a> {
     system_instruction: Option<&'a SystemInstruction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<&'a [Tool]>,
     contents: &'a [&'a Chat],
+    #[serde(skip_serializing_if = "Option::is_none")]
     generation_config: Option<&'a Value>,
 }
 

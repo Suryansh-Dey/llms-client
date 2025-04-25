@@ -107,7 +107,7 @@ impl Gemini {
         session.update(&reply);
         Ok(reply)
     }
-    /// # Warining
+    /// # Warning
     /// You must read the response stream to get reply stored context in sessions.
     /// `data_extractor` is used to extract data that you get as a stream of futures.
     /// # Example
@@ -122,11 +122,11 @@ impl Gemini {
     ///    }
     ///}
     ///```
-    pub async fn ask_as_stream<T>(
+    pub async fn ask_as_stream<StreamType>(
         &self,
         session: Session,
-        data_extractor: StreamDataExtractor<T>,
-    ) -> Result<GeminiResponseStream<T>, Box<dyn std::error::Error>> {
+        data_extractor: StreamDataExtractor<StreamType>,
+    ) -> Result<GeminiResponseStream<StreamType>, Box<dyn std::error::Error>> {
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?key={}",
             self.model, self.api_key
