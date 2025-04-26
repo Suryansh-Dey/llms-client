@@ -166,10 +166,7 @@ pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
                 }
             }
             Part::code_execution_result(updator_data) => {
-                if let Some(Part::code_execution_result(updating_data)) = updating
-                    .iter_mut()
-                    .find(|e| matches!(e, Part::code_execution_result(_)))
-                {
+                if let Some(Part::code_execution_result(updating_data)) = updating.last_mut() {
                     if let Some(ref mut updating_output) = updating_data.output {
                         if let Some(updator_output) = updator_data.output() {
                             updating_output.push_str(updator_output);
