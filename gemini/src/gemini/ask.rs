@@ -1,3 +1,4 @@
+use super::error::GeminiResponseError;
 use super::types::request::*;
 use super::types::response::*;
 use super::types::sessions::Session;
@@ -77,10 +78,7 @@ impl Gemini {
         self
     }
 
-    pub async fn ask(
-        &self,
-        session: &mut Session,
-    ) -> Result<GeminiResponse, Box<dyn std::error::Error>> {
+    pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
         let req_url = format!(
             "{BASE_URL}/{}:generateContent?key={}",
             self.model, self.api_key
@@ -100,7 +98,7 @@ impl Gemini {
         if !response.status().is_success() {
             let body = response.body().await?;
             let text = std::str::from_utf8(&body)?;
-            return Err(text.into());
+            return Err(GeminiResponseError::from(text.to_string()));
         }
 
         let reply = GeminiResponse::new(response).await?;
@@ -113,7 +111,7 @@ impl Gemini {
     /// # Example
     ///```ignore
     ///use futures::StreamExt
-    ///let mut response_stream = gemini.ask_as_stream(session, 
+    ///let mut response_stream = gemini.ask_as_stream(session,
     ///|_session, gemini_response| gemini_response).await.unwrap();
     ///
     ///while let Some(response) = response_stream.next().await {
@@ -126,7 +124,7 @@ impl Gemini {
         &self,
         session: Session,
         data_extractor: StreamDataExtractor<StreamType>,
-    ) -> Result<GeminiResponseStream<StreamType>, Box<dyn std::error::Error>> {
+    ) -> Result<GeminiResponseStream<StreamType>, GeminiResponseError> {
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?key={}",
             self.model, self.api_key
@@ -146,7 +144,7 @@ impl Gemini {
         if !response.status().is_success() {
             let body = response.body().await?;
             let text = std::str::from_utf8(&body)?;
-            return Err(text.into());
+            return Err(GeminiResponseError::from(text.to_string()));
         }
 
         Ok(GeminiResponseStream::new(response, session, data_extractor))

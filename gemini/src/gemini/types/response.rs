@@ -1,3 +1,5 @@
+use crate::gemini::error::GeminiResponseStreamError;
+
 use super::request::*;
 use super::sessions::Session;
 use actix_web::dev::{Decompress, Payload};
@@ -112,7 +114,7 @@ pin_project_lite::pin_project! {
     }
 }
 impl<T> Stream for GeminiResponseStream<T> {
-    type Item = Result<T, Box<dyn std::error::Error>>;
+    type Item = Result<T, GeminiResponseStreamError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -125,7 +127,7 @@ impl<T> Stream for GeminiResponseStream<T> {
                 } else {
                     let json_string = text[1..].trim();
                     let response =
-                        GeminiResponse::from_str(json_string).map_err(|_| json_string)?;
+                        GeminiResponse::from_str(json_string).map_err(|_| json_string.to_string())?;
                     this.session.update(&response);
                     let data = (this.data_extractor)(&this.session, response);
                     Poll::Ready(Some(Ok(data)))
