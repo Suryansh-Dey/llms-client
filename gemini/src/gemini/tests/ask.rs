@@ -4,7 +4,7 @@ use crate::gemini::types::sessions::Session;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
-#[actix_web::test]
+#[tokio::test]
 async fn ask_string() {
     let mut session = Session::new(6);
     let response = Gemini::new(
@@ -18,7 +18,7 @@ async fn ask_string() {
     println!("{}", response.get_text(""));
 }
 
-#[actix_web::test]
+#[tokio::test]
 async fn ask_string_for_json() {
     let mut session = Session::new(6);
     session.set_remember_reply(false);
@@ -48,7 +48,7 @@ async fn ask_string_for_json() {
     println!("{}", json);
 }
 
-#[actix_web::test]
+#[tokio::test]
 async fn ask_streamed() {
     let mut session = Session::new(6);
     session.ask_string("Can you explain me something in one line?");
@@ -73,7 +73,7 @@ async fn ask_streamed() {
     );
 }
 
-#[actix_web::test]
+#[tokio::test]
 async fn ask_streamed_with_tools() {
     let mut session = Session::new(6);
     session.ask_string("find sum of first 100 prime number using code");

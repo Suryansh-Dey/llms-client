@@ -1,5 +1,6 @@
 # Overview
-A Rust library to use Google's Gemini API. It is extremely flexible and modular to integrate with any framework. For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream which is a pain.
+A Rust library to use Google's Gemini API. It is extremely flexible and modular to integrate with any framework.  
+For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream which is a pain.
 
 ### Features
 - Automatic context management
@@ -10,7 +11,6 @@ A Rust library to use Google's Gemini API. It is extremely flexible and modular 
 - Inbuilt markdown to parts parser enables AI to see markdown images or files, even if they are from your device storage!
 
 # Basic usage
-**Main function should use `#[actix_web::main]` instead of `#[tokio::main]`.** Don't worry, your all tokio functions will work the same!
 ```rust
 use gemini_client_api::gemini::{
     ask::Gemini,

@@ -1,8 +1,7 @@
-use actix_web::HttpMessage;
-use awc::Client;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::future::join_all;
 use regex::Regex;
+use reqwest::Client;
 use std::time::Duration;
 
 const REQ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -23,7 +22,7 @@ pub async fn get_file_base64s(
     regex: Regex,
     guess_mime_type: fn(url: &str) -> String,
 ) -> Vec<MatchedFiles> {
-    let client = Client::builder().timeout(REQ_TIMEOUT).finish();
+    let client = Client::builder().timeout(REQ_TIMEOUT).build().unwrap();
     let mut tasks: Vec<_> = Vec::new();
 
     for file in regex.captures_iter(markdown.as_ref()) {
@@ -33,19 +32,21 @@ pub async fn get_file_base64s(
             let (mime_type, base64) = if url.starts_with("https://") || url.starts_with("http://") {
                 let response = client.get(&url).send().await;
                 match response {
-                    Ok(mut response) => {
+                    Ok(response) => {
+                        let mime_type = response
+                            .headers()
+                            .get("Content-Type")
+                            .map(|mime| mime.to_str().ok())
+                            .flatten()
+                            .map(|str| str.to_string());
+
                         let base64 = response
-                            .body()
+                            .bytes()
                             .await
                             .ok()
                             .map(|bytes| STANDARD.encode(bytes));
                         let mime_type = match base64 {
-                            Some(_) => response
-                                .mime_type()
-                                .ok()
-                                .flatten()
-                                .map(|mime| mime.to_string())
-                                .or_else(|| Some(guess_mime_type(&url))),
+                            Some(_) => mime_type.or_else(|| Some(guess_mime_type(&url))),
                             None => None,
                         };
                         (mime_type, base64)
@@ -53,14 +54,13 @@ pub async fn get_file_base64s(
                     Err(_) => (None, None),
                 }
             } else {
-                let base64 = 
-                    tokio::fs::read(url.clone())
-                        .await
-                        .ok()
-                        .map(|bytes| STANDARD.encode(&bytes));
+                let base64 = tokio::fs::read(url.clone())
+                    .await
+                    .ok()
+                    .map(|bytes| STANDARD.encode(&bytes));
                 match base64 {
-                    Some(base64)=>(Some(guess_mime_type(&url)),Some(base64)),
-                    None => (None, None)
+                    Some(base64) => (Some(guess_mime_type(&url)), Some(base64)),
+                    None => (None, None),
                 }
             };
             MatchedFiles {

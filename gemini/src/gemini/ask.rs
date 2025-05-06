@@ -2,7 +2,7 @@ use super::error::GeminiResponseError;
 use super::types::request::*;
 use super::types::response::*;
 use super::types::sessions::Session;
-use awc::Client;
+use reqwest::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -26,7 +26,7 @@ impl Gemini {
         sys_prompt: Option<SystemInstruction>,
     ) -> Self {
         Self {
-            client: Client::builder().timeout(API_TIMEOUT).finish(),
+            client: Client::builder().timeout(API_TIMEOUT).build().unwrap(),
             api_key: api_key.into(),
             model: model.into(),
             sys_prompt,
@@ -84,21 +84,21 @@ impl Gemini {
             self.model, self.api_key
         );
 
-        let mut response = self
+        let response = self
             .client
             .post(req_url)
-            .send_json(&GeminiRequestBody::new(
+            .json(&GeminiRequestBody::new(
                 self.sys_prompt.as_ref(),
                 self.tools.as_deref(),
                 &session.get_history().as_slice(),
                 self.generation_config.as_ref(),
             ))
+            .send()
             .await?;
 
         if !response.status().is_success() {
-            let body = response.body().await?;
-            let text = std::str::from_utf8(&body)?;
-            return Err(GeminiResponseError::from(text.to_string()));
+            let text = response.text().await?;
+            return Err(GeminiResponseError::from(text));
         }
 
         let reply = GeminiResponse::new(response).await?;
@@ -130,23 +130,27 @@ impl Gemini {
             self.model, self.api_key
         );
 
-        let mut response = self
+        let response = self
             .client
             .post(req_url)
-            .send_json(&GeminiRequestBody::new(
+            .json(&GeminiRequestBody::new(
                 self.sys_prompt.as_ref(),
                 self.tools.as_deref(),
                 session.get_history().as_slice(),
                 self.generation_config.as_ref(),
             ))
+            .send()
             .await?;
 
         if !response.status().is_success() {
-            let body = response.body().await?;
-            let text = std::str::from_utf8(&body)?;
-            return Err(GeminiResponseError::from(text.to_string()));
+            let text = response.text().await?;
+            return Err(GeminiResponseError::from(text));
         }
 
-        Ok(GeminiResponseStream::new(response, session, data_extractor))
+        Ok(GeminiResponseStream::new(
+            Box::new(response.bytes_stream()),
+            session,
+            data_extractor,
+        ))
     }
 }

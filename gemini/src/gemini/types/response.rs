@@ -1,11 +1,10 @@
-use crate::gemini::error::GeminiResponseStreamError;
-
 use super::request::*;
 use super::sessions::Session;
-use actix_web::dev::{Decompress, Payload};
-use awc::ClientResponse;
+use crate::gemini::error::GeminiResponseStreamError;
+use bytes::Bytes;
 use derive_new::new;
 use futures::Stream;
+use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -58,9 +57,7 @@ pub struct GeminiResponse {
     pub promptFeedback: Option<Value>,
 }
 impl GeminiResponse {
-    pub(crate) async fn new(
-        mut response: ClientResponse<Decompress<Payload>>,
-    ) -> Result<GeminiResponse, awc::error::JsonPayloadError> {
+    pub(crate) async fn new(response: Response) -> Result<GeminiResponse, reqwest::Error> {
         response.json().await
     }
     pub(crate) fn from_str(string: impl AsRef<str>) -> Result<Self, serde_json::Error> {
@@ -108,7 +105,7 @@ pin_project_lite::pin_project! {
     ///In case of response of invalid format received, response string is returned as Err.
     pub struct GeminiResponseStream<T>{
         #[pin]
-        response_stream:ClientResponse<Decompress<Payload>>,
+        response_stream:Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static>,
         session: Session,
         data_extractor: StreamDataExtractor<T>
     }
@@ -126,8 +123,8 @@ impl<T> Stream for GeminiResponseStream<T> {
                     Poll::Ready(None)
                 } else {
                     let json_string = text[1..].trim();
-                    let response =
-                        GeminiResponse::from_str(json_string).map_err(|_| json_string.to_string())?;
+                    let response = GeminiResponse::from_str(json_string)
+                        .map_err(|_| json_string.to_string())?;
                     this.session.update(&response);
                     let data = (this.data_extractor)(&this.session, response);
                     Poll::Ready(Some(Ok(data)))
