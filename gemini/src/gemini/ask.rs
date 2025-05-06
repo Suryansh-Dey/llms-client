@@ -144,7 +144,7 @@ impl Gemini {
 
         if !response.status().is_success() {
             let text = response.text().await?;
-            return Err(GeminiResponseError::from(text));
+            return Err(text.into());
         }
 
         Ok(GeminiResponseStream::new(
