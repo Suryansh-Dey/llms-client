@@ -6,7 +6,7 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 - Automatic context management
 - Vision to see images
 - Code execution by Gemini
-- File reading like PDF or any document, even MP3
+- File reading like PDF or any document, even audio files like MP3
 - Function call support
 - Inbuilt markdown to parts parser enables AI to see markdown images or files, even if they are from your device storage!
 

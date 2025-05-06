@@ -102,7 +102,6 @@ impl GeminiResponse {
 pub type StreamDataExtractor<T> = fn(session: &Session, GeminiResponse) -> T;
 pin_project_lite::pin_project! {
 #[derive(new)]
-    ///In case of response of invalid format received, response string is returned as Err.
     pub struct GeminiResponseStream<T>{
         #[pin]
         response_stream:Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static>,
