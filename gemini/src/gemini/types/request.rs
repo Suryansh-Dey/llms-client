@@ -55,9 +55,10 @@ pub struct FunctionResponse {
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 #[allow(non_snake_case)]
 pub struct FileData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    mimeType: Option<String>,
-    fileUrl: String,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "mimeType")]
+    mime_type: Option<String>,
+    #[serde(alias = "fileUri")]
+    file_uri: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -95,7 +96,8 @@ pub enum Part {
     code_execution_result(CodeExecuteResult),
     functionCall(FunctionCall),
     functionResponse(FunctionResponse),
-    fileData(FileData),
+    #[serde(alias = "fileData")]
+    file_data(FileData),
 }
 
 #[derive(Serialize, Deserialize, new, Getters, Debug, Clone)]

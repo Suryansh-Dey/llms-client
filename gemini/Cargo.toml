@@ -1,6 +1,6 @@
 [package]
 name = "gemini-client-api"
-version = "3.7.9"
+version = "3.7.10"
 edition = "2024"
 repository = "https://github.com/Suryansh-Dey/llms-client"
 authors = ["Suryansh Dey suryanshdey@gmail.com"]
