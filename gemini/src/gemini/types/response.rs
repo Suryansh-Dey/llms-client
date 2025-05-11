@@ -12,7 +12,7 @@ use std::{
     task::{Context, Poll},
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum FinishReason {
     /// Default value. This value is unused.
@@ -41,14 +41,14 @@ pub enum FinishReason {
     IMAGE_SAFETY,
 }
 
-#[derive(Serialize, Deserialize, new)]
+#[derive(Serialize, Deserialize, Clone, Debug, new)]
 #[allow(non_snake_case)]
 struct Candidate {
     content: Chat,
     pub finishReason: Option<FinishReason>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct GeminiResponse {
     candidates: Vec<Candidate>,
