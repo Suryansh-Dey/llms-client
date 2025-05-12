@@ -1,7 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::future::join_all;
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{Client, header::HeaderMap};
 use std::time::Duration;
 
 const REQ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -21,6 +21,7 @@ pub async fn get_file_base64s(
     markdown: impl AsRef<str>,
     regex: Regex,
     guess_mime_type: fn(url: &str) -> String,
+    decide_download: fn(headers: &HeaderMap) -> bool,
 ) -> Vec<MatchedFiles> {
     let client = Client::builder().timeout(REQ_TIMEOUT).build().unwrap();
     let mut tasks: Vec<_> = Vec::new();
@@ -32,7 +33,7 @@ pub async fn get_file_base64s(
             let (mime_type, base64) = if url.starts_with("https://") || url.starts_with("http://") {
                 let response = client.get(&url).send().await;
                 match response {
-                    Ok(response) => {
+                    Ok(response) if (decide_download)(response.headers()) => {
                         let mime_type = response
                             .headers()
                             .get("Content-Type")
@@ -51,7 +52,7 @@ pub async fn get_file_base64s(
                         };
                         (mime_type, base64)
                     }
-                    Err(_) => (None, None),
+                    _ => (None, None),
                 }
             } else {
                 let base64 = tokio::fs::read(url.clone())

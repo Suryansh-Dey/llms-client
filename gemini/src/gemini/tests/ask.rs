@@ -84,12 +84,12 @@ async fn ask_streamed_with_tools() {
     );
     ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
     let mut response_stream = ai
-        .ask_as_stream(session, |_, gemini_response| gemini_response)
+        .ask_as_stream(session, |_, gemini_response| gemini_response.get_text(""))
         .await
         .unwrap();
     while let Some(response) = response_stream.next().await {
         if let Ok(response) = response {
-            println!("{}", response.get_text(""));
+            println!("{}", response);
         }
     }
     println!(
