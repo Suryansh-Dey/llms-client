@@ -1,6 +1,6 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::future::join_all;
-pub use mime::Mime;
+pub use mime;
 use regex::Regex;
 use reqwest::Client;
 pub use reqwest::header::{HeaderMap, HeaderValue};
@@ -22,7 +22,7 @@ pub struct MatchedFiles {
 pub async fn get_file_base64s(
     markdown: impl AsRef<str>,
     regex: Regex,
-    guess_mime_type: fn(url: &str) -> Mime,
+    guess_mime_type: fn(url: &str) -> mime::Mime,
     decide_download: fn(headers: &HeaderMap) -> bool,
 ) -> Vec<MatchedFiles> {
     let client = Client::builder().timeout(REQ_TIMEOUT).build().unwrap();
