@@ -1,7 +1,9 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::future::join_all;
+pub use mime::Mime;
 use regex::Regex;
-use reqwest::{Client, header::HeaderMap};
+use reqwest::Client;
+pub use reqwest::header::{HeaderMap, HeaderValue};
 use std::time::Duration;
 
 const REQ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -20,7 +22,7 @@ pub struct MatchedFiles {
 pub async fn get_file_base64s(
     markdown: impl AsRef<str>,
     regex: Regex,
-    guess_mime_type: fn(url: &str) -> String,
+    guess_mime_type: fn(url: &str) -> Mime,
     decide_download: fn(headers: &HeaderMap) -> bool,
 ) -> Vec<MatchedFiles> {
     let client = Client::builder().timeout(REQ_TIMEOUT).build().unwrap();
@@ -47,7 +49,9 @@ pub async fn get_file_base64s(
                             .ok()
                             .map(|bytes| STANDARD.encode(bytes));
                         let mime_type = match base64 {
-                            Some(_) => mime_type.or_else(|| Some(guess_mime_type(&url))),
+                            Some(_) => {
+                                mime_type.or_else(|| Some(guess_mime_type(&url).to_string()))
+                            }
                             None => None,
                         };
                         (mime_type, base64)
@@ -60,7 +64,7 @@ pub async fn get_file_base64s(
                     .ok()
                     .map(|bytes| STANDARD.encode(&bytes));
                 match base64 {
-                    Some(base64) => (Some(guess_mime_type(&url)), Some(base64)),
+                    Some(base64) => (Some(guess_mime_type(&url).to_string()), Some(base64)),
                     None => (None, None),
                 }
             };

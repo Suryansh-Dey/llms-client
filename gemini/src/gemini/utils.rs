@@ -9,8 +9,8 @@ pub struct MarkdownToParts<'a> {
     markdown: &'a str,
 }
 impl<'a> MarkdownToParts<'a> {
-    ///# Panics
-    /// `regex` must have a Regex with atleast 1 capture group with file URL as first capture group, else it PANICS.
+    ///# Panics `regex` must have a Regex with only 1 capture group with file URL as first capture
+    ///group, else it PANICS.
     /// # Arguments
     /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
     /// with no "Content-Type" header.
@@ -18,12 +18,12 @@ impl<'a> MarkdownToParts<'a> {
     /// be fetched and won't be in `parts`
     /// # Example
     /// ```ignore
-    /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_| "image/png".to_string(), |_| true)
+    /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_| mime::IMAGE_PNG, |_| true)
     /// ```
     pub async fn from_regex_checked(
         markdown: &'a str,
         regex: Regex,
-        guess_mime_type: fn(url: &str) -> String,
+        guess_mime_type: fn(url: &str) -> mime::Mime,
         decice_download: fn(headers: &HeaderMap) -> bool,
     ) -> Self {
         Self {
@@ -33,18 +33,19 @@ impl<'a> MarkdownToParts<'a> {
         }
     }
     ///# Panics
-    /// `regex` must have a Regex with atleast 1 capture group with file URL as first capture group, else it PANICS.
+    /// `regex` must have a Regex with only 1 capture group with file URL as first capture group, else it PANICS.
     /// # Arguments
     /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
     /// with no "Content-Type" header.
     /// # Example
     /// ```ignore
-    /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_| "image/png".to_string())
+    /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_|
+    /// mime::IMAGE_PNG)
     /// ```
     pub async fn from_regex(
         markdown: &'a str,
         regex: Regex,
-        guess_mime_type: fn(url: &str) -> String,
+        guess_mime_type: fn(url: &str) -> mime::Mime,
     ) -> Self {
         Self::from_regex_checked(markdown, regex, guess_mime_type, |_| true).await
     }
@@ -55,11 +56,11 @@ impl<'a> MarkdownToParts<'a> {
     /// be fetched and won't be in `parts`
     /// # Example
     /// ```ignore
-    /// new("Your markdown string...", |_| "image/png".to_string(), |_| true)
+    /// new("Your markdown string...", |_| mime::IMAGE_PNG, |_| true)
     /// ```
     pub async fn new_checked(
         markdown: &'a str,
-        guess_mime_type: fn(url: &str) -> String,
+        guess_mime_type: fn(url: &str) -> mime::Mime,
         decice_download: fn(headers: &HeaderMap) -> bool,
     ) -> Self {
         let image_regex = Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap();
@@ -70,9 +71,9 @@ impl<'a> MarkdownToParts<'a> {
     /// with no "Content-Type" header.
     /// # Example
     /// ```ignore
-    /// new("Your markdown string...", |_| "image/png".to_string())
+    /// new("Your markdown string...", |_| mime::IMAGE_PNG)
     /// ```
-    pub async fn new(markdown: &'a str, guess_mime_type: fn(url: &str) -> String) -> Self {
+    pub async fn new(markdown: &'a str, guess_mime_type: fn(url: &str) -> mime::Mime) -> Self {
         Self::new_checked(markdown, guess_mime_type, |_| true).await
     }
     pub fn process(mut self) -> Vec<Part> {
