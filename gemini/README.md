@@ -67,7 +67,8 @@ async fn ask_string_for_json() {
     .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance" "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
     .await
     .unwrap();
-    println!("{}", response.get_text(""));
+    let json: Value = response.get_json().unwrap();
+    println!("{}", json);
 }
 
 async fn ask_streamed() {
@@ -78,12 +79,13 @@ async fn ask_streamed() {
         "gemini-2.5-pro-exp-03-25",
         None,
     );
-    let mut response_stream = ai.ask_as_stream(session, |_, gemini_response| gemini_response).await.unwrap();
+    let mut response_stream = ai
+        .ask_as_stream(session, |session, _gemini_response| {
+            session.get_last_message_text("").unwrap()
+        }).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap().get_text(""));
+        println!("{}", response.unwrap());
     }
-    session = response_stream.get_session_owned();
-    println!("Complete reply: {}", session.get_last_message_text("").unwrap());
 }
 
 async fn ask_streamed_with_tools() {

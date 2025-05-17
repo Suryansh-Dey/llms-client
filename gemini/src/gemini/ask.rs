@@ -6,7 +6,6 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
 
-const API_TIMEOUT: Duration = Duration::from_secs(60);
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
 #[derive(Clone, Default, Debug)]
@@ -26,7 +25,26 @@ impl Gemini {
         sys_prompt: Option<SystemInstruction>,
     ) -> Self {
         Self {
-            client: Client::builder().timeout(API_TIMEOUT).build().unwrap(),
+            client: Client::builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .unwrap(),
+            api_key: api_key.into(),
+            model: model.into(),
+            sys_prompt,
+            generation_config: None,
+            tools: None,
+        }
+    }
+    /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
+    pub fn new_with_timeout(
+        api_key: impl Into<String>,
+        model: impl Into<String>,
+        sys_prompt: Option<SystemInstruction>,
+        api_timeout: Duration,
+    ) -> Self {
+        Self {
+            client: Client::builder().timeout(api_timeout).build().unwrap(),
             api_key: api_key.into(),
             model: model.into(),
             sys_prompt,
@@ -112,7 +130,8 @@ impl Gemini {
     ///```ignore
     ///use futures::StreamExt
     ///let mut response_stream = gemini.ask_as_stream(session,
-    ///|_session, gemini_response| gemini_response).await.unwrap();
+    ///|session, _gemini_response| session.get_last_message_text("").unwrap())
+    ///.await.unwrap(); // Use _gemini_response.get_text("") for text received in every chunk
     ///
     ///while let Some(response) = response_stream.next().await {
     ///    if let Ok(response) = response {

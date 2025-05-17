@@ -60,17 +60,14 @@ async fn ask_streamed() {
     ai.ask(&mut session).await.unwrap();
     session.ask_string("machine learning");
     let mut response_stream = ai
-        .ask_as_stream(session, |_, gemini_response| gemini_response)
+        .ask_as_stream(session, |session, _| {
+            session.get_last_message_text("").unwrap()
+        })
         .await
         .unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap().get_text(""));
+        println!("{}", response.unwrap());
     }
-    session = response_stream.get_session_owned();
-    println!(
-        "Complete reply: {}",
-        session.get_last_message_text("").unwrap()
-    );
 }
 
 #[tokio::test]
