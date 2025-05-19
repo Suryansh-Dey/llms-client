@@ -26,7 +26,7 @@ pub async fn get_file_base64s(
     decide_download: fn(headers: &HeaderMap) -> bool,
 ) -> Vec<MatchedFiles> {
     let client = Client::builder().timeout(REQ_TIMEOUT).build().unwrap();
-    let mut tasks: Vec<_> = Vec::new();
+    let mut tasks = Vec::new();
 
     for file in regex.captures_iter(markdown.as_ref()) {
         let capture = file.get(0).unwrap();
