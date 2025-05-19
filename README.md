@@ -33,7 +33,7 @@ async fn see_markdown() {
     let response1 = ai.ask(session.ask_string("Hi, can you tell me which one of two bowls has more healty item?")).await.unwrap();
     println!("{}", response1.get_text("")); //Question and reply both automatically gets stored in `session` for context.
 
-    let parser = MarkdownToParts::new("Here is their ![image](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way", |_|"image/png".to_string()).await;
+    let parser = MarkdownToParts::new("Here is their ![image](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way", |_|mime::IMAGE_PNG).await;
     //Can even read from file path of files on your device!
     let parts = parser.process();
 
@@ -68,7 +68,8 @@ async fn ask_string_for_json() {
     .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance" "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
     .await
     .unwrap();
-    println!("{}", response.get_text(""));
+    let json: Value = response.get_json().unwrap();
+    println!("{}", json);
 }
 
 async fn ask_streamed() {
@@ -79,12 +80,13 @@ async fn ask_streamed() {
         "gemini-2.5-pro-exp-03-25",
         None,
     );
-    let mut response_stream = ai.ask_as_stream(session, |_, gemini_response| gemini_response).await.unwrap();
+    let mut response_stream = ai
+        .ask_as_stream(session, |session, _gemini_response| {
+            session.get_last_message_text("").unwrap()
+        }).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap().get_text(""));
+        println!("{}", response.unwrap());
     }
-    session = response_stream.get_session_owned();
-    println!("Complete reply: {}", session.get_last_message_text("").unwrap());
 }
 
 async fn ask_streamed_with_tools() {
@@ -96,10 +98,12 @@ async fn ask_streamed_with_tools() {
         None,
     );
     ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
-    let mut response_stream = ai.ask_as_stream(session, |_, gemini_response| gemini_response).await.unwrap();
+    let mut response_stream = ai
+        .ask_as_stream(session, |_, gemini_response| gemini_response.get_text(""))
+        .await.unwrap();
     while let Some(response) = response_stream.next().await {
         if let Ok(response) = response {
-            println!("{}", response.get_text(""));
+            println!("{}", response);
         }
     }
     println!(
@@ -110,3 +114,4 @@ async fn ask_streamed_with_tools() {
 ```
 # TODO
 1. Do the same for chatGPT
+2. Make a MarkdownToParts::builder
