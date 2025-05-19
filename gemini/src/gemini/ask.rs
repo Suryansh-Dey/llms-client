@@ -139,11 +139,14 @@ impl Gemini {
     ///    }
     ///}
     ///```
-    pub async fn ask_as_stream<StreamType>(
+    pub async fn ask_as_stream<F, StreamType>(
         &self,
         session: Session,
-        data_extractor: StreamDataExtractor<StreamType>,
-    ) -> Result<GeminiResponseStream<StreamType>, GeminiResponseError> {
+        data_extractor: F,
+    ) -> Result<GeminiResponseStream<F, StreamType>, GeminiResponseError>
+    where
+        F: FnMut(&Session, GeminiResponse) -> StreamType,
+    {
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?key={}",
             self.model, self.api_key

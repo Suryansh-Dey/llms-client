@@ -99,17 +99,20 @@ impl GeminiResponse {
     }
 }
 
-pub type StreamDataExtractor<'a, T> = Box<dyn FnMut(&Session, GeminiResponse) -> T + 'a>;
 pin_project_lite::pin_project! {
 #[derive(new)]
-    pub struct GeminiResponseStream<'a, T>{
+    pub struct GeminiResponseStream<F,T>
+        where F:FnMut(&Session, GeminiResponse) -> T{
         #[pin]
         response_stream:Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static>,
         session: Session,
-        data_extractor: StreamDataExtractor<'a,T>
+        data_extractor: F
     }
 }
-impl<'a, T> Stream for GeminiResponseStream<'a, T> {
+impl<F, T> Stream for GeminiResponseStream<F, T>
+where
+    F: FnMut(&Session, GeminiResponse) -> T,
+{
     type Item = Result<T, GeminiResponseStreamError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -135,7 +138,10 @@ impl<'a, T> Stream for GeminiResponseStream<'a, T> {
         }
     }
 }
-impl<'a, T> GeminiResponseStream<'a, T> {
+impl<F, T> GeminiResponseStream<F, T>
+where
+    F: FnMut(&Session, GeminiResponse) -> T,
+{
     pub fn get_session(&self) -> &Session {
         &self.session
     }
