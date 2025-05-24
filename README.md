@@ -114,4 +114,3 @@ async fn ask_streamed_with_tools() {
 ```
 # TODO
 1. Do the same for chatGPT
-2. Make a MarkdownToParts::builder
