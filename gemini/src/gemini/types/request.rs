@@ -147,24 +147,24 @@ pub enum Tool {
 }
 
 pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
-    if let Some(updator_part) = updator.first() {
+    for updator_part in updator {
         match updator_part {
             Part::text(updator_text) => {
                 if let Some(Part::text(updating_text)) = updating.last_mut() {
                     updating_text.push_str(updator_text);
-                    return;
+                    continue;
                 }
             }
             Part::inline_data(updator_data) => {
                 if let Some(Part::inline_data(updating_data)) = updating.last_mut() {
                     updating_data.data.push_str(&updator_data.data());
-                    return;
+                    continue;
                 }
             }
             Part::executable_code(updator_data) => {
                 if let Some(Part::executable_code(updating_data)) = updating.last_mut() {
                     updating_data.code.push_str(&updator_data.code());
-                    return;
+                    continue;
                 }
             }
             Part::code_execution_result(updator_data) => {
@@ -176,12 +176,12 @@ pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
                     } else {
                         updating_data.output = updator_data.output.clone();
                     }
-                    return;
+                    continue;
                 }
             }
             _ => {
                 updating.push(updator_part.clone());
-                return;
+                continue;
             }
         }
         updating.push(updator_part.clone());

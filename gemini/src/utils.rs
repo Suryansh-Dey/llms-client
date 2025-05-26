@@ -6,6 +6,7 @@ use reqwest::Client;
 pub use reqwest::header::{HeaderMap, HeaderValue};
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct MatchedFiles {
     pub index: usize,
     pub length: usize,
@@ -22,7 +23,7 @@ pub async fn get_file_base64s(
     regex: Regex,
     guess_mime_type: fn(url: &str) -> mime::Mime,
     decide_download: fn(headers: &HeaderMap) -> bool,
-    timeout: Duration
+    timeout: Duration,
 ) -> Vec<MatchedFiles> {
     let client = Client::builder().timeout(timeout).build().unwrap();
     let mut tasks = Vec::new();
