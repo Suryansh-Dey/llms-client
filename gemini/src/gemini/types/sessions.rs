@@ -53,7 +53,7 @@ impl Session {
     ///- session.get_parts_mut(1) return last message
     ///- session.get_parts_mut(2) return 2nd last message
     pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Vec<Part>> {
-        let chat_no = self.get_history_limit().checked_sub(chat_previous_no)?;
+        let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
         Some(self.history[chat_no].parts_mut())
     }
     ///`chat_previous_no` is ith last message.
@@ -61,14 +61,16 @@ impl Session {
     ///- session.get_parts(1) return last message
     ///- session.get_parts(2) return 2nd last message
     pub fn get_parts(&self, chat_previous_no: usize) -> Option<&Vec<Part>> {
-        let chat_no = self.get_history_limit().checked_sub(chat_previous_no)?;
+        let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
         Some(self.history[chat_no].parts())
     }
+    /// `chat_no` follows 0-indexing
     pub fn get_parts_no_mut(&mut self, chat_no: usize) -> Option<&mut Vec<Part>> {
         self.get_history_as_vecdeque_mut()
             .get_mut(chat_no)
             .map(|chat| chat.parts_mut())
     }
+    /// `chat_no` follows 0-indexing
     pub fn get_parts_no(&self, chat_no: usize) -> Option<&Vec<Part>> {
         self.get_history_as_vecdeque()
             .get(chat_no)
