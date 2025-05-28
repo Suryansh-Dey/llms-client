@@ -58,6 +58,16 @@ impl Session {
             .get_mut(history_length - chat_previous_no)
             .map(|chat| chat.parts_mut())
     }
+    ///`chat_previous_no` is ith last message.
+    ///# Example
+    ///- session.get_parts_mut(1) return last message
+    ///- session.get_parts_mut(2) return 2nd last message
+    pub fn get_parts(&self, chat_previous_no: usize) -> Option<&Vec<Part>> {
+        let history_length = self.get_history_length();
+        self.history
+            .get(history_length - chat_previous_no)
+            .map(|chat| chat.parts())
+    }
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
