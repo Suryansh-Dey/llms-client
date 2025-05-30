@@ -1,7 +1,7 @@
 # Gemini
 ## Overview
 A Rust library to use Google's Gemini API. It is extremely flexible and modular to integrate with any framework.  
-For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream which is a pain.
+For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a stream which is a pain.
 
 ### Features
 - Automatic context management
@@ -81,11 +81,9 @@ async fn ask_streamed() {
         None,
     );
     let mut response_stream = ai
-        .ask_as_stream(session, |session, _gemini_response| {
-            session.get_last_message_text("").unwrap()
-        }).await.unwrap();
+        .ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap());
+        println!("{}", response.unwrap().get_text(""));
     }
 }
 
@@ -99,11 +97,10 @@ async fn ask_streamed_with_tools() {
     );
     ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
     let mut response_stream = ai
-        .ask_as_stream(session, |_, gemini_response| gemini_response.get_text(""))
-        .await.unwrap();
+        .ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
         if let Ok(response) = response {
-            println!("{}", response);
+            println!("{}", response.get_text(""));
         }
     }
     println!(

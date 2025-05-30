@@ -18,6 +18,9 @@ pub struct Gemini {
     tools: Option<Vec<Tool>>,
 }
 impl Gemini {
+    /// # Arguments
+    /// `api_key` get one from [Google AI studio](https://aistudio.google.com/app/apikey)
+    /// `model` should be of those mentioned [here](https://ai.google.dev/gemini-api/docs/models#model-variations) in bold black color
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
     pub fn new(
         api_key: impl Into<String>,
@@ -124,26 +127,26 @@ impl Gemini {
         Ok(reply)
     }
     /// # Warning
-    /// You must read the response stream to get reply stored context in sessions.
+    /// You must read the response stream to get reply stored context in `session`.
     /// `data_extractor` is used to extract data that you get as a stream of futures.
     /// # Example
     ///```ignore
     ///use futures::StreamExt
-    ///let mut response_stream = gemini.ask_as_stream(session,
+    ///let mut response_stream = gemini.ask_as_stream_with_extractor(session,
     ///|session, _gemini_response| session.get_last_message_text("").unwrap())
-    ///.await.unwrap(); // Use _gemini_response.get_text("") for text received in every chunk
+    ///.await.unwrap(); // Use _gemini_response.get_text("") to just get the text received in every chunk
     ///
     ///while let Some(response) = response_stream.next().await {
     ///    if let Ok(response) = response {
-    ///        println!("{}", response.get_text(""));
+    ///        println!("{}", response);
     ///    }
     ///}
     ///```
-    pub async fn ask_as_stream<F, StreamType>(
+    pub async fn ask_as_stream_with_extractor<F, StreamType>(
         &self,
         session: Session,
         data_extractor: F,
-    ) -> Result<GeminiResponseStream<F, StreamType>, GeminiResponseError>
+    ) -> Result<ResponseStream<F, StreamType>, GeminiResponseError>
     where
         F: FnMut(&Session, GeminiResponse) -> StreamType,
     {
@@ -169,10 +172,34 @@ impl Gemini {
             return Err(text.into());
         }
 
-        Ok(GeminiResponseStream::new(
+        Ok(ResponseStream::new(
             Box::new(response.bytes_stream()),
             session,
             data_extractor,
         ))
+    }
+    /// # Warning
+    /// You must read the response stream to get reply stored context in `session`.
+    /// # Example
+    ///```ignore
+    ///use futures::StreamExt
+    ///let mut response_stream = gemini.ask_as_stream(session).await.unwrap();
+    ///
+    ///while let Some(response) = response_stream.next().await {
+    ///    if let Ok(response) = response {
+    ///        println!("{}", response.get_text(""));
+    ///    }
+    ///}
+    ///```
+    pub async fn ask_as_stream(
+        &self,
+        session: Session,
+    ) -> Result<GeminiResponseStream, GeminiResponseError> {
+        self.ask_as_stream_with_extractor(
+            session,
+            (|_, gemini_response| gemini_response)
+                as fn(&Session, GeminiResponse) -> GeminiResponse,
+        )
+        .await
     }
 }

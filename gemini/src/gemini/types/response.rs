@@ -101,7 +101,7 @@ impl GeminiResponse {
 
 pin_project_lite::pin_project! {
 #[derive(new)]
-    pub struct GeminiResponseStream<F,T>
+    pub struct ResponseStream<F,T>
         where F:FnMut(&Session, GeminiResponse) -> T{
         #[pin]
         response_stream:Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static>,
@@ -109,7 +109,7 @@ pin_project_lite::pin_project! {
         data_extractor: F
     }
 }
-impl<F, T> Stream for GeminiResponseStream<F, T>
+impl<F, T> Stream for ResponseStream<F, T>
 where
     F: FnMut(&Session, GeminiResponse) -> T,
 {
@@ -138,7 +138,7 @@ where
         }
     }
 }
-impl<F, T> GeminiResponseStream<F, T>
+impl<F, T> ResponseStream<F, T>
 where
     F: FnMut(&Session, GeminiResponse) -> T,
 {
@@ -149,3 +149,5 @@ where
         self.session
     }
 }
+pub type GeminiResponseStream =
+    ResponseStream<fn(&Session, GeminiResponse) -> GeminiResponse, GeminiResponse>;
