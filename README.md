@@ -1,7 +1,12 @@
 # Gemini
+## Installation
+```bash
+cargo add gemini-client-api
+
+```
 ## Overview
 A Rust library to use Google's Gemini API. It is extremely flexible and modular to integrate with any framework.  
-For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a stream which is a pain.
+For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a stream of futures, which is a pain.
 
 ### Features
 - Automatic context management
