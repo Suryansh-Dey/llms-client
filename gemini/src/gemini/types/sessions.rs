@@ -24,7 +24,7 @@ impl Session {
             remember_reply: true,
         }
     }
-    pub fn set_remember_reply(&mut self, remember: bool) -> &mut Self {
+    pub fn set_remember_reply(mut self, remember: bool) -> Self {
         self.remember_reply = remember;
         self
     }

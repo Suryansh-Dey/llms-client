@@ -56,20 +56,20 @@ impl Gemini {
         }
     }
     /// The generation config Schema should follow [Gemini docs](https://ai.google.dev/gemini-api/docs/text-generation#configuration-parameters)
-    pub fn set_generation_config(&mut self, generation_config: Value) -> &mut Self {
+    pub fn set_generation_config(mut self, generation_config: Value) -> Self {
         self.generation_config = Some(generation_config);
         self
     }
-    pub fn set_model(&mut self, model: impl Into<String>) -> &mut Self {
+    pub fn set_model(mut self, model: impl Into<String>) -> Self {
         self.model = model.into();
         self
     }
-    pub fn set_api_key(&mut self, api_key: impl Into<String>) -> &mut Self {
+    pub fn set_api_key(mut self, api_key: impl Into<String>) -> Self {
         self.api_key = api_key.into();
         self
     }
     /// `schema` should follow [Schema of gemini](https://ai.google.dev/api/caching#Schema)
-    pub fn set_json_mode(&mut self, schema: Value) -> &mut Self {
+    pub fn set_json_mode(mut self, schema: Value) -> Self {
         if let None = self.generation_config {
             self.generation_config = Some(json!({
                 "response_mime_type": "application/json",
@@ -81,21 +81,19 @@ impl Gemini {
         }
         self
     }
-    pub fn unset_json_mode(&mut self) -> &mut Self {
+    pub fn unset_json_mode(mut self) -> Self {
         if let Some(ref mut generation_config) = self.generation_config {
             generation_config["response_schema"] = None::<Value>.into();
             generation_config["response_mime_type"] = None::<Value>.into();
         }
         self
     }
-    ///- `tools` can be None to unset tools from using.  
-    ///- Or Vec tools to be allowed
-    pub fn set_tools(&mut self, tools: Option<Vec<Tool>>) -> &mut Self {
-        self.tools = tools;
+    pub fn set_tools(mut self, tools: Vec<Tool>) -> Self {
+        self.tools = Some(tools);
         self
     }
-    pub fn unset_code_execution_mode(&mut self) -> &mut Self {
-        self.tools.take();
+    pub fn unset_tools(mut self) -> Self {
+        self.tools = None;
         self
     }
 

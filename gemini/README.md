@@ -1,6 +1,6 @@
 # Overview
 A Rust library to use Google's Gemini API. It is extremely flexible and modular to integrate with any framework.  
-For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a stream of futures, which is a pain.
+For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream of futures, which is a pain.
 
 ### Features
 - Automatic context management
@@ -44,8 +44,7 @@ async fn see_markdown() {
 }
 
 async fn ask_string_for_json() {
-    let mut session = Session::new(6);
-    session.set_remember_reply(false);
+    let mut session = Session::new(6).set_remember_reply(false);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.0-flash-lite",
@@ -76,7 +75,7 @@ async fn ask_streamed() {
     session.ask_string("How are you");
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-pro-exp-03-25",
+        "gemini-2.5-flash",
         None,
     );
     let mut response_stream = ai
@@ -89,12 +88,12 @@ async fn ask_streamed() {
 async fn ask_streamed_with_tools() {
     let mut session = Session::new(6);
     session.ask_string("find sum of first 100 prime number using code");
-    let mut ai = Gemini::new(
+    let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.0-flash",
         None,
-    );
-    ai.set_tools(Some(vec![Tool::code_execution(json!({}))]));
+    )
+    .set_tools(vec![Tool::code_execution(json!({}))]);
     let mut response_stream = ai
         .ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
