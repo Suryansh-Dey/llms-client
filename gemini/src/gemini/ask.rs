@@ -113,14 +113,20 @@ impl Gemini {
                 self.generation_config.as_ref(),
             ))
             .send()
-            .await?;
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response.text().await?;
-            return Err(text.into());
+            let text = response
+                .text()
+                .await
+                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            return Err(GeminiResponseError::StatusNotOk(text));
         }
 
-        let reply = GeminiResponse::new(response).await?;
+        let reply = GeminiResponse::new(response)
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
         session.update(&reply);
         Ok(reply)
     }
@@ -163,11 +169,15 @@ impl Gemini {
                 self.generation_config.as_ref(),
             ))
             .send()
-            .await?;
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response.text().await?;
-            return Err(text.into());
+            let text = response
+                .text()
+                .await
+                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            return Err(GeminiResponseError::StatusNotOk(text.into()));
         }
 
         Ok(ResponseStream::new(

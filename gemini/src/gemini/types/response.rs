@@ -125,14 +125,17 @@ where
                     Poll::Ready(None)
                 } else {
                     let json_string = text[1..].trim();
-                    let response = GeminiResponse::from_str(json_string)
-                        .map_err(|_| json_string.to_string())?;
+                    let response = GeminiResponse::from_str(json_string).map_err(|_| {
+                        GeminiResponseStreamError::InvalidResposeFormat(json_string.into())
+                    })?;
                     this.session.update(&response);
                     let data = (this.data_extractor)(&this.session, response);
                     Poll::Ready(Some(Ok(data)))
                 }
             }
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e.into()))),
+            Poll::Ready(Some(Err(e))) => {
+                Poll::Ready(Some(Err(GeminiResponseStreamError::ReqwestError(e))))
+            }
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }

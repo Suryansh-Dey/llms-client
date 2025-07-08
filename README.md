@@ -54,7 +54,7 @@ async fn ask_string_for_json() {
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.0-flash-lite",
-        Some(SystemInstruction::from_str("Calssify the given words")),
+        Some(SystemInstruction::from_str("Classify the given words")),
     )
     .set_json_mode(json!({
         "type": "object",
@@ -67,7 +67,8 @@ async fn ask_string_for_json() {
                 "type":"array",
                 "items":{"type":"string"}
             }
-        }
+        },
+        "required":["positive", "negative"]
     }))
     .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance" "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
     .await
