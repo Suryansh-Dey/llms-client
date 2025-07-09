@@ -89,6 +89,7 @@ pub struct CodeExecuteResult {
 pub enum Part {
     text(String),
     #[serde(alias = "inlineData")]
+    ///Image or document
     inline_data(InlineData),
     #[serde(alias = "executableCode")]
     executable_code(ExecutableCode),
@@ -97,6 +98,7 @@ pub enum Part {
     functionCall(FunctionCall),
     functionResponse(FunctionResponse),
     #[serde(alias = "fileData")]
+    ///For Audio file URL. Not allowed for images or PDFs, use InlineData instead.
     file_data(FileData),
 }
 

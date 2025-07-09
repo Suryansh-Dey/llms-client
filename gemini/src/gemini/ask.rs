@@ -55,7 +55,7 @@ impl Gemini {
             tools: None,
         }
     }
-    /// The generation config Schema should follow [Gemini docs](https://ai.google.dev/gemini-api/docs/text-generation#configuration-parameters)
+    /// The generation config Schema should follow [Gemini docs](https://ai.google.dev/api/generate-content#generationconfig)
     pub fn set_generation_config(mut self, generation_config: Value) -> Self {
         self.generation_config = Some(generation_config);
         self
@@ -69,6 +69,10 @@ impl Gemini {
         self
     }
     /// `schema` should follow [Schema of gemini](https://ai.google.dev/api/caching#Schema)
+    /// To verify your schema visit [here](https://aistudio.google.com/prompts/new_chat):
+    /// - Under tools, toggle on Structured output
+    /// - Click Edit
+    /// - Here you can create schema with `Visual Editor` or `Code Editor` with error detection
     pub fn set_json_mode(mut self, schema: Value) -> Self {
         if let None = self.generation_config {
             self.generation_config = Some(json!({
