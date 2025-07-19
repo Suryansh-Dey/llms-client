@@ -1,5 +1,7 @@
+use base64::{Engine, engine::general_purpose::STANDARD};
 use derive_new::new;
 use getset::Getters;
+use reqwest::header::{HeaderMap, ToStrError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -16,6 +18,41 @@ pub struct InlineData {
     mime_type: String,
     #[get = "pub"]
     data: String,
+}
+#[derive(Debug)]
+pub enum InlineDataError {
+    RequestFailed(reqwest::Error),
+    CheckerFalse,
+    ContentTypeMissing,
+    ContentTypeParseFailed(ToStrError),
+}
+impl InlineData {
+    pub async fn from_link_with_check<F: FnOnce(&HeaderMap) -> bool>(
+        url: &str,
+        checker: F,
+    ) -> Result<Self, InlineDataError> {
+        let response = reqwest::get(url)
+            .await
+            .map_err(|e| InlineDataError::RequestFailed(e))?;
+        if !checker(response.headers()) {
+            return Err(InlineDataError::CheckerFalse);
+        }
+        let mime_type = response
+            .headers()
+            .get("Content-Type")
+            .ok_or(InlineDataError::ContentTypeMissing)?
+            .to_str()
+            .map_err(|e| InlineDataError::ContentTypeParseFailed(e))?
+            .to_string();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| InlineDataError::RequestFailed(e))?;
+        Ok(InlineData::new(mime_type, STANDARD.encode(body)))
+    }
+    pub async fn from_link(url: &str) -> Result<Self, InlineDataError> {
+        Self::from_link_with_check(url, |_| true).await
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

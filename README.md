@@ -6,7 +6,7 @@ cargo add gemini-client-api
 ```
 ## Overview
 A Rust library to use Google's Gemini API. It is extremely flexible and modular to integrate with any framework.  
-For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a stream of futures, which is a pain.
+For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream of futures, which is a pain.
 
 ### Features
 - Automatic context management
@@ -38,13 +38,12 @@ async fn see_markdown() {
     let response1 = ai.ask(session.ask_string("Hi, can you tell me which one of two bowls has more healty item?")).await.unwrap();
     println!("{}", response1.get_text("")); //Question and reply both automatically gets stored in `session` for context.
 
-    let parser = MarkdownToParts::new("Here is their ![image](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way", |_|mime::IMAGE_PNG).await;
+    let parts = MarkdownToParts::new("Here is their ![image](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way", |_|mime::IMAGE_PNG)
+        .await.process();
     //Can even read from file path of files on your device!
-    let parts = parser.process();
 
     let response2 = ai.ask(session.ask(parts))
-    .await
-    .unwrap();
+    .await.unwrap();
 
     println!("{}", response2.get_text(""));
 }
