@@ -1,6 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use derive_new::new;
 use getset::Getters;
+use mime::Mime;
 use reqwest::header::{HeaderMap, ToStrError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,7 +28,7 @@ pub enum InlineDataError {
     ContentTypeParseFailed(ToStrError),
 }
 impl InlineData {
-    pub async fn from_link_with_check<F: FnOnce(&HeaderMap) -> bool>(
+    pub async fn from_url_with_check<F: FnOnce(&HeaderMap) -> bool>(
         url: &str,
         checker: F,
     ) -> Result<Self, InlineDataError> {
@@ -50,8 +51,15 @@ impl InlineData {
             .map_err(|e| InlineDataError::RequestFailed(e))?;
         Ok(InlineData::new(mime_type, STANDARD.encode(body)))
     }
-    pub async fn from_link(url: &str) -> Result<Self, InlineDataError> {
-        Self::from_link_with_check(url, |_| true).await
+    pub async fn from_url(url: &str) -> Result<Self, InlineDataError> {
+        Self::from_url_with_check(url, |_| true).await
+    }
+    pub async fn from_path(path: &str, mime_type: Mime) -> Result<Self, std::io::Error> {
+        let data = tokio::fs::read(path).await?;
+        Ok(InlineData::new(
+            mime_type.to_string(),
+            STANDARD.encode(data),
+        ))
     }
 }
 
