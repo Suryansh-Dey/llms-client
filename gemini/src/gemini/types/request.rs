@@ -54,8 +54,8 @@ impl InlineData {
     pub async fn from_url(url: &str) -> Result<Self, InlineDataError> {
         Self::from_url_with_check(url, |_| true).await
     }
-    pub async fn from_path(path: &str, mime_type: Mime) -> Result<Self, std::io::Error> {
-        let data = tokio::fs::read(path).await?;
+    pub async fn from_path(file_path: &str, mime_type: Mime) -> Result<Self, std::io::Error> {
+        let data = tokio::fs::read(file_path).await?;
         Ok(InlineData::new(
             mime_type.to_string(),
             STANDARD.encode(data),

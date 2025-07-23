@@ -154,7 +154,7 @@ impl Gemini {
         &self,
         session: Session,
         data_extractor: F,
-    ) -> Result<ResponseStream<F, StreamType>, GeminiResponseError>
+    ) -> Result<ResponseStream<F, StreamType>, (Session, GeminiResponseError)>
     where
         F: FnMut(&Session, GeminiResponse) -> StreamType,
     {
@@ -163,7 +163,7 @@ impl Gemini {
             self.model, self.api_key
         );
 
-        let response = self
+        let request = self
             .client
             .post(req_url)
             .json(&GeminiRequestBody::new(
@@ -173,15 +173,18 @@ impl Gemini {
                 self.generation_config.as_ref(),
             ))
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await;
+        let response = match request {
+            Ok(response) => response,
+            Err(e) => return Err((session, GeminiResponseError::ReqwestError(e))),
+        };
 
         if !response.status().is_success() {
-            let text = response
-                .text()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
-            return Err(GeminiResponseError::StatusNotOk(text.into()));
+            let text = match response.text().await {
+                Ok(response) => response,
+                Err(e) => return Err((session, GeminiResponseError::ReqwestError(e))),
+            };
+            return Err((session, GeminiResponseError::StatusNotOk(text.into())));
         }
 
         Ok(ResponseStream::new(
@@ -206,7 +209,7 @@ impl Gemini {
     pub async fn ask_as_stream(
         &self,
         session: Session,
-    ) -> Result<GeminiResponseStream, GeminiResponseError> {
+    ) -> Result<GeminiResponseStream, (Session, GeminiResponseError)> {
         self.ask_as_stream_with_extractor(
             session,
             (|_, gemini_response| gemini_response)
