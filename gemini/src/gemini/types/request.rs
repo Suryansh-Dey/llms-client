@@ -171,7 +171,7 @@ impl SystemInstruction {
         }
     }
 }
-
+#[allow(non_snake_case)]
 #[derive(Serialize, new)]
 pub struct GeminiRequestBody<'a> {
     system_instruction: Option<&'a SystemInstruction>,
@@ -179,7 +179,7 @@ pub struct GeminiRequestBody<'a> {
     tools: Option<&'a [Tool]>,
     contents: &'a [&'a Chat],
     #[serde(skip_serializing_if = "Option::is_none")]
-    generation_config: Option<&'a Value>,
+    generationConfig: Option<&'a Value>,
 }
 
 #[derive(Serialize, Debug, Clone)]
