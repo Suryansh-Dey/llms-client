@@ -56,9 +56,11 @@ impl Gemini {
         }
     }
     /// The generation config Schema should follow [Gemini docs](https://ai.google.dev/api/generate-content#generationconfig)
-    pub fn set_generation_config(mut self, generation_config: Value) -> Self {
-        self.generation_config = Some(generation_config);
-        self
+    pub fn set_generation_config(&mut self) -> &mut Value {
+        if let None = self.generation_config {
+            self.generation_config = Some(json!({}));
+        }
+        self.generation_config.as_mut().unwrap()
     }
     pub fn set_model(mut self, model: impl Into<String>) -> Self {
         self.model = model.into();
@@ -74,15 +76,9 @@ impl Gemini {
     /// - Click Edit
     /// - Here you can create schema with `Visual Editor` or `Code Editor` with error detection
     pub fn set_json_mode(mut self, schema: Value) -> Self {
-        if let None = self.generation_config {
-            self.generation_config = Some(json!({
-                "response_mime_type": "application/json",
-                "response_schema":schema
-            }))
-        } else if let Some(config) = self.generation_config.as_mut() {
-            config["response_mime_type"] = "application/json".into();
-            config["response_schema"] = schema.into();
-        }
+        let config = self.set_generation_config();
+        config["response_mime_type"] = "application/json".into();
+        config["response_schema"] = schema.into();
         self
     }
     pub fn unset_json_mode(mut self) -> Self {
