@@ -106,7 +106,8 @@ pin_project_lite::pin_project! {
         #[pin]
         response_stream:Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static>,
         session: Session,
-        data_extractor: F
+        data_extractor: F,
+        buffer: Vec<u8>,
     }
 }
 impl<F, T> Stream for ResponseStream<F, T>
@@ -116,28 +117,65 @@ where
     type Item = Result<T, GeminiResponseStreamError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
+        let mut this = self.project();
 
-        match this.response_stream.poll_next(cx) {
-            Poll::Ready(Some(Ok(bytes))) => {
-                let text = String::from_utf8_lossy(&bytes);
-                if text == "]" {
-                    Poll::Ready(None)
-                } else {
-                    let json_string = text[1..].trim();
-                    let response = GeminiResponse::from_str(json_string).map_err(|_| {
-                        GeminiResponseStreamError::InvalidResposeFormat(json_string.into())
-                    })?;
-                    this.session.update(&response);
-                    let data = (this.data_extractor)(&this.session, response);
-                    Poll::Ready(Some(Ok(data)))
+        loop {
+            // Look for the delimiter `\r\n\r\n` in the buffer.
+            if let Some(end_of_message_pos) = this.buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                let message_bytes = this.buffer.drain(..end_of_message_pos + 4).collect::<Vec<u8>>();
+
+                // Convert to string and remove the "data: " prefix and extra spaces.
+                if let Some(json_str) = String::from_utf8_lossy(&message_bytes)
+                    .strip_prefix("data:")
+                    .map(|s| s.trim())
+                {
+                    if !json_str.is_empty() {
+                        // Parse JSON.
+                        let response = match GeminiResponse::from_str(json_str) {
+                            Ok(resp) => resp,
+                            Err(e) => {
+                                let err = GeminiResponseStreamError::InvalidResposeFormat(
+                                    format!("JSON parsing error [{}]: {}", e, json_str)
+                                );
+                                return Poll::Ready(Some(Err(err)));
+                            }
+                        };
+
+                        // Update the session and return the data.
+                        this.session.update(&response);
+                        let data = (this.data_extractor)(this.session, response);
+                        return Poll::Ready(Some(Ok(data)));
+                    }
+                }
+                continue;
+            }
+
+            // If the complete message is not in the buffer, read data from the network.
+            match this.response_stream.as_mut().poll_next(cx) {
+                Poll::Ready(Some(Ok(bytes))) => {
+                    this.buffer.extend_from_slice(&bytes);
+                }
+                Poll::Pending => {
+                    return Poll::Pending;
+                }
+                Poll::Ready(None) => {
+                    if this.buffer.is_empty() {
+                        return Poll::Ready(None);
+                    } else {
+                        // If there's something left in the buffer, it means we received a malformed message.
+                        let err_text = String::from_utf8_lossy(this.buffer).into_owned();
+                        let err = GeminiResponseStreamError::InvalidResposeFormat(
+                            format!("Stream ended with incomplete data in the buffer: {}", err_text)
+                        );
+                        // Clear the buffer to avoid triggering the error again.
+                        this.buffer.clear();
+                        return Poll::Ready(Some(Err(err)));
+                    }
+                }
+                Poll::Ready(Some(Err(e))) => {
+                    return Poll::Ready(Some(Err(GeminiResponseStreamError::ReqwestError(e))));
                 }
             }
-            Poll::Ready(Some(Err(e))) => {
-                Poll::Ready(Some(Err(GeminiResponseStreamError::ReqwestError(e))))
-            }
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
         }
     }
 }
