@@ -159,7 +159,7 @@ impl Gemini {
         F: FnMut(&Session, GeminiResponse) -> StreamType,
     {
         let req_url = format!(
-            "{BASE_URL}/{}:streamGenerateContent?key={}",
+            "{BASE_URL}/{}:streamGenerateContent?alt=sse&key={}",
             self.model, self.api_key
         );
 
