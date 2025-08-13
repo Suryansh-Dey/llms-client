@@ -82,20 +82,62 @@ impl GeminiResponse {
             .replace("\\n", "\n");
         serde_json::from_str::<T>(&unescaped_str)
     }
-    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
-    pub fn extract_text(parts: &[Part], seperator: impl AsRef<str>) -> String {
-        let mut concatenated_string = String::new();
-        for part in parts {
-            if let Part::text(text) = part {
-                concatenated_string.push_str(text);
-                concatenated_string.push_str(seperator.as_ref());
-            }
+    pub fn is_thinking(&self) -> bool {
+        let parts = self.get_parts();
+
+        // If there are no text parts in the chunk at all, it is not a "thought".
+        if !parts.iter().any(|p| matches!(p, Part::text(_))) {
+            return false;
         }
-        concatenated_string
+
+        // If every text part in this chunk is a "thought",
+        // then we consider the entire chunk a "thought".
+        parts.iter().all(|part| match part {
+            Part::text(text_part) => *text_part.thought(),
+            _ => true,
+        })
     }
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    pub fn extract_text_no_think(parts: &[Part], seperator: impl AsRef<str>) -> String {
+        parts
+            .iter()
+            .filter_map(|part| {
+                // Looking only for text parts
+                if let Part::text(text_part) = part {
+                    if !text_part.thought() {
+                        Some(text_part.text().as_str())
+                    } else {
+                        None // Ignoring "thought" parts
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref())
+    }
+    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    pub fn extract_text(parts: &[Part], seperator: impl AsRef<str>) -> String {
+        parts
+            .iter()
+            .filter_map(|part| {
+                if let Part::text(text_part) = part {
+                    // Just return the text, without checking the `thought` flag
+                    Some(text_part.text().as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref())
+    }
     pub fn get_text(&self, seperator: impl AsRef<str>) -> String {
-        Self::extract_text(&self.get_parts(), seperator.as_ref())
+        Self::extract_text(self.get_parts(), seperator)
+    }
+
+    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    pub fn get_text_no_think(&self, seperator: impl AsRef<str>) -> String {
+        Self::extract_text_no_think(&self.get_parts(), seperator.as_ref())
     }
 }
 

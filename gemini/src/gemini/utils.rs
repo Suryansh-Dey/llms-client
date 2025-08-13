@@ -155,7 +155,7 @@ impl<'a> MarkdownToParts<'a> {
             {
                 let end = index + length - removed_length;
                 let text = &self.markdown[..end];
-                parts.push(Part::text(text.to_string()));
+                parts.push(Part::text(text.into()));
                 parts.push(Part::inline_data(InlineData::new(mime_type, base64)));
 
                 self.markdown = &self.markdown[end..];
@@ -163,7 +163,7 @@ impl<'a> MarkdownToParts<'a> {
             }
         }
         if self.markdown.len() != 0 {
-            parts.push(Part::text(self.markdown.to_string()));
+            parts.push(Part::text(self.markdown.into()));
         }
         parts
     }

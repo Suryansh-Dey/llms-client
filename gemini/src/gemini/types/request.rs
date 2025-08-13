@@ -4,6 +4,7 @@ use getset::Getters;
 use mime::Mime;
 use reqwest::header::{HeaderMap, ToStrError};
 use serde::{Deserialize, Serialize};
+use serde::ser::{SerializeMap, Serializer};
 use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -129,22 +130,130 @@ pub struct CodeExecuteResult {
     output: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Clone, new, Getters, Debug)]
+pub struct TextPart {
+    #[get = "pub"]
+    text: String,
+    #[get = "pub"]
+    thought: bool,
+}
+impl From<String> for TextPart {
+    /// Creates a TextPart from a String, where `thought` is always `false`.
+    fn from(text: String) -> Self {
+        TextPart::new(text, false)
+    }
+}
+impl<'a> From<&'a str> for TextPart {
+    /// Creates a TextPart from &str, where `thought` is always `false`.
+    fn from(text: &'a str) -> Self {
+        TextPart::new(text.to_string(), false)
+    }
+}
+
+#[derive(Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum Part {
-    text(String),
-    #[serde(alias = "inlineData")]
+    text(TextPart),
     ///Image or document
     inline_data(InlineData),
-    #[serde(alias = "executableCode")]
     executable_code(ExecutableCode),
-    #[serde(alias = "codeExecutionResult")]
     code_execution_result(CodeExecuteResult),
     functionCall(FunctionCall),
     functionResponse(FunctionResponse),
-    #[serde(alias = "fileData")]
     ///For Audio file URL. Not allowed for images or PDFs, use InlineData instead.
     file_data(FileData),
+}
+
+impl serde::Serialize for Part {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Part::text(text_part) => {
+                if *text_part.thought() {
+                    // If it's a "thought", serialize as an object with two fields
+                    let mut map = serializer.serialize_map(Some(2))?;
+                    map.serialize_entry("text", text_part.text())?;
+                    map.serialize_entry("thought", text_part.thought())?;
+                    map.end()
+                } else {
+                    // If it's a regular text, we use a special serde method
+                    // that will create exactly {"text": "..."}
+                    serializer.serialize_newtype_variant("Part", 0, "text", text_part.text())
+                }
+            }
+
+            // Standard handling for all other variants
+            Part::inline_data(data) => {
+                serializer.serialize_newtype_variant("Part", 1, "inlineData", data)
+            }
+            Part::executable_code(code) => {
+                serializer.serialize_newtype_variant("Part", 2, "executableCode", code)
+            }
+            Part::code_execution_result(result) => {
+                serializer.serialize_newtype_variant("Part", 3, "codeExecutionResult", result)
+            }
+            Part::functionCall(call) => {
+                serializer.serialize_newtype_variant("Part", 4, "functionCall", call)
+            }
+            Part::functionResponse(response) => {
+                serializer.serialize_newtype_variant("Part", 5, "functionResponse", response)
+            }
+            Part::file_data(data) => {
+                serializer.serialize_newtype_variant("Part", 6, "fileData", data)
+            }
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Part {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)] // small hack
+        struct PartHelper {
+            text: Option<String>,
+            #[serde(default)]
+            thought: bool,
+            #[serde(alias = "inlineData")]
+            inline_data: Option<InlineData>,
+            #[serde(alias = "executableCode")]
+            executable_code: Option<ExecutableCode>,
+            #[serde(alias = "codeExecutionResult")]
+            code_execution_result: Option<CodeExecuteResult>,
+            #[serde(alias = "functionCall")]
+            function_call: Option<FunctionCall>,
+            #[serde(alias = "functionResponse")]
+            function_response: Option<FunctionResponse>,
+            #[serde(alias = "fileData")]
+            file_data: Option<FileData>,
+        }
+
+        let helper = PartHelper::deserialize(deserializer)?;
+
+        // We check the variants in order of their uniqueness
+        if let Some(data) = helper.inline_data {
+            Ok(Part::inline_data(data))
+        } else if let Some(code) = helper.executable_code {
+            Ok(Part::executable_code(code))
+        } else if let Some(result) = helper.code_execution_result {
+            Ok(Part::code_execution_result(result))
+        } else if let Some(call) = helper.function_call {
+            Ok(Part::functionCall(call))
+        } else if let Some(resp) = helper.function_response {
+            Ok(Part::functionResponse(resp))
+        } else if let Some(data) = helper.file_data {
+            Ok(Part::file_data(data))
+        } else if let Some(text) = helper.text {
+            // Special case: create a TextPart with the text and the `thought` flag
+            let text_part = TextPart::new(text, helper.thought);
+            Ok(Part::text(text_part))
+        } else {
+            Err(serde::de::Error::custom("Unknown Part variant in JSON"))
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, new, Getters, Debug, Clone)]
@@ -160,12 +269,24 @@ impl Chat {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, new, Getters, Debug, Default)]
+#[allow(non_snake_case)]
+pub struct ThinkingConfig {
+    /// Optional. Indicates whether to include thoughts in the response. If true, thoughts
+	/// are returned only if the model supports thought and thoughts are available.
+    #[get = "pub"]
+    pub include_thoughts: bool,
+    /// Optional. Indicates the thinking budget in tokens.
+    #[get = "pub"]
+    pub thinking_budget: i32,
+}
+
 #[derive(Serialize, Deserialize, new, Debug, Clone)]
 pub struct SystemInstruction {
     parts: Vec<Part>,
 }
 impl SystemInstruction {
-    pub fn from_str(prompt: impl Into<String>) -> Self {
+    pub fn from_str(prompt: impl Into<TextPart>) -> Self {
         Self {
             parts: vec![Part::text(prompt.into())],
         }
@@ -196,9 +317,12 @@ pub enum Tool {
 pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
     for updator_part in updator {
         match updator_part {
-            Part::text(updator_text) => {
-                if let Some(Part::text(updating_text)) = updating.last_mut() {
-                    updating_text.push_str(updator_text);
+            Part::text(updator_text_part) => {
+                if let Some(Part::text(updating_text_part)) = updating.last_mut() {
+                    if *updating_text_part.thought() == *updator_text_part.thought() {
+                        updating_text_part.text.push_str(updator_text_part.text());
+                        continue;
+                    }
                     continue;
                 }
             }

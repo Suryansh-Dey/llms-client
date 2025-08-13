@@ -101,13 +101,13 @@ impl Session {
     }
     /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("opportunist")`, the prompt string is concatenated with the previous prompt.
-    pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
+    pub fn ask_string(&mut self, prompt: impl Into<TextPart>) -> &mut Self {
         self.add_chat(Chat::new(Role::user, vec![Part::text(prompt.into())]))
     }
     pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::model, parts))
     }
-    pub fn reply_string(&mut self, prompt: impl Into<String>) -> &mut Self {
+    pub fn reply_string(&mut self, prompt: impl Into<TextPart>) -> &mut Self {
         self.add_chat(Chat::new(Role::model, vec![Part::text(prompt.into())]))
     }
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
@@ -140,19 +140,46 @@ impl Session {
     }
     ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
     pub fn get_last_message_text(&self, seperator: impl AsRef<str>) -> Option<String> {
-        let parts = self.get_last_message();
-        if let Some(parts) = parts {
-            let mut concatenated_string = String::new();
-            for part in parts {
-                if let Part::text(text) = part {
-                    concatenated_string.push_str(text);
-                    concatenated_string.push_str(seperator.as_ref());
+        let parts = self.get_last_message()?;
+        let final_text = parts
+            .iter()
+            .filter_map(|part| {
+                if let Part::text(text_part) = part {
+                    if !text_part.thought() {
+                        Some(text_part.text().as_str())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
                 }
-            }
-            Some(concatenated_string)
-        } else {
-            None
-        }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref());
+
+        Some(final_text)
+    }
+    ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
+    pub fn get_last_message_thoughts(&self, seperator: impl AsRef<str>) -> Option<String> {
+        let parts = self.get_last_message()?;
+
+        let thoughts = parts
+            .iter()
+            .filter_map(|part| {
+                if let Part::text(text_part) = part {
+                    if *text_part.thought() {
+                        Some(text_part.text().as_str())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref());
+
+        Some(thoughts)
     }
     /// If last message is a question from user then only that is removed else the model reply and
     /// the user's question (just before model reply)
