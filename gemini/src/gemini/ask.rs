@@ -187,7 +187,6 @@ impl Gemini {
             Box::new(response.bytes_stream()),
             session,
             data_extractor,
-            Vec::new(),
         ))
     }
     /// # Warning

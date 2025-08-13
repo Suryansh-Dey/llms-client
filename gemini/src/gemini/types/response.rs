@@ -100,7 +100,6 @@ impl GeminiResponse {
 }
 
 pin_project_lite::pin_project! {
-#[derive(new)]
     pub struct ResponseStream<F,T>
         where F:FnMut(&Session, GeminiResponse) -> T{
         #[pin]
@@ -121,8 +120,15 @@ where
 
         loop {
             // Look for the delimiter `\r\n\r\n` in the buffer.
-            if let Some(end_of_message_pos) = this.buffer.windows(4).position(|window| window == b"\r\n\r\n") {
-                let message_bytes = this.buffer.drain(..end_of_message_pos + 4).collect::<Vec<u8>>();
+            if let Some(end_of_message_pos) = this
+                .buffer
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+            {
+                let message_bytes = this
+                    .buffer
+                    .drain(..end_of_message_pos + 4)
+                    .collect::<Vec<u8>>();
 
                 // Convert to string and remove the "data: " prefix and extra spaces.
                 if let Some(json_str) = String::from_utf8_lossy(&message_bytes)
@@ -134,9 +140,10 @@ where
                         let response = match GeminiResponse::from_str(json_str) {
                             Ok(resp) => resp,
                             Err(e) => {
-                                let err = GeminiResponseStreamError::InvalidResposeFormat(
-                                    format!("JSON parsing error [{}]: {}", e, json_str)
-                                );
+                                let err = GeminiResponseStreamError::InvalidResposeFormat(format!(
+                                    "JSON parsing error [{}]: {}",
+                                    e, json_str
+                                ));
                                 return Poll::Ready(Some(Err(err)));
                             }
                         };
@@ -164,9 +171,10 @@ where
                     } else {
                         // If there's something left in the buffer, it means we received a malformed message.
                         let err_text = String::from_utf8_lossy(this.buffer).into_owned();
-                        let err = GeminiResponseStreamError::InvalidResposeFormat(
-                            format!("Stream ended with incomplete data in the buffer: {}", err_text)
-                        );
+                        let err = GeminiResponseStreamError::InvalidResposeFormat(format!(
+                            "Stream ended with incomplete data in the buffer: {}",
+                            err_text
+                        ));
                         // Clear the buffer to avoid triggering the error again.
                         this.buffer.clear();
                         return Poll::Ready(Some(Err(err)));
@@ -183,6 +191,20 @@ impl<F, T> ResponseStream<F, T>
 where
     F: FnMut(&Session, GeminiResponse) -> T,
 {
+    pub(crate) fn new(
+        response_stream: Box<
+            dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
+        >,
+        session: Session,
+        data_extractor: F,
+    ) -> Self {
+        Self {
+            response_stream,
+            session,
+            data_extractor,
+            buffer: Vec::new(),
+        }
+    }
     pub fn get_session(&self) -> &Session {
         &self.session
     }
