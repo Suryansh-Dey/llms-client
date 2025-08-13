@@ -66,12 +66,8 @@ impl Gemini {
         self.model = model.into();
         self
     }
-    pub fn set_sys_prompt(mut self, sys_prompt: SystemInstruction) -> Self {
-        self.sys_prompt = Some(sys_prompt);
-        self
-    }
-    pub fn remove_sys_prompt(mut self) -> Self {
-        self.sys_prompt = None;
+    pub fn set_sys_prompt(mut self, sys_prompt: Option<SystemInstruction>) -> Self {
+        self.sys_prompt = sys_prompt;
         self
     }
     pub fn set_api_key(mut self, api_key: impl Into<String>) -> Self {
