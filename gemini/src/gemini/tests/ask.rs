@@ -1,6 +1,6 @@
 use crate::gemini::ask::Gemini;
-use crate::gemini::types::request::{SystemInstruction, Tool};
-use crate::gemini::types::sessions::Session;
+use crate::gemini::types::request::{SystemInstruction, ThinkingConfig, Tool};
+use crate::gemini::types::sessions::{self, Session};
 use futures::StreamExt;
 use serde_json::{Value, json};
 
@@ -88,4 +88,18 @@ async fn ask_streamed_with_tools() {
         "Complete reply: {:#?}",
         json!(response_stream.get_session().get_last_message().unwrap())
     );
+}
+
+#[tokio::test]
+async fn ask_thinking() {
+    let mut session = Session::new(4);
+    let ai = Gemini::new(
+        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
+        "gemini-2.5-flash",
+        None,
+    )
+    .set_thinking_config(ThinkingConfig::new(true, 1024));
+    session.ask_string("How to calculate width of a binary tree?");
+    let response = ai.ask(&mut session).await.unwrap();
+    println!("{}", response.get_text(""));
 }

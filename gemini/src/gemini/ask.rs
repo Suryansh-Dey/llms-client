@@ -73,13 +73,6 @@ impl Gemini {
         }
         self
     }
-    pub fn set_thoughts_enabled(mut self, enabled: bool) -> Self {
-        let thinking = serde_json::to_value(ThinkingConfig::new(enabled, -1)).unwrap();
-        if let Value::Object(map) = self.set_generation_config() {
-            map.insert("thinking_config".to_string(), thinking);
-        }
-        self
-    }
     pub fn set_model(mut self, model: impl Into<String>) -> Self {
         self.model = model.into();
         self

@@ -3,8 +3,8 @@ use derive_new::new;
 use getset::Getters;
 use mime::Mime;
 use reqwest::header::{HeaderMap, ToStrError};
-use serde::{Deserialize, Serialize};
 use serde::ser::{SerializeMap, Serializer};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -269,16 +269,38 @@ impl Chat {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Getters, Debug, Default)]
 #[allow(non_snake_case)]
 pub struct ThinkingConfig {
-    /// Optional. Indicates whether to include thoughts in the response. If true, thoughts
-	/// are returned only if the model supports thought and thoughts are available.
+    /// Indicates whether to include thoughts in the response. If true, thoughts
+    /// are returned only if the model supports thought and thoughts are available.
     #[get = "pub"]
-    pub include_thoughts: bool,
-    /// Optional. Indicates the thinking budget in tokens.
+    include_thoughts: bool,
+    /// Indicates the thinking budget in tokens.
     #[get = "pub"]
-    pub thinking_budget: i32,
+    thinking_budget: i32,
+}
+impl ThinkingConfig {
+    /// Read [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for allowed range of
+    /// `thinking_budget`
+    pub fn new(include_thoughts: bool, thinking_budget: u32) -> Self {
+        Self {
+            include_thoughts,
+            thinking_budget: thinking_budget as i32,
+        }
+    }
+    pub fn new_disable_thinking(include_thoughts: bool) -> Self {
+        Self {
+            include_thoughts,
+            thinking_budget: 0,
+        }
+    }
+    pub fn new_dynamic_thinking(include_thoughts: bool) -> Self {
+        Self {
+            include_thoughts,
+            thinking_budget: -1,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, new, Debug, Clone)]

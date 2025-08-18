@@ -131,10 +131,12 @@ impl GeminiResponse {
             .collect::<Vec<&str>>()
             .join(seperator.as_ref())
     }
+    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
     pub fn get_text(&self, seperator: impl AsRef<str>) -> String {
         Self::extract_text(self.get_parts(), seperator)
     }
 
+    /// Don't include thoughts
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
     pub fn get_text_no_think(&self, seperator: impl AsRef<str>) -> String {
         Self::extract_text_no_think(&self.get_parts(), seperator.as_ref())
