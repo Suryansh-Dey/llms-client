@@ -292,6 +292,29 @@ impl SystemInstruction {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum HarmCategory {
+    HarmCategoryHarassment,
+    HarmCategoryHateSpeech,
+    HarmCategorySexuallyExplicit,
+    HarmCategoryDangerousContent,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum BlockThreshold {
+    BlockNone,
+    BlockOnlyHigh,
+    BlockMediumAndAbove,
+    BlockLowAndAbove,
+}
+#[derive(Serialize, Deserialize, new, Getters, Debug, Clone)]
+pub struct SafetySetting {
+    pub category: HarmCategory,
+    pub threshold: BlockThreshold,
+}
+
 #[allow(non_snake_case)]
 #[derive(Serialize, new)]
 pub struct GeminiRequestBody<'a> {
@@ -301,6 +324,8 @@ pub struct GeminiRequestBody<'a> {
     contents: &'a [&'a Chat],
     #[serde(skip_serializing_if = "Option::is_none")]
     generationConfig: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    safetySettings: Option<&'a [SafetySetting]>,
 }
 
 #[derive(Serialize, Debug, Clone)]

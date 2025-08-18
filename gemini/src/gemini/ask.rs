@@ -15,6 +15,7 @@ pub struct Gemini {
     model: String,
     sys_prompt: Option<SystemInstruction>,
     generation_config: Option<Value>,
+    safety_settings: Option<Vec<SafetySetting>>,
     tools: Option<Vec<Tool>>,
 }
 impl Gemini {
@@ -36,6 +37,7 @@ impl Gemini {
             model: model.into(),
             sys_prompt,
             generation_config: None,
+            safety_settings: None,
             tools: None,
         }
     }
@@ -52,6 +54,7 @@ impl Gemini {
             model: model.into(),
             sys_prompt,
             generation_config: None,
+            safety_settings: None,
             tools: None,
         }
     }
@@ -83,6 +86,10 @@ impl Gemini {
     }
     pub fn set_sys_prompt(mut self, sys_prompt: Option<SystemInstruction>) -> Self {
         self.sys_prompt = sys_prompt;
+        self
+    }
+    pub fn set_safety_settings(mut self, settings: Option<Vec<SafetySetting>>) -> Self {
+        self.safety_settings = settings;
         self
     }
     pub fn set_api_key(mut self, api_key: impl Into<String>) -> Self {
@@ -130,6 +137,7 @@ impl Gemini {
                 self.tools.as_deref(),
                 &session.get_history().as_slice(),
                 self.generation_config.as_ref(),
+                self.safety_settings.as_deref(),
             ))
             .send()
             .await
@@ -186,6 +194,7 @@ impl Gemini {
                 self.tools.as_deref(),
                 session.get_history().as_slice(),
                 self.generation_config.as_ref(),
+                self.safety_settings.as_deref(),
             ))
             .send()
             .await;
