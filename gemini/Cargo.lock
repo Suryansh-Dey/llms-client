@@ -282,7 +282,7 @@ dependencies = [
 
 [[package]]
 name = "gemini-client-api"
-version = "5.5.7"
+version = "5.5.8"
 dependencies = [
  "base64",
  "bytes",

@@ -289,9 +289,9 @@ impl ThinkingConfig {
             thinking_budget: thinking_budget as i32,
         }
     }
-    pub fn new_disable_thinking(include_thoughts: bool) -> Self {
+    pub fn new_disable_thinking() -> Self {
         Self {
-            include_thoughts,
+            include_thoughts: false,
             thinking_budget: 0,
         }
     }
