@@ -333,8 +333,10 @@ pub enum BlockThreshold {
 }
 #[derive(Serialize, Deserialize, new, Getters, Debug, Clone)]
 pub struct SafetySetting {
-    pub category: HarmCategory,
-    pub threshold: BlockThreshold,
+    #[get = "pub"]
+    category: HarmCategory,
+    #[get = "pub"]
+    threshold: BlockThreshold,
 }
 
 #[allow(non_snake_case)]

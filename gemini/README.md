@@ -4,11 +4,12 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 
 ### Features
 - Automatic context management
+- Inbuilt markdown to parts parser enables AI to see markdown images or files, even if they are from your device storage!
 - Vision to see images
 - Code execution by Gemini
 - File reading like PDF or any document, even audio files like MP3
 - Function call support
-- Inbuilt markdown to parts parser enables AI to see markdown images or files, even if they are from your device storage!
+- Thinking and Safety setting
 
 # Basic usage
 ```rust
@@ -105,5 +106,18 @@ async fn ask_streamed_with_tools() {
         "Complete reply: {:#?}",
         json!(response_stream.get_session().get_last_message().unwrap())
     );
+}
+
+async fn ask_thinking() {
+    let mut session = Session::new(4);
+    let ai = Gemini::new(
+        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
+        "gemini-2.5-flash",
+        None,
+    )
+    .set_thinking_config(ThinkingConfig::new(true, 1024));
+    session.ask_string("How to calculate width of a binary tree?");
+    let response = ai.ask(&mut session).await.unwrap();
+    println!("{}", response.get_text_no_think(""));
 }
 ```
