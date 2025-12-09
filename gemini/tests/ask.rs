@@ -16,7 +16,7 @@ async fn see_web_markdown() {
     .await
     .unwrap();
 
-    println!("{}", response.get_text(""));
+    println!("{}", response.get_chat().get_text_no_think(""));
 }
 
 #[tokio::test]
@@ -37,5 +37,5 @@ async fn see_fs_markdown() {
     .await
     .unwrap();
 
-    println!("{}", response.get_text(""));
+    println!("{}", response.get_chat().get_text_no_think(""));
 }

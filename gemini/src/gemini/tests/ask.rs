@@ -1,6 +1,6 @@
 use crate::gemini::ask::Gemini;
 use crate::gemini::types::request::{SystemInstruction, ThinkingConfig, Tool};
-use crate::gemini::types::sessions::{self, Session};
+use crate::gemini::types::sessions::Session;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
@@ -9,13 +9,13 @@ async fn ask_string() {
     let mut session = Session::new(6);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash",
+        "gemini-2.5-flash",
         None,
     )
     .ask(session.ask_string("Hi"))
     .await
     .unwrap();
-    println!("{}", response.get_text(""));
+    println!("{}", response.get_chat().get_text_all(""));
 }
 
 #[tokio::test]
@@ -23,7 +23,7 @@ async fn ask_string_for_json() {
     let mut session = Session::new(6).set_remember_reply(false);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash",
         Some(SystemInstruction::from_str("Classify the given words")),
     )
     .set_json_mode(json!({
@@ -61,7 +61,7 @@ async fn ask_streamed() {
     session.ask_string("machine learning");
     let mut response_stream = ai
         .ask_as_stream_with_extractor(session, |session, _| {
-            session.get_last_message_text("").unwrap()
+            session.get_last_chat().unwrap().get_text_no_think("")
         })
         .await
         .unwrap();
@@ -76,17 +76,17 @@ async fn ask_streamed_with_tools() {
     session.ask_string("find sum of first 100 prime number using code");
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash",
+        "gemini-2.5-flash",
         None,
     )
     .set_tools(vec![Tool::code_execution(json!({}))]);
     let mut response_stream = ai.ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap().get_text(""));
+        println!("{}", response.unwrap().get_chat().get_text_all(""));
     }
     println!(
         "Complete reply: {:#?}",
-        json!(response_stream.get_session().get_last_message().unwrap())
+        json!(response_stream.get_session().get_last_chat().unwrap())
     );
 }
 
@@ -101,5 +101,5 @@ async fn ask_thinking() {
     .set_thinking_config(ThinkingConfig::new(true, 1024));
     session.ask_string("How to calculate width of a binary tree?");
     let response = ai.ask(&mut session).await.unwrap();
-    println!("{}", response.get_text_no_think(""));
+    println!("{}", response.get_chat().get_text_no_think(""));
 }

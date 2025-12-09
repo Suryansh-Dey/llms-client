@@ -47,7 +47,7 @@ async fn ask_string_for_json() {
     let mut session = Session::new(6).set_remember_reply(false);
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash",
         Some(SystemInstruction::from_str("Classify the given words")),
     )
     .set_json_mode(json!({
@@ -91,7 +91,7 @@ async fn ask_streamed_with_tools() {
     session.ask_string("find sum of first 100 prime number using code");
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash",
+        "gemini-2.5-flash",
         None,
     )
     .set_tools(vec![Tool::code_execution(json!({}))]);

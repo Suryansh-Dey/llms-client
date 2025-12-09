@@ -63,27 +63,36 @@ impl GeminiResponse {
     pub(crate) fn from_str(string: impl AsRef<str>) -> Result<Self, serde_json::Error> {
         serde_json::from_str(string.as_ref())
     }
+    ///Instead use get_chat()
+    #[deprecated]
     pub fn get_parts(&self) -> &Vec<Part> {
         self.candidates[0].content.parts()
+    }
+    pub fn get_chat(&self) -> &Chat {
+        &self.candidates[0].content
     }
     pub fn get_json<T>(&self) -> Result<T, serde_json::Error>
     where
         T: serde::de::DeserializeOwned,
     {
-        let unescaped_str = self.get_text("").replace("\\\"", "\"").replace("\\n", "\n");
-        serde_json::from_str::<T>(&unescaped_str)
+        Self::parse_json(self.get_chat().parts())
     }
     pub fn parse_json<T>(parts: &[Part]) -> Result<T, serde_json::Error>
     where
         T: serde::de::DeserializeOwned,
     {
-        let unescaped_str = Self::extract_text(parts, "")
+        let unescaped_str = Chat::extract_text_all(parts, "")
             .replace("\\\"", "\"")
             .replace("\\n", "\n");
         serde_json::from_str::<T>(&unescaped_str)
     }
+    /// Instead use
+    /// ```ignore
+    /// geminiResponse.get_chat().is_thinking()
+    /// ```
+    #[deprecated]
     pub fn is_thinking(&self) -> bool {
-        let parts = self.get_parts();
+        let parts = self.get_chat().parts();
 
         // If there are no text parts in the chunk at all, it is not a "thought".
         if !parts.iter().any(|p| matches!(p, Part::text(_))) {
@@ -97,7 +106,12 @@ impl GeminiResponse {
             _ => true,
         })
     }
+    /// Instead use
+    /// ```ignore
+    /// geminiResponse.get_chat().get_text_no_think()
+    /// ```
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    #[deprecated]
     pub fn extract_text_no_think(parts: &[Part], seperator: impl AsRef<str>) -> String {
         parts
             .iter()
@@ -116,7 +130,12 @@ impl GeminiResponse {
             .collect::<Vec<&str>>()
             .join(seperator.as_ref())
     }
+    /// Instead use
+    /// ```ignore
+    /// chat.get_text_all()
+    /// ```
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    #[deprecated]
     pub fn extract_text(parts: &[Part], seperator: impl AsRef<str>) -> String {
         parts
             .iter()
@@ -131,15 +150,25 @@ impl GeminiResponse {
             .collect::<Vec<&str>>()
             .join(seperator.as_ref())
     }
+    /// Instead use
+    /// ```ignore
+    /// geminiResponse.get_chat().get_text_all()
+    /// ```
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    #[deprecated]
     pub fn get_text(&self, seperator: impl AsRef<str>) -> String {
-        Self::extract_text(self.get_parts(), seperator)
+        self.get_chat().get_text_all(seperator)
     }
 
+    /// Instead use
+    /// ```ignore
+    /// geminiResponse.get_chat().get_text_no_think()
+    /// ```
     /// Don't include thoughts
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    #[deprecated]
     pub fn get_text_no_think(&self, seperator: impl AsRef<str>) -> String {
-        Self::extract_text_no_think(&self.get_parts(), seperator.as_ref())
+        self.get_chat().get_text_no_think(seperator)
     }
 }
 

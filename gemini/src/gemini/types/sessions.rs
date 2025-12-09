@@ -112,7 +112,7 @@ impl Session {
     }
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
         if self.get_remember_reply() {
-            let reply_parts = response.get_parts();
+            let reply_parts = response.get_chat().parts();
             self.add_chat(Chat::new(Role::model, reply_parts.clone()));
             Some(reply_parts)
         } else {
@@ -124,6 +124,8 @@ impl Session {
             None
         }
     }
+    ///Use get_last_chat instead
+    #[deprecated]
     pub fn get_last_message(&self) -> Option<&Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque().back() {
             Some(reply.parts())
@@ -131,6 +133,8 @@ impl Session {
             None
         }
     }
+    ///Use get_last_chat_mut instead
+    #[deprecated]
     pub fn get_last_message_mut(&mut self) -> Option<&mut Vec<Part>> {
         if let Some(reply) = self.get_history_as_vecdeque_mut().back_mut() {
             Some(reply.parts_mut())
@@ -138,48 +142,33 @@ impl Session {
             None
         }
     }
-    ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
-    pub fn get_last_message_text(&self, seperator: impl AsRef<str>) -> Option<String> {
-        let parts = self.get_last_message()?;
-        let final_text = parts
-            .iter()
-            .filter_map(|part| {
-                if let Part::text(text_part) = part {
-                    if !text_part.thought() {
-                        Some(text_part.text().as_str())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<&str>>()
-            .join(seperator.as_ref());
-
-        Some(final_text)
+    pub fn get_last_chat(&self) -> Option<&Chat> {
+        self.get_history_as_vecdeque().back()
     }
+    pub fn get_last_chat_mut(&mut self) -> Option<&mut Chat> {
+        self.get_history_as_vecdeque_mut().back_mut()
+    }
+    /// Instead use
+    /// ```ignore
+    /// session.get_last_chat()
+    /// .map(|chat| chat.get_text_no_think(seperator))
+    /// ```
     ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
+    #[deprecated]
+    pub fn get_last_message_text(&self, seperator: impl AsRef<str>) -> Option<String> {
+        self.get_last_chat()
+            .map(|chat| chat.get_text_no_think(seperator))
+    }
+    ///Instead use
+    ///```ignore
+    /// session.get_last_chat()
+    /// .map(|chat| chat.get_thoughts(seperator))
+    ///```
+    ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
+    #[deprecated]
     pub fn get_last_message_thoughts(&self, seperator: impl AsRef<str>) -> Option<String> {
-        let parts = self.get_last_message()?;
-
-        let thoughts = parts
-            .iter()
-            .filter_map(|part| {
-                if let Part::text(text_part) = part {
-                    if *text_part.thought() {
-                        Some(text_part.text().as_str())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<&str>>()
-            .join(seperator.as_ref());
-
-        Some(thoughts)
+        self.get_last_chat()
+            .map(|chat| chat.get_thoughts(seperator))
     }
     /// If last message is a question from user then only that is removed else the model reply and
     /// the user's question (just before model reply)

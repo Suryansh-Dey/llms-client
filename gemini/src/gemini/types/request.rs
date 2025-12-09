@@ -267,6 +267,94 @@ impl Chat {
     pub(super) fn parts_mut(&mut self) -> &mut Vec<Part> {
         &mut self.parts
     }
+    ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
+    ///Don't contain thoughts
+    pub fn get_text_no_think(&self, seperator: impl AsRef<str>) -> String {
+        let parts = self.parts();
+        let final_text = parts
+            .iter()
+            .filter_map(|part| {
+                if let Part::text(text_part) = part {
+                    if !text_part.thought() {
+                        Some(text_part.text().as_str())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref());
+
+        final_text
+    }
+    ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
+    pub fn get_thoughts(&self, seperator: impl AsRef<str>) -> String {
+        let parts = self.parts();
+        let thoughts = parts
+            .iter()
+            .filter_map(|part| {
+                if let Part::text(text_part) = part {
+                    if *text_part.thought() {
+                        Some(text_part.text().as_str())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref());
+
+        thoughts
+    }
+    pub fn extract_text_all(parts: &[Part], seperator: impl AsRef<str>) -> String {
+        parts
+            .iter()
+            .filter_map(|part| {
+                if let Part::text(text_part) = part {
+                    // Just return the text, without checking the `thought` flag
+                    Some(text_part.text().as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref())
+    }
+    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    ///Includes all text including thoughts
+    pub fn get_text_all(&self, seperator: impl AsRef<str>) -> String {
+        self.parts()
+            .iter()
+            .filter_map(|part| {
+                if let Part::text(text_part) = part {
+                    // Just return the text, without checking the `thought` flag
+                    Some(text_part.text().as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(seperator.as_ref())
+    }
+    pub fn is_thinking(&self) -> bool {
+        let parts = self.parts();
+
+        // If there are no text parts in the chunk at all, it is not a "thought".
+        if !parts.iter().any(|p| matches!(p, Part::text(_))) {
+            return false;
+        }
+
+        // If every text part in this chunk is a "thought",
+        // then we consider the entire chunk a "thought".
+        parts.iter().all(|part| match part {
+            Part::text(text_part) => *text_part.thought(),
+            _ => true,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, Default)]
