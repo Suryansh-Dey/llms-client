@@ -15,7 +15,7 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 ```rust
 use gemini_client_api::gemini::{
     ask::Gemini,
-    types::request::{SystemInstruction, Tool},
+    types::request::Tool,
     types::sessions::Session,
     utils::MarkdownToParts,
 };
@@ -48,7 +48,7 @@ async fn ask_string_for_json() {
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.5-flash",
-        Some(SystemInstruction::from_str("Classify the given words")),
+        Some("Classify the given words".into()),
     )
     .set_json_mode(json!({
         "type": "object",

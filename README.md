@@ -21,7 +21,7 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 ```rust
 use gemini_client_api::gemini::{
     ask::Gemini,
-    types::request::{SystemInstruction, Tool},
+    types::request::Tool,
     types::sessions::Session,
     utils::MarkdownToParts,
 };
@@ -37,7 +37,7 @@ async fn see_markdown() {
     );
     let response1 = ai.ask(session.ask_string("Hi, can you tell me which one of two bowls has more healty item?")).await.unwrap();
     //Question and reply both automatically gets stored in `session` for context.
-    println!("{}", response.get_chat().get_text_no_think(""));
+    println!("{}", response1.get_chat().get_text_no_think(""));
 
     let parts = MarkdownToParts::new("Here is their ![image](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way", |_|mime::IMAGE_PNG)
         .await.process();
@@ -46,7 +46,7 @@ async fn see_markdown() {
     let response2 = ai.ask(session.ask(parts))
     .await.unwrap();
 
-    println!("{}", response.get_chat().get_text_no_think(""));
+    println!("{}", response2.get_chat().get_text_no_think(""));
 }
 
 async fn ask_string_for_json() {
@@ -54,7 +54,7 @@ async fn ask_string_for_json() {
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.5-flash",
-        Some(SystemInstruction::from_str("Classify the given words")),
+        Some("Classify the given words".into()),
     )
     .set_json_mode(json!({
         "type": "object",
@@ -88,7 +88,7 @@ async fn ask_streamed() {
     let mut response_stream = ai
         .ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
-        println!("{}", response.get_chat().get_text_no_think(""));
+        println!("{}", response.unwrap().get_chat().get_text_no_think(""));
     }
 }
 

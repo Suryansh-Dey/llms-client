@@ -1,5 +1,5 @@
 use crate::gemini::ask::Gemini;
-use crate::gemini::types::request::{SystemInstruction, ThinkingConfig, Tool};
+use crate::gemini::types::request::{ThinkingConfig, Tool};
 use crate::gemini::types::sessions::Session;
 use futures::StreamExt;
 use serde_json::{Value, json};
@@ -24,7 +24,7 @@ async fn ask_string_for_json() {
     let response = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.5-flash",
-        Some(SystemInstruction::from_str("Classify the given words")),
+        Some("Classify the given words".into()),
     )
     .set_json_mode(json!({
         "type": "object",

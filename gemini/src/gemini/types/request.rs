@@ -394,7 +394,32 @@ pub struct SystemInstruction {
     parts: Vec<Part>,
 }
 impl SystemInstruction {
+    ///Instead use `.into()`
+    #[deprecated]
     pub fn from_str(prompt: impl Into<TextPart>) -> Self {
+        Self {
+            parts: vec![Part::text(prompt.into())],
+        }
+    }
+}
+impl From<TextPart> for SystemInstruction {
+    fn from(prompt: TextPart) -> Self {
+        Self {
+            parts: vec![Part::text(prompt)],
+        }
+    }
+}
+impl From<String> for SystemInstruction {
+    /// Creates a TextPart from a String, where `thought` is always `false`.
+    fn from(prompt: String) -> Self {
+        Self {
+            parts: vec![Part::text(prompt.into())],
+        }
+    }
+}
+impl<'a> From<&'a str> for SystemInstruction {
+    /// Creates a TextPart from &str, where `thought` is always `false`.
+    fn from(prompt: &'a str) -> Self {
         Self {
             parts: vec![Part::text(prompt.into())],
         }
