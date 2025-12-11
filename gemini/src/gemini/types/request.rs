@@ -84,17 +84,23 @@ pub struct ExecutableCode {
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionCall {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[get = "pub"]
     id: Option<String>,
+    #[get = "pub"]
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[get = "pub"]
     args: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[get = "pub"]
     id: Option<String>,
+    #[get = "pub"]
     name: String,
+    #[get = "pub"]
     response: Value,
 }
 
@@ -102,8 +108,10 @@ pub struct FunctionResponse {
 #[allow(non_snake_case)]
 pub struct FileData {
     #[serde(skip_serializing_if = "Option::is_none", alias = "mimeType")]
+    #[get = "pub"]
     mime_type: Option<String>,
     #[serde(alias = "fileUri")]
+    #[get = "pub"]
     file_uri: String,
 }
 
@@ -327,18 +335,7 @@ impl Chat {
     ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
     ///Includes all text including thoughts
     pub fn get_text_all(&self, seperator: impl AsRef<str>) -> String {
-        self.parts()
-            .iter()
-            .filter_map(|part| {
-                if let Part::text(text_part) = part {
-                    // Just return the text, without checking the `thought` flag
-                    Some(text_part.text().as_str())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<&str>>()
-            .join(seperator.as_ref())
+        Self::extract_text_all(&self.parts(), seperator)
     }
     pub fn is_thinking(&self) -> bool {
         let parts = self.parts();
@@ -391,8 +388,9 @@ impl ThinkingConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, new, Debug, Clone)]
+#[derive(Serialize, Deserialize, Getters, new, Debug, Clone)]
 pub struct SystemInstruction {
+    #[get = "pub"]
     parts: Vec<Part>,
 }
 impl SystemInstruction {
