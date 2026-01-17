@@ -1,16 +1,17 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::future::join_all;
 pub use mime;
+use mime::Mime;
 use regex::Regex;
 use reqwest::Client;
 pub use reqwest::header::{HeaderMap, HeaderValue};
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 #[derive(Clone)]
 pub struct MatchedFiles {
     pub index: usize,
     pub length: usize,
-    pub mime_type: Option<String>,
+    pub mime_type: Option<Mime>,
     pub base64: Option<String>,
 }
 /// # Panics
@@ -21,7 +22,7 @@ pub struct MatchedFiles {
 pub async fn get_file_base64s(
     markdown: impl AsRef<str>,
     regex: Regex,
-    guess_mime_type: fn(url: &str) -> mime::Mime,
+    guess_mime_type: fn(url: &str) -> Mime,
     decide_download: fn(headers: &HeaderMap) -> bool,
     timeout: Duration,
 ) -> Vec<MatchedFiles> {
@@ -41,7 +42,8 @@ pub async fn get_file_base64s(
                             .get("Content-Type")
                             .map(|mime| mime.to_str().ok())
                             .flatten()
-                            .map(|str| str.to_string());
+                            .map(|mime| Mime::from_str(mime).ok())
+                            .flatten();
 
                         let base64 = response
                             .bytes()
@@ -49,9 +51,7 @@ pub async fn get_file_base64s(
                             .ok()
                             .map(|bytes| STANDARD.encode(bytes));
                         let mime_type = match base64 {
-                            Some(_) => {
-                                mime_type.or_else(|| Some(guess_mime_type(&url).to_string()))
-                            }
+                            Some(_) => mime_type.or_else(|| Some(guess_mime_type(&url))),
                             None => None,
                         };
                         (mime_type, base64)
@@ -64,7 +64,7 @@ pub async fn get_file_base64s(
                     .ok()
                     .map(|bytes| STANDARD.encode(&bytes));
                 match base64 {
-                    Some(base64) => (Some(guess_mime_type(&url).to_string()), Some(base64)),
+                    Some(base64) => (Some(guess_mime_type(&url)), Some(base64)),
                     None => (None, None),
                 }
             };

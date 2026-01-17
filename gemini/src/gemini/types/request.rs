@@ -1,7 +1,9 @@
+use std::str::FromStr;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use derive_new::new;
 use getset::Getters;
-use mime::Mime;
+use mime::{FromStrError, Mime};
 use reqwest::header::{HeaderMap, ToStrError};
 use serde::ser::{SerializeMap, Serializer};
 use serde::{Deserialize, Serialize};
@@ -28,12 +30,16 @@ pub enum InlineDataError {
     CheckerFalse,
     ContentTypeMissing,
     ContentTypeParseFailed(ToStrError),
+    InvalidMimeType(FromStrError),
 }
 impl InlineData {
     /// Creates a new InlineData.
     /// `data` must be a base64 encoded string.
-    pub fn new(mime_type: String, data: String) -> Self {
-        Self { mime_type, data }
+    pub fn new(mime_type: Mime, data: String) -> Self {
+        Self {
+            mime_type: mime_type.to_string(),
+            data,
+        }
     }
     pub async fn from_url_with_check<F: FnOnce(&HeaderMap) -> bool>(
         url: &str,
@@ -45,17 +51,20 @@ impl InlineData {
         if !checker(response.headers()) {
             return Err(InlineDataError::CheckerFalse);
         }
+
         let mime_type = response
             .headers()
             .get("Content-Type")
             .ok_or(InlineDataError::ContentTypeMissing)?
             .to_str()
-            .map_err(|e| InlineDataError::ContentTypeParseFailed(e))?
-            .to_string();
+            .map_err(|e| InlineDataError::ContentTypeParseFailed(e))?;
+        let mime_type = Mime::from_str(mime_type).map_err(|e| InlineDataError::InvalidMimeType(e))?;
+
         let body = response
             .bytes()
             .await
             .map_err(|e| InlineDataError::RequestFailed(e))?;
+
         Ok(InlineData::new(mime_type, STANDARD.encode(body)))
     }
     pub async fn from_url(url: &str) -> Result<Self, InlineDataError> {
@@ -64,7 +73,7 @@ impl InlineData {
     pub async fn from_path(file_path: &str, mime_type: Mime) -> Result<Self, std::io::Error> {
         let data = tokio::fs::read(file_path).await?;
         Ok(InlineData::new(
-            mime_type.to_string(),
+            mime_type,
             STANDARD.encode(data),
         ))
     }

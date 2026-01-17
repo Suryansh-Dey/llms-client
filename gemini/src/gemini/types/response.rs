@@ -81,9 +81,7 @@ impl GeminiResponse {
     where
         T: serde::de::DeserializeOwned,
     {
-        let unescaped_str = Chat::extract_text_all(parts, "")
-            .replace("\\\"", "\"")
-            .replace("\\n", "\n");
+        let unescaped_str = Chat::extract_text_all(parts, "");
         serde_json::from_str::<T>(&unescaped_str)
     }
     /// Instead use
