@@ -14,11 +14,12 @@ pub enum Role {
     model,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
+#[derive(Serialize, Deserialize, Clone, Getters, Debug)]
 pub struct InlineData {
     #[get = "pub"]
     mime_type: String,
     #[get = "pub"]
+    ///Base64 encoded string.
     data: String,
 }
 #[derive(Debug)]
@@ -29,6 +30,11 @@ pub enum InlineDataError {
     ContentTypeParseFailed(ToStrError),
 }
 impl InlineData {
+    /// Creates a new InlineData.
+    /// `data` must be a base64 encoded string.
+    pub fn new(mime_type: String, data: String) -> Self {
+        Self { mime_type, data }
+    }
     pub async fn from_url_with_check<F: FnOnce(&HeaderMap) -> bool>(
         url: &str,
         checker: F,
