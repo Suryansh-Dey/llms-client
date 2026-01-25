@@ -1,8 +1,9 @@
 use gemini_client_api::gemini::{
     ask::Gemini,
     types::sessions::Session,
-    utils::{GeminiSchema, gemini_schema},
+    utils::{GeminiSchema, gemini_function, gemini_schema},
 };
+use gemini_client_api::gemini::types::request::Tool;
 use serde_json::{Value, json};
 
 #[allow(dead_code)]
@@ -29,7 +30,7 @@ struct Task {
 }
 
 #[test]
-fn test_gemini_schema_generation() {
+fn gemini_schema_generation_test() {
     let schema = Task::gemini_schema();
 
     let expected = json!({
@@ -79,7 +80,7 @@ struct ComplexTask {
 }
 
 #[test]
-fn test_complex_schema() {
+fn complex_schema_test() {
     let schema = ComplexTask::gemini_schema();
     let expected = json!({
         "type": "OBJECT",
@@ -123,4 +124,49 @@ async fn ask_string_for_json_with_struct() {
 
     let json: Value = response.get_json().unwrap();
     println!("{}", json);
+}
+
+#[gemini_function]
+/// Get the current weather in a given location
+fn get_weather(
+    /// The city and state, e.g. San Francisco, CA
+    location: String,
+    /// The temperature unit to use
+    unit: Option<String>,
+) {
+    let _ = (location, unit);
+}
+
+#[test]
+fn gemini_function_schema_test() {
+    let schema = get_weather::gemini_schema();
+    let expected = json!({
+        "name": "get_weather",
+        "description": "Get the current weather in a given location",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "location": {
+                    "type": "STRING",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                },
+                "unit": {
+                    "type": "STRING",
+                    "description": "The temperature unit to use",
+                    "nullable": true
+                }
+            },
+            "required": ["location"]
+        }
+    });
+
+    assert_eq!(schema, expected);
+
+    let tool = Tool::functionDeclarations(vec![schema]);
+    if let Tool::functionDeclarations(decls) = tool {
+        assert_eq!(decls.len(), 1);
+        assert_eq!(decls[0]["name"], "get_weather");
+    } else {
+        panic!("Expected Tool::functionDeclarations");
+    }
 }

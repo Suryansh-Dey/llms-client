@@ -1,6 +1,76 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Lit, Meta, Type};
+use syn::{
+    parse_macro_input, Attribute, Data, DeriveInput, Fields, FnArg, ItemFn, Lit, Meta, Pat, Type,
+};
+
+#[proc_macro_attribute]
+pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut input_fn = parse_macro_input!(item as ItemFn);
+    let fn_name = &input_fn.sig.ident;
+    let fn_description = extract_doc_comments(&input_fn.attrs);
+
+    let mut properties = Vec::new();
+    let mut required = Vec::new();
+
+    for arg in input_fn.sig.inputs.iter_mut() {
+        if let FnArg::Typed(pat_type) = arg {
+            if let Pat::Ident(pat_ident) = &*pat_type.pat {
+                let param_name = pat_ident.ident.to_string();
+                let param_type = &pat_type.ty;
+                let param_desc = extract_doc_comments(&pat_type.attrs);
+
+                // Remove doc attributes from the function signature so it compiles
+                pat_type.attrs.retain(|attr| !attr.path().is_ident("doc"));
+
+                let is_optional = is_option(param_type);
+
+                properties.push(quote! {
+                    let mut schema = <#param_type as GeminiSchema>::gemini_schema();
+                    if !#param_desc.is_empty() {
+                        if let Some(obj) = schema.as_object_mut() {
+                            obj.insert("description".to_string(), serde_json::json!(#param_desc));
+                        }
+                    }
+                    props.insert(#param_name.to_string(), schema);
+                });
+
+                if !is_optional {
+                    required.push(param_name);
+                }
+            }
+        }
+    }
+
+    let fn_name_str = fn_name.to_string();
+
+    let expanded = quote! {
+        #input_fn
+
+        #[allow(non_camel_case_types)]
+        pub struct #fn_name { }
+
+        impl GeminiSchema for #fn_name {
+            fn gemini_schema() -> serde_json::Value {
+                use serde_json::{json, Map};
+                let mut props = Map::new();
+                #(#properties)*
+
+                json!({
+                    "name": #fn_name_str,
+                    "description": #fn_description,
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": props,
+                        "required": [#(#required),*]
+                    }
+                })
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
 
 #[proc_macro_attribute]
 pub fn gemini_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {

@@ -5,7 +5,7 @@ use regex::Regex;
 use reqwest::header::HeaderMap;
 use std::time::Duration;
 mod macros;
-pub use gemini_proc_macros::gemini_schema;
+pub use gemini_proc_macros::{gemini_function, gemini_schema};
 pub use macros::GeminiSchema;
 
 const REQ_TIMEOUT: Duration = Duration::from_secs(10);
