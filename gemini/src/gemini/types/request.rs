@@ -385,17 +385,53 @@ pub struct SafetySetting {
     threshold: BlockThreshold,
 }
 
-#[allow(non_snake_case)]
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolConfig {
+    /// Configuration for function calling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_calling_config: Option<FunctionCallingConfig>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FunctionCallingConfig {
+    /// The mode in which function calling should execute.
+    /// Can be "AUTO", "ANY", or "NONE".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<FunctionCallingMode>,
+
+    /// Optional: Only provide this if mode is "ANY".
+    /// Restricts the model to only call specific functions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_function_names: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FunctionCallingMode {
+    /// Default model behavior. Model decides whether to predict a
+    /// function call or a natural language response.
+    Auto,
+    /// Model is constrained to always predict a function call.
+    Any,
+    /// Model will not predict any function call.
+    None,
+}
+
 #[derive(Serialize, new)]
+#[serde(rename_all = "camelCase")]
 pub struct GeminiRequestBody<'a> {
     system_instruction: Option<&'a SystemInstruction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<&'a [Tool]>,
     contents: &'a [&'a Chat],
     #[serde(skip_serializing_if = "Option::is_none")]
-    generationConfig: Option<&'a Value>,
+    generation_config: Option<&'a Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    safetySettings: Option<&'a [SafetySetting]>,
+    safety_settings: Option<&'a [SafetySetting]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_config: Option<&'a ToolConfig>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -434,7 +470,8 @@ pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
                     }
                 }
                 PartType::CodeExecutionResult(updator_data) => {
-                    if let PartType::CodeExecutionResult(ref mut updating_data) = updating_last.data {
+                    if let PartType::CodeExecutionResult(ref mut updating_data) = updating_last.data
+                    {
                         if let Some(ref mut updating_output) = updating_data.output {
                             if let Some(updator_output) = updator_data.output() {
                                 updating_output.push_str(updator_output);

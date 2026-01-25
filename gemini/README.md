@@ -17,11 +17,13 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 ```rust
 use gemini_client_api::gemini::{
     ask::Gemini,
-    types::request::Tool,
+    types::request::{Tool, ThinkingConfig},
     types::sessions::Session,
     utils::MarkdownToParts,
 };
 use futures::StreamExt;
+use serde::Deserialize;
+use std::error::Error;
 use serde_json::json;
 
 async fn see_markdown() {
@@ -59,7 +61,7 @@ async fn ask_string_for_json_with_struct() {
         Some("Classify the given words".into()),
     )
     .set_json_mode(Schema::gemini_schema())
-    .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance" "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
+    .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance", "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
     .await
     .unwrap();
 
@@ -103,7 +105,7 @@ async fn ask_streamed_with_tools() {
     }
     println!(
         "Complete reply: {:#?}",
-        json!(response_stream.get_session().get_last_message().unwrap())
+        json!(response_stream.get_session().get_last_chat().unwrap())
     );
 }
 

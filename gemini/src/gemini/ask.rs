@@ -17,6 +17,7 @@ pub struct Gemini {
     generation_config: Option<Value>,
     safety_settings: Option<Vec<SafetySetting>>,
     tools: Option<Vec<Tool>>,
+    tool_config: Option<ToolConfig>,
 }
 impl Gemini {
     /// # Arguments
@@ -39,6 +40,7 @@ impl Gemini {
             generation_config: None,
             safety_settings: None,
             tools: None,
+            tool_config: None,
         }
     }
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
@@ -56,6 +58,7 @@ impl Gemini {
             generation_config: None,
             safety_settings: None,
             tools: None,
+            tool_config: None,
         }
     }
     /// The generation config Schema should follow [Gemini docs](https://ai.google.dev/api/generate-content#generationconfig)
@@ -64,6 +67,10 @@ impl Gemini {
             self.generation_config = Some(json!({}));
         }
         self.generation_config.as_mut().unwrap()
+    }
+    pub fn set_tool_config(mut self, config: ToolConfig) -> Self {
+        self.tool_config = Some(config);
+        self
     }
     pub fn set_thinking_config(mut self, config: ThinkingConfig) -> Self {
         if let Value::Object(map) = self.set_generation_config() {
@@ -131,6 +138,7 @@ impl Gemini {
                 &session.get_history().as_slice(),
                 self.generation_config.as_ref(),
                 self.safety_settings.as_deref(),
+                self.tool_config.as_ref(),
             ))
             .send()
             .await
@@ -188,6 +196,7 @@ impl Gemini {
                 session.get_history().as_slice(),
                 self.generation_config.as_ref(),
                 self.safety_settings.as_deref(),
+                self.tool_config.as_ref(),
             ))
             .send()
             .await;
