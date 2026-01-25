@@ -1,4 +1,5 @@
-use gemini_client_api::gemini::types::request::{FunctionCall, Part, Role};
+use gemini_client_api::gemini::ask::Gemini;
+use gemini_client_api::gemini::types::request::{FunctionCall, Part, Role, Tool};
 use gemini_client_api::gemini::{
     types::sessions::Session,
     utils::{GeminiSchema, execute_function_calls, gemini_function},
@@ -52,7 +53,34 @@ async fn execute_function_calls_test() {
     results.sort_by(|a, b| a.0.cmp(&b.0));
 
     assert_eq!(results[0].0, "add_numbers");
-    assert_eq!(results[0].1, json!(30));
+    assert_eq!(results[0].1, json!({"result": 30}));
     assert_eq!(results[1].0, "greet");
-    assert_eq!(results[1].1, json!("Hello, Gemini!"));
+    assert_eq!(results[1].1, json!({"result": "Hello, Gemini!"}));
+}
+
+#[gemini_function]
+///Lists file in my current dir
+async fn list_files() -> String {
+    r#" Cargo.lock
+Cargo.toml
+gemini-proc-macros
+README.md
+src
+target
+tests"#
+        .into()
+}
+#[tokio::test]
+async fn ask_with_function_calls() {
+    let mut session = Session::new(10);
+    let ai = Gemini::new(
+        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
+        "gemini-2.5-flash",
+        None,
+    ).set_tools(vec![Tool::functionDeclarations(vec![list_files::gemini_schema()])]);
+    session.ask_string("What files I have in this directory");
+    ai.ask(&mut session).await.unwrap();
+    execute_function_calls!(session, list_files);
+    ai.ask(&mut session).await.unwrap();
+    println!("{:?}", session.get_history());
 }

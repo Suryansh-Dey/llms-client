@@ -1,7 +1,7 @@
 use super::request::*;
 use super::response::GeminiResponse;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::json;
 use std::collections::VecDeque;
 use std::{usize, vec};
 
@@ -110,12 +110,21 @@ impl Session {
     pub fn reply_string(&mut self, prompt: impl Into<TextPart>) -> &mut Self {
         self.add_chat(Chat::new(Role::model, vec![Part::text(prompt.into())]))
     }
-    pub fn add_function_response(&mut self, name: impl Into<String>, response: Value) -> &mut Self {
-        let parts = vec![Part::functionResponse(FunctionResponse::new(
-            name.into(),
-            response,
-        ))];
-        self.add_chat(Chat::new(Role::function, parts))
+    pub fn add_function_response<T: Serialize>(
+        &mut self,
+        name: impl Into<String>,
+        response: T,
+    ) -> Result<&mut Self, serde_json::Error> {
+        let res_value = serde_json::to_value(response)?;
+        let final_res = if res_value.is_object() {
+            res_value
+        } else {
+            json!({ "result": res_value })
+        };
+
+        let part = Part::functionResponse(FunctionResponse::new(name.into(), final_res));
+
+        Ok(self.add_chat(Chat::new(Role::function, vec![part])))
     }
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
         if self.get_remember_reply() {
