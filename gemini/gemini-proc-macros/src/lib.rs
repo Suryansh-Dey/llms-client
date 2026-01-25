@@ -56,6 +56,27 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    let is_result = match &input_fn.sig.output {
+        syn::ReturnType::Default => false,
+        syn::ReturnType::Type(_, ty) => {
+            let s = quote!(#ty).to_string();
+            s.contains("Result")
+        }
+    };
+
+    let result_handling = if is_result {
+        quote! {
+            match result {
+                Ok(v) => Ok(serde_json::json!(v)),
+                Err(e) => Err(e.to_string()),
+            }
+        }
+    } else {
+        quote! {
+            Ok(serde_json::json!(result))
+        }
+    };
+
     let expanded = quote! {
         #input_fn
 
@@ -81,15 +102,15 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl #fn_name {
-            pub async fn execute(args: serde_json::Value) -> serde_json::Value {
+            pub async fn execute(args: serde_json::Value) -> Result<serde_json::Value, String> {
                 use serde::Deserialize;
                 #[derive(Deserialize)]
                 struct Args {
                     #(#param_names: #param_types),*
                 }
-                let args: Args = serde_json::from_value(args).expect("Failed to deserialize function arguments");
+                let args: Args = serde_json::from_value(args).map_err(|e| e.to_string())?;
                 let result = #fn_name(#(args.#param_names),*) #call_await;
-                serde_json::json!(result)
+                #result_handling
             }
         }
     };
@@ -127,7 +148,7 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
         quote! {
             #name_str => {
                 let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
-                let fut: std::pin::Pin<Box<dyn std::future::Future<Output = (String, gemini_client_api::serde_json::Value)>>> = Box::pin(async move {
+                let fut: std::pin::Pin<Box<dyn std::future::Future<Output = (String, Result<gemini_client_api::serde_json::Value, String>)>>> = Box::pin(async move {
                     (#name_str.to_string(), #path::execute(args).await)
                 });
                 futures.push(fut);
@@ -136,22 +157,29 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
     });
 
     let expanded = quote! {
-        if let Some(chat) = #session.get_last_chat() {
-            let mut futures = Vec::new();
-            for part in chat.parts() {
-                if let gemini_client_api::gemini::types::request::Part::functionCall(call) = part {
-                    match call.name().as_str() {
-                        #(#match_arms)*
-                        _ => {}
+        {
+            let mut all_results = Vec::new();
+            if let Some(chat) = #session.get_last_chat() {
+                let mut futures = Vec::new();
+                for part in chat.parts() {
+                    if let gemini_client_api::gemini::types::request::Part::functionCall(call) = part {
+                        match call.name().as_str() {
+                            #(#match_arms)*
+                            _ => {}
+                        }
+                    }
+                }
+                if !futures.is_empty() {
+                    let results = gemini_client_api::futures::future::join_all(futures).await;
+                    for (name, res) in results {
+                        if let Ok(ref val) = res {
+                            let _ = #session.add_function_response(name, val.clone());
+                        }
+                        all_results.push(res);
                     }
                 }
             }
-            if !futures.is_empty() {
-                let results = gemini_client_api::futures::future::join_all(futures).await;
-                for (name, res) in results {
-                    #session.add_function_response(name, res);
-                }
-            }
+            all_results
         }
     };
 

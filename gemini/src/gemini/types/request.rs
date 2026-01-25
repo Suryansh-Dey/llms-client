@@ -59,7 +59,8 @@ impl InlineData {
             .ok_or(InlineDataError::ContentTypeMissing)?
             .to_str()
             .map_err(|e| InlineDataError::ContentTypeParseFailed(e))?;
-        let mime_type = Mime::from_str(mime_type).map_err(|e| InlineDataError::InvalidMimeType(e))?;
+        let mime_type =
+            Mime::from_str(mime_type).map_err(|e| InlineDataError::InvalidMimeType(e))?;
 
         let body = response
             .bytes()
@@ -73,10 +74,7 @@ impl InlineData {
     }
     pub async fn from_path(file_path: &str, mime_type: Mime) -> Result<Self, std::io::Error> {
         let data = tokio::fs::read(file_path).await?;
-        Ok(InlineData::new(
-            mime_type,
-            STANDARD.encode(data),
-        ))
+        Ok(InlineData::new(mime_type, STANDARD.encode(data)))
     }
 }
 
@@ -148,11 +146,15 @@ pub struct CodeExecuteResult {
     output: Option<String>,
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
 #[derive(Serialize, Clone, new, Getters, Debug)]
 pub struct TextPart {
     #[get = "pub"]
     text: String,
     #[get = "pub"]
+    #[serde(skip_serializing_if = "is_false")]
     thought: bool,
 }
 impl From<String> for TextPart {
