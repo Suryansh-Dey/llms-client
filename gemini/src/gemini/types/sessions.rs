@@ -1,9 +1,10 @@
 use super::request::*;
 use super::response::GeminiResponse;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::VecDeque;
 use std::mem::discriminant;
-use std::usize;
+use std::{usize, vec};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
@@ -109,6 +110,13 @@ impl Session {
     }
     pub fn reply_string(&mut self, prompt: impl Into<TextPart>) -> &mut Self {
         self.add_chat(Chat::new(Role::model, vec![Part::text(prompt.into())]))
+    }
+    pub fn add_function_response(&mut self, name: impl Into<String>, response: Value) -> &mut Self {
+        let parts = vec![Part::functionResponse(FunctionResponse::new(
+            name.into(),
+            response,
+        ))];
+        self.add_chat(Chat::new(Role::function, parts))
     }
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
         if self.get_remember_reply() {

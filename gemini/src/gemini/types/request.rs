@@ -14,6 +14,7 @@ use serde_json::Value;
 pub enum Role {
     user,
     model,
+    function,
 }
 
 #[derive(Serialize, Deserialize, Clone, Getters, Debug)]
@@ -98,9 +99,6 @@ pub struct ExecutableCode {
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionCall {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[get = "pub"]
-    id: Option<String>,
     #[get = "pub"]
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,9 +108,6 @@ pub struct FunctionCall {
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[get = "pub"]
-    id: Option<String>,
     #[get = "pub"]
     name: String,
     #[get = "pub"]
@@ -498,7 +493,6 @@ pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
                         updating_text_part.text.push_str(updator_text_part.text());
                         continue;
                     }
-                    continue;
                 }
             }
             Part::inline_data(updator_data) => {
