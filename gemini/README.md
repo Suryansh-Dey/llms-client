@@ -43,8 +43,8 @@ async fn see_markdown() {
     println!("{}", response2.get_chat().get_text_no_think(""));
 }
 
-async fn ask_string_for_json() {
-    #[allow(dead_code)]
+async fn ask_string_for_json_with_struct() {
+    #[derive(Debug, Deserialize)]
     #[gemini_schema]
     struct Schema {
         positive: Vec<String>,
@@ -61,8 +61,11 @@ async fn ask_string_for_json() {
     .await
     .unwrap();
 
-    let json: Value = response.get_json().unwrap();
-    println!("{}", json);
+    let json: Schema = response.get_json().unwrap();
+    println!(
+        "positives:{:?}\nnegatives:{:?}",
+        json.positive, json.negative
+    )
 }
 
 async fn ask_streamed() {

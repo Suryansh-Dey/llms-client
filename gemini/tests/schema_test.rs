@@ -1,10 +1,12 @@
+use gemini_client_api::gemini::types::request::Tool;
 use gemini_client_api::gemini::{
     ask::Gemini,
     types::sessions::Session,
     utils::{GeminiSchema, gemini_function, gemini_schema},
 };
-use gemini_client_api::gemini::types::request::Tool;
-use serde_json::{Value, json};
+use serde::Deserialize;
+use serde_json::json;
+use std::fmt::Debug;
 
 #[allow(dead_code)]
 #[gemini_schema]
@@ -105,7 +107,7 @@ fn complex_schema_test() {
 
 #[tokio::test]
 async fn ask_string_for_json_with_struct() {
-    #[allow(dead_code)]
+    #[derive(Debug, Deserialize)]
     #[gemini_schema]
     struct Schema {
         positive: Vec<String>,
@@ -122,10 +124,14 @@ async fn ask_string_for_json_with_struct() {
     .await
     .unwrap();
 
-    let json: Value = response.get_json().unwrap();
-    println!("{}", json);
+    let json: Schema = response.get_json().unwrap();
+    println!(
+        "positives:{:?}\nnegatives:{:?}",
+        json.positive, json.negative
+    )
 }
 
+#[allow(dead_code)]
 #[gemini_function]
 /// Get the current weather in a given location
 fn get_weather(
