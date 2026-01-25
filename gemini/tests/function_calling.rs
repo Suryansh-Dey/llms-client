@@ -1,3 +1,4 @@
+use std::error::Error;
 use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::request::{FunctionCall, Part, Role, Tool};
 use gemini_client_api::gemini::{
@@ -112,17 +113,17 @@ async fn test_non_result_always_success() {
     assert_eq!(*history[1].role(), Role::function);
 }
 #[gemini_function]
-///Lists file in my current dir
-async fn list_files() -> String {
-    r#" Cargo.lock
-Cargo.toml
-gemini-proc-macros
-README.md
-src
-target
-tests"#
-        .into()
+///Lists files in my dir
+async fn list_files(
+    ///Path to the dir
+    path: String,
+) -> Result<String, Box<dyn Error>> {
+    Ok(std::fs::read_dir(path)?
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .collect::<Vec<String>>()
+        .join(", "))
 }
+
 #[tokio::test]
 async fn ask_with_function_calls() {
     let mut session = Session::new(10);
@@ -134,9 +135,15 @@ async fn ask_with_function_calls() {
     .set_tools(vec![Tool::functionDeclarations(vec![
         list_files::gemini_schema(),
     ])]);
-    session.ask_string("What files I have in this directory");
-    ai.ask(&mut session).await.unwrap();
-    execute_function_calls!(session, list_files);
-    ai.ask(&mut session).await.unwrap();
-    println!("{:?}", session.get_history());
+    session.ask_string("What files I have in current directory");
+    let response = ai.ask(&mut session).await.unwrap(); //Received a function call
+    let result = execute_function_calls!(session, list_files); //don't update session if Error
+    println!("function output: {:?}", result);
+    if result.len() != 0 {
+        //If any function call at all happened
+        let response = ai.ask(&mut session).await.unwrap(); //Providing output of the function call and continue
+        println!("{:?}", response.get_chat().parts());
+    } else {
+        println!("{:?}", response.get_chat().parts());
+    }
 }

@@ -2,6 +2,10 @@
 name = "gemini-proc-macros"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/Suryansh-Dey/llms-client"
+authors = ["Suryansh Dey suryanshdey@gmail.com"]
+description = "Procedural macros for gemini-client-api"
+license = "MIT"
 
 [lib]
 proc-macro = true

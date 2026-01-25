@@ -1,9 +1,11 @@
 # Overview
-A Rust library to use Google's Gemini API. It is extremely flexible and modular to integrate with any framework.  
+A Rust library to use Google's Gemini API with macro super powers! It is extremely flexible and modular to integrate with any framework.  
 For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream of futures, which is a pain.
 
 ### Features
 - Automatic context management
+- Automatic function calling. Trust me!
+- Automatic JSON schema generation
 - Inbuilt markdown to parts parser enables AI to see markdown images or files, even if they are from your device storage!
 - Vision to see images
 - Code execution by Gemini
@@ -103,6 +105,41 @@ async fn ask_streamed_with_tools() {
         "Complete reply: {:#?}",
         json!(response_stream.get_session().get_last_message().unwrap())
     );
+}
+
+use gemini_client_api::gemini::utils::{GeminiSchema, execute_function_calls, gemini_function};
+///Lists files in my dir
+async fn list_files(
+    ///Path to the dir
+    path: String,
+) -> Result<String, Box<dyn Error>> {
+    Ok(std::fs::read_dir(path)?
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .collect::<Vec<String>>()
+        .join(", "))
+}
+
+async fn ask_with_function_calls() {
+    let mut session = Session::new(10);
+    let ai = Gemini::new(
+        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
+        "gemini-2.5-flash",
+        None,
+    )
+    .set_tools(vec![Tool::functionDeclarations(vec![
+        list_files::gemini_schema(),
+    ])]);
+    session.ask_string("What files I have in current directory");
+    let response = ai.ask(&mut session).await.unwrap(); //Received a function call
+    let result = execute_function_calls!(session, list_files); //don't update session if Error
+    println!("function output: {:?}", result);
+    if result.len() != 0 {
+        //If any function call at all happened
+        let response = ai.ask(&mut session).await.unwrap(); //Providing output of the function call and continue
+        println!("{:?}", response.get_chat().parts());
+    } else {
+        println!("{:?}", response.get_chat().parts());
+    }
 }
 
 async fn ask_thinking() {

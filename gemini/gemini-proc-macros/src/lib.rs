@@ -119,6 +119,10 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
+/// - Provide all functions to be called `execute_function_calls!(session, f1, f2...)`
+/// - `Returns` vec![Result of f2, Result of f2 ...]
+/// *if function don't return type Result, it always return `Result::Ok(value)`*
+/// - `Session` struct is automatically updated with FunctionResponse only for `Ok` result
 pub fn execute_function_calls(input: TokenStream) -> TokenStream {
     use syn::parse::{Parse, ParseStream};
     use syn::{Expr, Token};
