@@ -1,5 +1,4 @@
 use std::str::FromStr;
-
 use base64::{Engine, engine::general_purpose::STANDARD};
 use derive_new::new;
 use getset::Getters;
@@ -9,11 +8,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[allow(non_camel_case_types)]
+#[serde(rename_all = "camelCase")]
 pub enum Role {
-    user,
-    model,
-    function,
+    User,
+    Model,
+    Function,
 }
 
 #[derive(Serialize, Deserialize, Clone, Getters, Debug)]

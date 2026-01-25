@@ -51,7 +51,7 @@ async fn execute_function_calls_test() {
 
     assert_eq!(history.len(), 2);
     let last_chat = history[1];
-    assert_eq!(*last_chat.role(), Role::function);
+    assert_eq!(*last_chat.role(), Role::Function);
     assert_eq!(last_chat.parts().len(), 2);
 
     // Check specific values in session
@@ -83,7 +83,7 @@ async fn test_failure_no_session_update() {
     // Only model reply should be there.
     // No function response should be added because it failed.
     assert_eq!(history.len(), 1);
-    assert_eq!(*history[0].role(), Role::model);
+    assert_eq!(*history[0].role(), Role::Model);
 }
 
 #[tokio::test]
@@ -98,7 +98,7 @@ async fn test_non_result_always_success() {
 
     let history = session.get_history();
     assert_eq!(history.len(), 2);
-    assert_eq!(*history[1].role(), Role::function);
+    assert_eq!(*history[1].role(), Role::Function);
 }
 #[gemini_function]
 ///Lists files in my dir

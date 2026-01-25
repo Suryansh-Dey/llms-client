@@ -124,6 +124,12 @@ impl Gemini {
     }
 
     pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
+        if !session
+            .get_last_chat()
+            .is_some_and(|chat| *chat.role() == Role::User || *chat.role() == Role::Function)
+        {
+            return Err(GeminiResponseError::NothingToRespond);
+        }
         let req_url = format!(
             "{BASE_URL}/{}:generateContent?key={}",
             self.model, self.api_key
@@ -182,6 +188,12 @@ impl Gemini {
     where
         F: FnMut(&Session, GeminiResponse) -> StreamType,
     {
+        if !session
+            .get_last_chat()
+            .is_some_and(|chat| *chat.role() == Role::User || *chat.role() == Role::Function)
+        {
+            return Err((session, GeminiResponseError::NothingToRespond));
+        }
         let req_url = format!(
             "{BASE_URL}/{}:streamGenerateContent?alt=sse&key={}",
             self.model, self.api_key

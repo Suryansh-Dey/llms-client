@@ -97,18 +97,18 @@ impl Session {
     /// If ask is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("ok")`, the parts is concatenated with the previous parts.
     pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
-        self.add_chat(Chat::new(Role::user, parts))
+        self.add_chat(Chat::new(Role::User, parts))
     }
     /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("opportunist")`, the prompt string is concatenated with the previous prompt.
     pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
-        self.add_chat(Chat::new(Role::user, vec![prompt.into().into()]))
+        self.add_chat(Chat::new(Role::User, vec![prompt.into().into()]))
     }
     pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
-        self.add_chat(Chat::new(Role::model, parts))
+        self.add_chat(Chat::new(Role::Model, parts))
     }
     pub fn reply_string(&mut self, prompt: impl Into<String>) -> &mut Self {
-        self.add_chat(Chat::new(Role::model, vec![prompt.into().into()]))
+        self.add_chat(Chat::new(Role::Model, vec![prompt.into().into()]))
     }
     pub fn add_function_response<T: Serialize>(
         &mut self,
@@ -124,16 +124,16 @@ impl Session {
 
         let part = FunctionResponse::new(name.into(), final_res).into();
 
-        Ok(self.add_chat(Chat::new(Role::function, vec![part])))
+        Ok(self.add_chat(Chat::new(Role::Function, vec![part])))
     }
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
         if self.get_remember_reply() {
             let reply_parts = response.get_chat().parts();
-            self.add_chat(Chat::new(Role::model, reply_parts.clone()));
+            self.add_chat(Chat::new(Role::Model, reply_parts.clone()));
             Some(reply_parts)
         } else {
             if let Some(chat) = self.history.back() {
-                if let Role::user = chat.role() {
+                if let Role::User = chat.role() {
                     self.history.pop_back();
                 }
             }
@@ -193,7 +193,7 @@ impl Session {
     pub fn forget_last_conversation(&mut self) -> (Option<Chat>, Option<Chat>) {
         let last = self.history.pop_back();
         if let Some(chat) = self.history.back() {
-            if let Role::user = chat.role() {
+            if let Role::User = chat.role() {
                 return (last, self.history.pop_back());
             }
         }
