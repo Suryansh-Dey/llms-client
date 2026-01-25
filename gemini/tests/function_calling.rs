@@ -1,11 +1,11 @@
-use std::error::Error;
 use gemini_client_api::gemini::ask::Gemini;
-use gemini_client_api::gemini::types::request::{FunctionCall, Part, Role, Tool};
+use gemini_client_api::gemini::types::request::{FunctionCall, PartType, Role, Tool};
 use gemini_client_api::gemini::{
     types::sessions::Session,
     utils::{GeminiSchema, execute_function_calls, gemini_function},
 };
 use serde_json::json;
+use std::error::Error;
 
 #[gemini_function]
 /// Add two numbers
@@ -37,14 +37,8 @@ async fn execute_function_calls_test() {
 
     // Simulate a model response with function calls
     let parts = vec![
-        Part::functionCall(FunctionCall::new(
-            "add_numbers".to_string(),
-            Some(json!({"a": 10, "b": 20})),
-        )),
-        Part::functionCall(FunctionCall::new(
-            "greet".to_string(),
-            Some(json!({"name": "Gemini"})),
-        )),
+        FunctionCall::new("add_numbers".to_string(), Some(json!({"a": 10, "b": 20}))).into(),
+        FunctionCall::new("greet".to_string(), Some(json!({"name": "Gemini"}))).into(),
     ];
     session.reply(parts);
 
@@ -63,7 +57,7 @@ async fn execute_function_calls_test() {
     // Check specific values in session
     let mut session_results = Vec::new();
     for part in last_chat.parts() {
-        if let Part::functionResponse(resp) = part {
+        if let PartType::FunctionResponse(resp) = part.data() {
             session_results.push((resp.name().clone(), resp.response().clone()));
         }
     }
@@ -78,10 +72,7 @@ async fn execute_function_calls_test() {
 #[tokio::test]
 async fn test_failure_no_session_update() {
     let mut session = Session::new(10);
-    let parts = vec![Part::functionCall(FunctionCall::new(
-        "fail_fn".to_string(),
-        Some(json!({})),
-    ))];
+    let parts = vec![FunctionCall::new("fail_fn".to_string(), Some(json!({}))).into()];
     session.reply(parts);
 
     let results = execute_function_calls!(session, fail_fn);
@@ -98,10 +89,7 @@ async fn test_failure_no_session_update() {
 #[tokio::test]
 async fn test_non_result_always_success() {
     let mut session = Session::new(10);
-    let parts = vec![Part::functionCall(FunctionCall::new(
-        "sync_fn".to_string(),
-        Some(json!({"x": 21})),
-    ))];
+    let parts = vec![FunctionCall::new("sync_fn".to_string(), Some(json!({"x": 21}))).into()];
     session.reply(parts);
 
     let results = execute_function_calls!(session, sync_fn);

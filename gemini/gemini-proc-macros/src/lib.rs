@@ -166,7 +166,7 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
             if let Some(chat) = #session.get_last_chat() {
                 let mut futures = Vec::new();
                 for part in chat.parts() {
-                    if let gemini_client_api::gemini::types::request::Part::functionCall(call) = part {
+                    if let gemini_client_api::gemini::types::request::PartType::FunctionCall(call) = part.data() {
                         match call.name().as_str() {
                             #(#match_arms)*
                             _ => {}

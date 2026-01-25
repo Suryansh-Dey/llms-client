@@ -101,14 +101,14 @@ impl Session {
     }
     /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("opportunist")`, the prompt string is concatenated with the previous prompt.
-    pub fn ask_string(&mut self, prompt: impl Into<TextPart>) -> &mut Self {
-        self.add_chat(Chat::new(Role::user, vec![Part::text(prompt.into())]))
+    pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
+        self.add_chat(Chat::new(Role::user, vec![prompt.into().into()]))
     }
     pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::model, parts))
     }
-    pub fn reply_string(&mut self, prompt: impl Into<TextPart>) -> &mut Self {
-        self.add_chat(Chat::new(Role::model, vec![Part::text(prompt.into())]))
+    pub fn reply_string(&mut self, prompt: impl Into<String>) -> &mut Self {
+        self.add_chat(Chat::new(Role::model, vec![prompt.into().into()]))
     }
     pub fn add_function_response<T: Serialize>(
         &mut self,
@@ -122,7 +122,7 @@ impl Session {
             json!({ "result": res_value })
         };
 
-        let part = Part::functionResponse(FunctionResponse::new(name.into(), final_res));
+        let part = FunctionResponse::new(name.into(), final_res).into();
 
         Ok(self.add_chat(Chat::new(Role::function, vec![part])))
     }

@@ -5,7 +5,6 @@ use derive_new::new;
 use getset::Getters;
 use mime::{FromStrError, Mime};
 use reqwest::header::{HeaderMap, ToStrError};
-use serde::ser::{SerializeMap, Serializer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -138,7 +137,7 @@ pub enum Outcome {
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
-pub struct CodeExecuteResult {
+pub struct CodeExecutionResult {
     #[get = "pub"]
     outcome: Outcome,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -146,133 +145,87 @@ pub struct CodeExecuteResult {
     output: Option<String>,
 }
 
-fn is_false(b: &bool) -> bool {
-    !*b
-}
-#[derive(Serialize, Clone, new, Getters, Debug)]
-pub struct TextPart {
-    #[get = "pub"]
-    text: String,
-    #[get = "pub"]
-    #[serde(skip_serializing_if = "is_false")]
-    thought: bool,
-}
-impl From<String> for TextPart {
-    /// Creates a TextPart from a String, where `thought` is always `false`.
-    fn from(text: String) -> Self {
-        TextPart::new(text, false)
-    }
-}
-impl<'a> From<&'a str> for TextPart {
-    /// Creates a TextPart from &str, where `thought` is always `false`.
-    fn from(text: &'a str) -> Self {
-        TextPart::new(text.to_string(), false)
-    }
-}
-
-#[derive(Clone, Debug)]
-#[allow(non_camel_case_types)]
-pub enum Part {
-    text(TextPart),
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum PartType {
+    Text(String),
     ///Image or document
-    inline_data(InlineData),
-    executable_code(ExecutableCode),
-    code_execution_result(CodeExecuteResult),
-    functionCall(FunctionCall),
-    functionResponse(FunctionResponse),
+    InlineData(InlineData),
+    ExecutableCode(ExecutableCode),
+    CodeExecutionResult(CodeExecutionResult),
+    FunctionCall(FunctionCall),
+    FunctionResponse(FunctionResponse),
     ///For Audio file URL. Not allowed for images or PDFs, use InlineData instead.
-    file_data(FileData),
+    FileData(FileData),
 }
-
-impl serde::Serialize for Part {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Part::text(text_part) => {
-                if *text_part.thought() {
-                    // If it's a "thought", serialize as an object with two fields
-                    let mut map = serializer.serialize_map(Some(2))?;
-                    map.serialize_entry("text", text_part.text())?;
-                    map.serialize_entry("thought", text_part.thought())?;
-                    map.end()
-                } else {
-                    // If it's a regular text, we use a special serde method
-                    // that will create exactly {"text": "..."}
-                    serializer.serialize_newtype_variant("Part", 0, "text", text_part.text())
-                }
-            }
-
-            // Standard handling for all other variants
-            Part::inline_data(data) => {
-                serializer.serialize_newtype_variant("Part", 1, "inlineData", data)
-            }
-            Part::executable_code(code) => {
-                serializer.serialize_newtype_variant("Part", 2, "executableCode", code)
-            }
-            Part::code_execution_result(result) => {
-                serializer.serialize_newtype_variant("Part", 3, "codeExecutionResult", result)
-            }
-            Part::functionCall(call) => {
-                serializer.serialize_newtype_variant("Part", 4, "functionCall", call)
-            }
-            Part::functionResponse(response) => {
-                serializer.serialize_newtype_variant("Part", 5, "functionResponse", response)
-            }
-            Part::file_data(data) => {
-                serializer.serialize_newtype_variant("Part", 6, "fileData", data)
-            }
+#[derive(Serialize, Deserialize, Clone, Getters, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Part {
+    #[get = "pub"]
+    #[serde(flatten)]
+    data: PartType,
+    #[get = "pub"]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thought: Option<bool>,
+    #[get = "pub"]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thought_signature: Option<String>,
+}
+impl Part {
+    pub fn is_thought(&self) -> bool {
+        self.thought_signature.is_some() || self.thought == Some(true)
+    }
+    pub fn new(data: PartType) -> Self {
+        Self {
+            data,
+            thought: None,
+            thought_signature: None,
         }
     }
 }
-
-impl<'de> serde::Deserialize<'de> for Part {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(serde::Deserialize)] // small hack
-        struct PartHelper {
-            text: Option<String>,
-            #[serde(default)]
-            thought: bool,
-            #[serde(alias = "inlineData")]
-            inline_data: Option<InlineData>,
-            #[serde(alias = "executableCode")]
-            executable_code: Option<ExecutableCode>,
-            #[serde(alias = "codeExecutionResult")]
-            code_execution_result: Option<CodeExecuteResult>,
-            #[serde(alias = "functionCall")]
-            function_call: Option<FunctionCall>,
-            #[serde(alias = "functionResponse")]
-            function_response: Option<FunctionResponse>,
-            #[serde(alias = "fileData")]
-            file_data: Option<FileData>,
-        }
-
-        let helper = PartHelper::deserialize(deserializer)?;
-
-        // We check the variants in order of their uniqueness
-        if let Some(data) = helper.inline_data {
-            Ok(Part::inline_data(data))
-        } else if let Some(code) = helper.executable_code {
-            Ok(Part::executable_code(code))
-        } else if let Some(result) = helper.code_execution_result {
-            Ok(Part::code_execution_result(result))
-        } else if let Some(call) = helper.function_call {
-            Ok(Part::functionCall(call))
-        } else if let Some(resp) = helper.function_response {
-            Ok(Part::functionResponse(resp))
-        } else if let Some(data) = helper.file_data {
-            Ok(Part::file_data(data))
-        } else if let Some(text) = helper.text {
-            // Special case: create a TextPart with the text and the `thought` flag
-            let text_part = TextPart::new(text, helper.thought);
-            Ok(Part::text(text_part))
-        } else {
-            Err(serde::de::Error::custom("Unknown Part variant in JSON"))
-        }
+impl From<PartType> for Part {
+    fn from(value: PartType) -> Self {
+        Self::new(value)
+    }
+}
+impl From<String> for Part {
+    fn from(value: String) -> Self {
+        Self::new(PartType::Text(value))
+    }
+}
+impl From<&str> for Part {
+    fn from(value: &str) -> Self {
+        Self::new(PartType::Text(value.into()))
+    }
+}
+impl From<InlineData> for Part {
+    fn from(value: InlineData) -> Self {
+        Self::new(PartType::InlineData(value))
+    }
+}
+impl From<ExecutableCode> for Part {
+    fn from(value: ExecutableCode) -> Self {
+        Self::new(PartType::ExecutableCode(value))
+    }
+}
+impl From<CodeExecutionResult> for Part {
+    fn from(value: CodeExecutionResult) -> Self {
+        Self::new(PartType::CodeExecutionResult(value))
+    }
+}
+impl From<FunctionCall> for Part {
+    fn from(value: FunctionCall) -> Self {
+        Self::new(PartType::FunctionCall(value))
+    }
+}
+impl From<FunctionResponse> for Part {
+    fn from(value: FunctionResponse) -> Self {
+        Self::new(PartType::FunctionResponse(value))
+    }
+}
+impl From<FileData> for Part {
+    fn from(value: FileData) -> Self {
+        Self::new(PartType::FileData(value))
     }
 }
 
@@ -294,9 +247,9 @@ impl Chat {
         let final_text = parts
             .iter()
             .filter_map(|part| {
-                if let Part::text(text_part) = part {
-                    if !text_part.thought() {
-                        Some(text_part.text().as_str())
+                if let PartType::Text(text) = part.data() {
+                    if !part.is_thought() {
+                        Some(text.as_str())
                     } else {
                         None
                     }
@@ -315,9 +268,9 @@ impl Chat {
         let thoughts = parts
             .iter()
             .filter_map(|part| {
-                if let Part::text(text_part) = part {
-                    if *text_part.thought() {
-                        Some(text_part.text().as_str())
+                if let PartType::Text(text) = part.data() {
+                    if part.is_thought() {
+                        Some(text.as_str())
                     } else {
                         None
                     }
@@ -334,9 +287,9 @@ impl Chat {
         parts
             .iter()
             .filter_map(|part| {
-                if let Part::text(text_part) = part {
+                if let PartType::Text(text_part) = part.data() {
                     // Just return the text, without checking the `thought` flag
-                    Some(text_part.text().as_str())
+                    Some(text_part.as_str())
                 } else {
                     None
                 }
@@ -350,19 +303,7 @@ impl Chat {
         Self::extract_text_all(&self.parts(), seperator)
     }
     pub fn is_thinking(&self) -> bool {
-        let parts = self.parts();
-
-        // If there are no text parts in the chunk at all, it is not a "thought".
-        if !parts.iter().any(|p| matches!(p, Part::text(_))) {
-            return false;
-        }
-
-        // If every text part in this chunk is a "thought",
-        // then we consider the entire chunk a "thought".
-        parts.iter().all(|part| match part {
-            Part::text(text_part) => *text_part.thought(),
-            _ => true,
-        })
+        self.parts.iter().any(|p| p.is_thought())
     }
 }
 
@@ -405,35 +346,17 @@ pub struct SystemInstruction {
     #[get = "pub"]
     parts: Vec<Part>,
 }
-impl SystemInstruction {
-    ///Instead use `.into()`
-    #[deprecated]
-    pub fn from_str(prompt: impl Into<TextPart>) -> Self {
-        Self {
-            parts: vec![Part::text(prompt.into())],
-        }
-    }
-}
-impl From<TextPart> for SystemInstruction {
-    fn from(prompt: TextPart) -> Self {
-        Self {
-            parts: vec![Part::text(prompt)],
-        }
-    }
-}
 impl From<String> for SystemInstruction {
-    /// Creates a TextPart from a String, where `thought` is always `false`.
     fn from(prompt: String) -> Self {
         Self {
-            parts: vec![Part::text(prompt.into())],
+            parts: vec![prompt.into()],
         }
     }
 }
 impl<'a> From<&'a str> for SystemInstruction {
-    /// Creates a TextPart from &str, where `thought` is always `false`.
     fn from(prompt: &'a str) -> Self {
         Self {
-            parts: vec![Part::text(prompt.into())],
+            parts: vec![prompt.into()],
         }
     }
 }
@@ -488,42 +411,41 @@ pub enum Tool {
 
 pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
     for updator_part in updator {
-        match updator_part {
-            Part::text(updator_text_part) => {
-                if let Some(Part::text(updating_text_part)) = updating.last_mut() {
-                    if *updating_text_part.thought() == *updator_text_part.thought() {
-                        updating_text_part.text.push_str(updator_text_part.text());
+        if let Some(updating_last) = updating.last_mut() {
+            match &updator_part.data {
+                PartType::Text(updator_text) => {
+                    if updating_last.is_thought() == updator_part.is_thought() {
+                        if let PartType::Text(ref mut updating_text) = updating_last.data {
+                            updating_text.push_str(&updator_text);
+                            continue;
+                        }
+                    }
+                }
+                PartType::InlineData(updator_data) => {
+                    if let PartType::InlineData(ref mut updating_data) = updating_last.data {
+                        updating_data.data.push_str(&updator_data.data());
                         continue;
                     }
                 }
-            }
-            Part::inline_data(updator_data) => {
-                if let Some(Part::inline_data(updating_data)) = updating.last_mut() {
-                    updating_data.data.push_str(&updator_data.data());
-                    continue;
-                }
-            }
-            Part::executable_code(updator_data) => {
-                if let Some(Part::executable_code(updating_data)) = updating.last_mut() {
-                    updating_data.code.push_str(&updator_data.code());
-                    continue;
-                }
-            }
-            Part::code_execution_result(updator_data) => {
-                if let Some(Part::code_execution_result(updating_data)) = updating.last_mut() {
-                    if let Some(ref mut updating_output) = updating_data.output {
-                        if let Some(updator_output) = updator_data.output() {
-                            updating_output.push_str(updator_output);
-                        }
-                    } else {
-                        updating_data.output = updator_data.output.clone();
+                PartType::ExecutableCode(updator_data) => {
+                    if let PartType::ExecutableCode(ref mut updating_data) = updating_last.data {
+                        updating_data.code.push_str(&updator_data.code());
+                        continue;
                     }
-                    continue;
                 }
-            }
-            _ => {
-                updating.push(updator_part.clone());
-                continue;
+                PartType::CodeExecutionResult(updator_data) => {
+                    if let PartType::CodeExecutionResult(ref mut updating_data) = updating_last.data {
+                        if let Some(ref mut updating_output) = updating_data.output {
+                            if let Some(updator_output) = updator_data.output() {
+                                updating_output.push_str(updator_output);
+                            }
+                        } else {
+                            updating_data.output = updator_data.output.clone();
+                        }
+                        continue;
+                    }
+                }
+                _ => {}
             }
         }
         updating.push(updator_part.clone());
