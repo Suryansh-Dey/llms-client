@@ -12,18 +12,21 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut properties = Vec::new();
     let mut required = Vec::new();
+    let mut param_names = Vec::new();
+    let mut param_types = Vec::new();
 
     for arg in input_fn.sig.inputs.iter_mut() {
         if let FnArg::Typed(pat_type) = arg {
             if let Pat::Ident(pat_ident) = &*pat_type.pat {
-                let param_name = pat_ident.ident.to_string();
-                let param_type = &pat_type.ty;
+                let param_name = pat_ident.ident.clone();
+                let param_name_str = param_name.to_string();
+                let param_type = (*pat_type.ty).clone();
                 let param_desc = extract_doc_comments(&pat_type.attrs);
 
                 // Remove doc attributes from the function signature so it compiles
                 pat_type.attrs.retain(|attr| !attr.path().is_ident("doc"));
 
-                let is_optional = is_option(param_type);
+                let is_optional = is_option(&param_type);
 
                 properties.push(quote! {
                     let mut schema = <#param_type as GeminiSchema>::gemini_schema();
@@ -32,17 +35,26 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             obj.insert("description".to_string(), serde_json::json!(#param_desc));
                         }
                     }
-                    props.insert(#param_name.to_string(), schema);
+                    props.insert(#param_name_str.to_string(), schema);
                 });
 
                 if !is_optional {
-                    required.push(param_name);
+                    required.push(param_name_str);
                 }
+
+                param_names.push(param_name);
+                param_types.push(param_type);
             }
         }
     }
 
     let fn_name_str = fn_name.to_string();
+    let is_async = input_fn.sig.asyncness.is_some();
+    let call_await = if is_async {
+        quote! { .await }
+    } else {
+        quote! {}
+    };
 
     let expanded = quote! {
         #input_fn
@@ -65,6 +77,80 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         "required": [#(#required),*]
                     }
                 })
+            }
+        }
+
+        impl #fn_name {
+            pub async fn execute(args: serde_json::Value) -> serde_json::Value {
+                use serde::Deserialize;
+                #[derive(Deserialize)]
+                struct Args {
+                    #(#param_names: #param_types),*
+                }
+                let args: Args = serde_json::from_value(args).expect("Failed to deserialize function arguments");
+                let result = #fn_name(#(args.#param_names),*) #call_await;
+                serde_json::json!(result)
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro]
+pub fn execute_function_calls(input: TokenStream) -> TokenStream {
+    use syn::parse::{Parse, ParseStream};
+    use syn::{Expr, Token};
+
+    struct ExecuteInput {
+        session: Expr,
+        _comma: Token![,],
+        functions: syn::punctuated::Punctuated<syn::Path, Token![,]>,
+    }
+
+    impl Parse for ExecuteInput {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            Ok(ExecuteInput {
+                session: input.parse()?,
+                _comma: input.parse()?,
+                functions: input.parse_terminated(syn::Path::parse, Token![,])?,
+            })
+        }
+    }
+
+    let input = parse_macro_input!(input as ExecuteInput);
+    let session = &input.session;
+    let functions = &input.functions;
+
+    let match_arms = functions.iter().map(|path| {
+        let name_str = path.segments.last().unwrap().ident.to_string();
+        quote! {
+            #name_str => {
+                let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
+                let fut: std::pin::Pin<Box<dyn std::future::Future<Output = (String, gemini_client_api::serde_json::Value)>>> = Box::pin(async move {
+                    (#name_str.to_string(), #path::execute(args).await)
+                });
+                futures.push(fut);
+            }
+        }
+    });
+
+    let expanded = quote! {
+        if let Some(chat) = #session.get_last_chat() {
+            let mut futures = Vec::new();
+            for part in chat.parts() {
+                if let gemini_client_api::gemini::types::request::Part::functionCall(call) = part {
+                    match call.name().as_str() {
+                        #(#match_arms)*
+                        _ => {}
+                    }
+                }
+            }
+            if !futures.is_empty() {
+                let results = gemini_client_api::futures::future::join_all(futures).await;
+                for (name, res) in results {
+                    #session.add_function_response(name, res);
+                }
             }
         }
     };

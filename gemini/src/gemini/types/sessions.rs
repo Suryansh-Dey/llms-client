@@ -3,7 +3,6 @@ use super::response::GeminiResponse;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
-use std::mem::discriminant;
 use std::{usize, vec};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -82,7 +81,7 @@ impl Session {
     }
     fn add_chat(&mut self, chat: Chat) -> &mut Self {
         if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
-            if discriminant(last_chat.role()) == discriminant(chat.role()) {
+            if last_chat.role() == chat.role() {
                 concatenate_parts(last_chat.parts_mut(), &chat.parts());
                 return self;
             }
