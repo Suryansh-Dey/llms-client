@@ -168,11 +168,11 @@ fn gemini_function_schema_test() {
 
     assert_eq!(schema, expected);
 
-    let tool = Tool::functionDeclarations(vec![schema]);
-    if let Tool::functionDeclarations(decls) = tool {
+    let tool = Tool::FunctionDeclarations(vec![schema]);
+    if let Tool::FunctionDeclarations(decls) = tool {
         assert_eq!(decls.len(), 1);
         assert_eq!(decls[0]["name"], "get_weather");
     } else {
-        panic!("Expected Tool::functionDeclarations");
+        panic!("Expected Tool::FunctionDeclarations");
     }
 }

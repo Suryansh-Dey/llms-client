@@ -79,7 +79,7 @@ async fn ask_streamed_with_tools() {
         "gemini-2.5-flash",
         None,
     )
-    .set_tools(vec![Tool::code_execution(json!({}))]);
+    .set_tools(vec![Tool::CodeExecution(json!({}))]);
     let mut response_stream = ai.ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
         println!("{}", response.unwrap().get_chat().get_text_all(""));

@@ -134,7 +134,7 @@ async fn ask_with_function_calls() {
         "gemini-2.5-flash",
         None,
     )
-    .set_tools(vec![Tool::functionDeclarations(vec![
+    .set_tools(vec![Tool::FunctionDeclarations(vec![
         list_files::gemini_schema(),
     ])]);
     session.ask_string("What files I have in current directory");

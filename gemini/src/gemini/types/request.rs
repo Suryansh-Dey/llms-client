@@ -77,12 +77,12 @@ impl InlineData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[allow(non_camel_case_types)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Language {
     ///Unspecified language. This value should not be used.
-    LANGUAGE_UNSPECIFIED,
+    LanguageUnspecified,
     ///Python >= 3.10, with numpy and simpy available.
-    PYTHON,
+    Python,
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
@@ -111,7 +111,6 @@ pub struct FunctionResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
-#[allow(non_snake_case)]
 pub struct FileData {
     #[serde(skip_serializing_if = "Option::is_none", alias = "mimeType")]
     #[get = "pub"]
@@ -122,17 +121,17 @@ pub struct FileData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[allow(non_camel_case_types)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Outcome {
     /// Unspecified status. This value should not be used.
-    OUTCOME_UNSPECIFIED,
+    OutcomeUnspecified,
     /// Code execution completed successfully.
-    OUTCOME_OK,
+    OutcomeOk,
     /// Code execution finished but with a failure. `stderr` should contain the reason.
-    OUTCOME_FAILED,
+    OutcomeFailed,
     /// Code execution ran for too long, and was cancelled.
     /// There may or may not be a partial output present.
-    OUTCOME_DEADLINE_EXCEEDED,
+    OutcomeDeadlineExceeded,
 }
 
 #[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
@@ -307,7 +306,6 @@ impl Chat {
 }
 
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, Default)]
-#[allow(non_snake_case)]
 pub struct ThinkingConfig {
     /// Indicates whether to include thoughts in the response. If true, thoughts
     /// are returned only if the model supports thought and thoughts are available.
@@ -434,14 +432,14 @@ pub struct GeminiRequestBody<'a> {
 }
 
 #[derive(Serialize, Debug, Clone)]
-#[allow(non_camel_case_types)]
+#[serde(rename_all = "camelCase")]
 pub enum Tool {
-    /// Generally it can be `Tool::google_search(json!({}))`
-    google_search(Value),
-    /// It is of form `Tool::function_calling(`[functionDeclaration](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting)`)`
-    functionDeclarations(Vec<Value>),
-    /// Generally it can be `Tool::code_execution(json!({}))`,
-    code_execution(Value),
+    /// Generally it can be `Tool::GoogleSearch(json!({}))`
+    GoogleSearch(Value),
+    /// It is of form `Tool::FunctionDeclarations(`[functionDeclaration](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting)`)`
+    FunctionDeclarations(Vec<Value>),
+    /// Generally it can be `Tool::CodeExecution(json!({}))`,
+    CodeExecution(Value),
 }
 
 pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
