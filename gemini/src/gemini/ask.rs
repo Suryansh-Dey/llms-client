@@ -126,7 +126,7 @@ impl Gemini {
     pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
         if !session
             .get_last_chat()
-            .is_some_and(|chat| *chat.role() == Role::User || *chat.role() == Role::Function)
+            .is_some_and(|chat| *chat.role() != Role::Model)
         {
             return Err(GeminiResponseError::NothingToRespond);
         }
@@ -190,7 +190,7 @@ impl Gemini {
     {
         if !session
             .get_last_chat()
-            .is_some_and(|chat| *chat.role() == Role::User || *chat.role() == Role::Function)
+            .is_some_and(|chat| *chat.role() != Role::Model)
         {
             return Err((session, GeminiResponseError::NothingToRespond));
         }

@@ -63,11 +63,6 @@ impl GeminiResponse {
     pub(crate) fn from_str(string: impl AsRef<str>) -> Result<Self, serde_json::Error> {
         serde_json::from_str(string.as_ref())
     }
-    ///Instead use get_chat()
-    #[deprecated]
-    pub fn get_parts(&self) -> &Vec<Part> {
-        self.candidates[0].content.parts()
-    }
     pub fn get_chat(&self) -> &Chat {
         &self.candidates[0].content
     }

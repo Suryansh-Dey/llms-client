@@ -125,7 +125,7 @@ async fn ask_with_function_calls() {
     ])]);
     session.ask_string("What files I have in current directory");
     let response = ai.ask(&mut session).await.unwrap(); //Received a function call
-    let result = execute_function_calls!(session, list_files); //don't update session if Error
+    let result = execute_function_calls!(session, list_files); //doesn't update session if Error
     println!("function output: {:?}", result);
     if result.len() != 0 {
         //If any function call at all happened

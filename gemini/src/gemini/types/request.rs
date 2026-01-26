@@ -147,7 +147,7 @@ pub struct CodeExecutionResult {
 #[serde(rename_all = "camelCase")]
 pub enum PartType {
     Text(String),
-    ///Image or document
+    ///Image or document like PDF
     InlineData(InlineData),
     ExecutableCode(ExecutableCode),
     CodeExecutionResult(CodeExecutionResult),

@@ -95,7 +95,7 @@ async fn ask_streamed_with_tools() {
         "gemini-2.5-flash",
         None,
     )
-    .set_tools(vec![Tool::code_execution(json!({}))]);
+    .set_tools(vec![Tool::CodeExecution(json!({}))]);
     let mut response_stream = ai
         .ask_as_stream(session).await.unwrap();
     while let Some(response) = response_stream.next().await {
@@ -110,6 +110,7 @@ async fn ask_streamed_with_tools() {
 }
 
 use gemini_client_api::gemini::utils::{GeminiSchema, execute_function_calls, gemini_function};
+#[gemini_function]
 ///Lists files in my dir
 async fn list_files(
     ///Path to the dir
@@ -133,7 +134,7 @@ async fn ask_with_function_calls() {
     ])]);
     session.ask_string("What files I have in current directory");
     let response = ai.ask(&mut session).await.unwrap(); //Received a function call
-    let result = execute_function_calls!(session, list_files); //don't update session if Error
+    let result = execute_function_calls!(session, list_files); //doesn't update session if Error
     println!("function output: {:?}", result);
     if result.len() != 0 {
         //If any function call at all happened

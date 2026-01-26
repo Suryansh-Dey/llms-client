@@ -1,12 +1,12 @@
 [package]
 name = "gemini-client-api"
-version = "6.1.0"
+version = "6.2.2"
 edition = "2024"
 repository = "https://github.com/Suryansh-Dey/llms-client"
 authors = ["Suryansh Dey suryanshdey@gmail.com"]
 keywords = ["Gemini", "SDK", "client", "API", "AI"]
 categories = ["web-programming", "asynchronous"]
-description = "Library to use Google Gemini API's all tools(code, search, function calling) even with streaming. Automatic context management!"
+description = "Library to use Google Gemini API. Automatic context management, schema generation, function calling and more."
 readme = "README.md"
 license = "MIT"
 
