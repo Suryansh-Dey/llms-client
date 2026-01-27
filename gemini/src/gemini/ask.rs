@@ -2,6 +2,7 @@ use super::error::GeminiResponseError;
 use super::types::request::*;
 use super::types::response::*;
 use super::types::sessions::Session;
+#[cfg(feature = "reqwest")]
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -10,6 +11,7 @@ const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models"
 
 #[derive(Clone, Default, Debug)]
 pub struct Gemini {
+    #[cfg(feature = "reqwest")]
     client: Client,
     api_key: String,
     model: String,
@@ -19,11 +21,13 @@ pub struct Gemini {
     tools: Option<Vec<Tool>>,
     tool_config: Option<ToolConfig>,
 }
+
 impl Gemini {
     /// # Arguments
     /// `api_key` get one from [Google AI studio](https://aistudio.google.com/app/apikey)
     /// `model` should be of those mentioned [here](https://ai.google.dev/gemini-api/docs/models#model-variations) in bold black color
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
+    #[cfg(feature = "reqwest")]
     pub fn new(
         api_key: impl Into<String>,
         model: impl Into<String>,
@@ -44,6 +48,7 @@ impl Gemini {
         }
     }
     /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
+    #[cfg(feature = "reqwest")]
     pub fn new_with_timeout(
         api_key: impl Into<String>,
         model: impl Into<String>,
@@ -126,6 +131,7 @@ impl Gemini {
         self
     }
 
+    #[cfg(feature = "reqwest")]
     pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
         if !session
             .get_last_chat()
@@ -183,6 +189,7 @@ impl Gemini {
     ///    }
     ///}
     ///```
+    #[cfg(feature = "reqwest")]
     pub async fn ask_as_stream_with_extractor<F, StreamType>(
         &self,
         session: Session,
@@ -247,6 +254,7 @@ impl Gemini {
     ///    }
     ///}
     ///```
+    #[cfg(feature = "reqwest")]
     pub async fn ask_as_stream(
         &self,
         session: Session,

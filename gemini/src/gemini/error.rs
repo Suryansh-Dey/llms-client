@@ -1,5 +1,6 @@
 #[derive(Debug)]
 pub enum GeminiResponseError {
+    #[cfg(feature = "reqwest")]
     ReqwestError(reqwest::Error),
     ///Contains the response string
     StatusNotOk(String),
@@ -14,6 +15,7 @@ impl std::error::Error for GeminiResponseError {}
 
 #[derive(Debug)]
 pub enum GeminiResponseStreamError {
+    #[cfg(feature = "reqwest")]
     ReqwestError(reqwest::Error),
     ///Contains the response string
     InvalidResposeFormat(String),

@@ -3,6 +3,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use derive_new::new;
 use getset::Getters;
 use mime::{FromStrError, Mime};
+#[cfg(feature = "reqwest")]
 use reqwest::header::{HeaderMap, ToStrError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,14 +24,18 @@ pub struct InlineData {
     ///Base64 encoded string.
     data: String,
 }
+
 #[derive(Debug)]
 pub enum InlineDataError {
+    #[cfg(feature = "reqwest")]
     RequestFailed(reqwest::Error),
     CheckerFalse,
     ContentTypeMissing,
+    #[cfg(feature = "reqwest")]
     ContentTypeParseFailed(ToStrError),
     InvalidMimeType(FromStrError),
 }
+
 impl InlineData {
     /// Creates a new InlineData.
     /// `data` must be a base64 encoded string.
@@ -40,6 +45,8 @@ impl InlineData {
             data,
         }
     }
+
+    #[cfg(feature = "reqwest")]
     pub async fn from_url_with_check<F: FnOnce(&HeaderMap) -> bool>(
         url: &str,
         checker: F,
@@ -67,9 +74,13 @@ impl InlineData {
 
         Ok(InlineData::new(mime_type, STANDARD.encode(body)))
     }
+
+    #[cfg(feature = "reqwest")]
     pub async fn from_url(url: &str) -> Result<Self, InlineDataError> {
         Self::from_url_with_check(url, |_| true).await
     }
+
+    #[cfg(all(feature = "tokio", not(target_arch = "wasm32")))]
     pub async fn from_path(file_path: &str, mime_type: Mime) -> Result<Self, std::io::Error> {
         let data = tokio::fs::read(file_path).await?;
         Ok(InlineData::new(mime_type, STANDARD.encode(data)))

@@ -1,17 +1,20 @@
 [package]
 name = "gemini-client-api"
-version = "6.3.1"
+version = "6.3.2"
 edition = "2024"
 repository = "https://github.com/Suryansh-Dey/llms-client"
-authors = ["Suryansh Dey suryanshdey@gmail.com"]
+authors = ["Suryansh Dey <suryanshdey@gmail.com>"]
 keywords = ["Gemini", "SDK", "client", "API", "AI"]
 categories = ["web-programming", "asynchronous"]
 description = "Library to use Google Gemini API. Automatic context management, schema generation, function calling and more."
 readme = "README.md"
 license = "MIT"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-reqwest = { version = "0.13", features = ["json", "stream"] }
+reqwest = { version = "0.13", features = ["json", "stream"], optional = true }
 bytes = "1"
 base64 = "0.22.1"
 derive-new = "0.7.0"
@@ -21,6 +24,12 @@ pin-project-lite = "0.2.16"
 regex = "1.11.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.140"
-tokio = { version = "1", features = ["fs", "macros"] }
+tokio = { version = "1", features = ["fs", "macros"], optional = true }
 mime = "0.3.17"
 gemini-proc-macros = { version = "0.2.0", path = "./gemini-proc-macros" }
+
+[features]
+default = ["full"]
+full = ["tokio", "reqwest"]
+tokio = ["dep:tokio"]
+reqwest = ["dep:reqwest"]

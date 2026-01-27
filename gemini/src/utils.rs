@@ -3,7 +3,9 @@ use futures::future::join_all;
 pub use mime;
 use mime::Mime;
 use regex::Regex;
+#[cfg(feature = "reqwest")]
 use reqwest::Client;
+#[cfg(feature = "reqwest")]
 pub use reqwest::header::{HeaderMap, HeaderValue};
 use std::{str::FromStr, time::Duration};
 
@@ -19,6 +21,7 @@ pub struct MatchedFiles {
 /// # Arguments
 /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
 /// with no "Content-Type" header.
+#[cfg(feature = "reqwest")]
 pub async fn get_file_base64s(
     markdown: impl AsRef<str>,
     regex: Regex,

@@ -12,6 +12,7 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 - File reading like PDF or any document, even audio files like MP3
 - Function call support
 - Thinking and Safety setting
+- Supports Session management in WASM environment with `default-features = false`
 
 # Basic usage
 ```rust

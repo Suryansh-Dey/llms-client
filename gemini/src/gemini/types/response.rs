@@ -4,6 +4,7 @@ use crate::gemini::error::GeminiResponseStreamError;
 use bytes::Bytes;
 use derive_new::new;
 use futures::Stream;
+#[cfg(feature = "reqwest")]
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -57,6 +58,7 @@ pub struct GeminiResponse {
     pub prompt_feedback: Option<Value>,
 }
 impl GeminiResponse {
+    #[cfg(feature = "reqwest")]
     pub(crate) async fn new(response: Response) -> Result<GeminiResponse, reqwest::Error> {
         response.json().await
     }
@@ -81,6 +83,7 @@ impl GeminiResponse {
     }
 }
 
+#[cfg(feature = "reqwest")]
 pin_project_lite::pin_project! {
     pub struct ResponseStream<F,T>
         where F:FnMut(&Session, GeminiResponse) -> T{
@@ -91,6 +94,7 @@ pin_project_lite::pin_project! {
         buffer: Vec<u8>,
     }
 }
+#[cfg(feature = "reqwest")]
 impl<F, T> Stream for ResponseStream<F, T>
 where
     F: FnMut(&Session, GeminiResponse) -> T,
@@ -169,6 +173,7 @@ where
         }
     }
 }
+#[cfg(feature = "reqwest")]
 impl<F, T> ResponseStream<F, T>
 where
     F: FnMut(&Session, GeminiResponse) -> T,
@@ -194,5 +199,6 @@ where
         self.session
     }
 }
+#[cfg(feature = "reqwest")]
 pub type GeminiResponseStream =
     ResponseStream<fn(&Session, GeminiResponse) -> GeminiResponse, GeminiResponse>;
