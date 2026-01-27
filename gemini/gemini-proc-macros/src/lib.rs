@@ -77,6 +77,12 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
+    let mut param_types_with_lifetime = Vec::new();
+    let lifetime = syn::Lifetime::new("'a", proc_macro2::Span::call_site());
+    for ty in &param_types {
+        param_types_with_lifetime.push(add_lifetime(ty, &lifetime));
+    }
+
     let expanded = quote! {
         #input_fn
 
@@ -105,10 +111,12 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
             pub async fn execute(args: serde_json::Value) -> Result<serde_json::Value, String> {
                 use serde::Deserialize;
                 #[derive(Deserialize)]
-                struct Args {
-                    #(#param_names: #param_types),*
+                struct Args<'a> {
+                    #(#param_names: #param_types_with_lifetime,)*
+                    #[serde(skip)]
+                    _phantom: std::marker::PhantomData<&'a ()>,
                 }
-                let args: Args = serde_json::from_value(args).map_err(|e| e.to_string())?;
+                let args = Args::deserialize(&args).map_err(|e| e.to_string())?;
                 let result = #fn_name(#(args.#param_names),*) #call_await;
                 #result_handling
             }
@@ -120,7 +128,8 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro]
 /// - Provide all functions to be called `execute_function_calls!(session, f1, f2...)`
-/// - `Returns` vec![Result of f2, Result of f2 ...]
+/// - `Returns` (Option<Result of f2>, Option<Result of f2>, ...)
+/// - Option::None if f_i was not called by Gemini
 /// *if function don't return type Result, it always return `Result::Ok(value)`*
 /// - `Session` struct is automatically updated with FunctionResponse only for `Ok` result
 pub fn execute_function_calls(input: TokenStream) -> TokenStream {
@@ -146,23 +155,34 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as ExecuteInput);
     let session = &input.session;
     let functions = &input.functions;
+    let num_funcs = functions.len();
 
-    let match_arms = functions.iter().map(|path| {
+    let match_arms = functions.iter().enumerate().map(|(i, path)| {
         let name_str = path.segments.last().unwrap().ident.to_string();
         quote! {
             #name_str => {
                 let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
-                let fut: std::pin::Pin<Box<dyn std::future::Future<Output = (String, Result<gemini_client_api::serde_json::Value, String>)>>> = Box::pin(async move {
-                    (#name_str.to_string(), #path::execute(args).await)
+                let fut: std::pin::Pin<Box<dyn std::future::Future<Output = (usize, String, Result<gemini_client_api::serde_json::Value, String>)>>> = Box::pin(async move {
+                    (#i, #name_str.to_string(), #path::execute(args).await)
                 });
                 futures.push(fut);
             }
         }
     });
 
+    let tuple_elements = (0..num_funcs).map(|i| {
+        quote! { results_array[#i].take() }
+    });
+
+    let tuple_return = if num_funcs == 1 {
+        quote! { (#(#tuple_elements),* ,) }
+    } else {
+        quote! { (#(#tuple_elements),*) }
+    };
+
     let expanded = quote! {
         {
-            let mut all_results = Vec::new();
+            let mut results_array = vec![None; #num_funcs];
             if let Some(chat) = #session.get_last_chat() {
                 let mut futures = Vec::new();
                 for part in chat.parts() {
@@ -175,15 +195,15 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
                 }
                 if !futures.is_empty() {
                     let results = gemini_client_api::futures::future::join_all(futures).await;
-                    for (name, res) in results {
+                    for (idx, name, res) in results {
                         if let Ok(ref val) = res {
                             let _ = #session.add_function_response(name, val.clone());
                         }
-                        all_results.push(res);
+                        results_array[idx] = Some(res);
                     }
                 }
             }
-            all_results
+            #tuple_return
         }
     };
 
@@ -194,6 +214,7 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
 pub fn gemini_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let description = extract_doc_comments(&input.attrs);
 
     let expanded = match &input.data {
@@ -230,7 +251,7 @@ pub fn gemini_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             quote! {
-                impl GeminiSchema for #name {
+                impl #impl_generics GeminiSchema for #name #ty_generics #where_clause {
                     fn gemini_schema() -> serde_json::Value {
                         use serde_json::{json, Map};
                         let mut props = Map::new();
@@ -262,7 +283,7 @@ pub fn gemini_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             quote! {
-                impl GeminiSchema for #name {
+                impl #impl_generics GeminiSchema for #name #ty_generics #where_clause {
                     fn gemini_schema() -> serde_json::Value {
                         use serde_json::json;
                         let mut schema = json!({
@@ -314,4 +335,26 @@ fn is_option(ty: &Type) -> bool {
         }
     }
     false
+}
+
+fn add_lifetime(ty: &Type, lifetime: &syn::Lifetime) -> Type {
+    let mut ty = ty.clone();
+    match &mut ty {
+        Type::Reference(tr) => {
+            tr.lifetime = Some(lifetime.clone());
+        }
+        Type::Path(tp) => {
+            for seg in &mut tp.path.segments {
+                if let syn::PathArguments::AngleBracketed(ab) = &mut seg.arguments {
+                    for arg in &mut ab.args {
+                        if let syn::GenericArgument::Type(inner) = arg {
+                            *inner = add_lifetime(inner, lifetime);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    ty
 }

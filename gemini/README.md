@@ -47,6 +47,7 @@ async fn see_markdown() {
     println!("{}", response2.get_chat().get_text_no_think(""));
 }
 
+use gemini_client_api::gemini::utils::{GeminiSchema, gemini_schema};
 async fn ask_string_for_json_with_struct() {
     #[derive(Debug, Deserialize)]
     #[gemini_schema]
@@ -114,7 +115,7 @@ use gemini_client_api::gemini::utils::{GeminiSchema, execute_function_calls, gem
 ///Lists files in my dir
 async fn list_files(
     ///Path to the dir
-    path: String,
+    path: &str,
 ) -> Result<String, Box<dyn Error>> {
     Ok(std::fs::read_dir(path)?
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
@@ -134,9 +135,9 @@ async fn ask_with_function_calls() {
     ])]);
     session.ask_string("What files I have in current directory");
     let response = ai.ask(&mut session).await.unwrap(); //Received a function call
-    let result = execute_function_calls!(session, list_files); //doesn't update session if Error
+    let (result,) = execute_function_calls!(session, list_files); //doesn't update session if Error
     println!("function output: {:?}", result);
-    if result.len() != 0 {
+    if result.is_some() {
         //If any function call at all happened
         let response = ai.ask(&mut session).await.unwrap(); //Providing output of the function call and continue
         println!("{:?}", response.get_chat().parts());

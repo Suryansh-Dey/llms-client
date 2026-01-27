@@ -96,6 +96,9 @@ impl Gemini {
         self.api_key = api_key.into();
         self
     }
+    ///To use struct as schema write #[gemini_schema] above struct then pass
+    /// `StructName::gemini_schema()`
+    /// OR
     /// `schema` should follow [Schema of gemini](https://ai.google.dev/api/caching#Schema)
     /// To verify your schema visit [here](https://aistudio.google.com/prompts/new_chat):
     /// - Under tools, toggle on Structured output

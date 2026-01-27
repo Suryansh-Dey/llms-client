@@ -436,7 +436,10 @@ pub struct GeminiRequestBody<'a> {
 pub enum Tool {
     /// Generally it can be `Tool::GoogleSearch(json!({}))`
     GoogleSearch(Value),
-    /// It is of form `Tool::FunctionDeclarations(`[functionDeclaration](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting)`)`
+    /// Recommended: write `#[gemini_function]` above the function and pass
+    /// `vec![function_name::gemini_schema(), ..]`
+    /// OR
+    /// It must be of form `vec![`[functionDeclaration](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting)`, ..]`
     FunctionDeclarations(Vec<Value>),
     /// Generally it can be `Tool::CodeExecution(json!({}))`,
     CodeExecution(Value),
