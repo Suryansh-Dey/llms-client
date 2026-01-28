@@ -129,8 +129,9 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro]
 /// - Provide all functions to be called `execute_function_calls!(session, f1, f2...)`
-/// - `Returns` (Option<Result of f2>, Option<Result of f2>, ...)
-/// - Option::None if f_i was not called by Gemini
+/// - `Returns` Vec<Option<Result<serde_json::Value, String>>>
+/// - Returned vec length always equals the number of functions passed
+/// - `None` if f_i was not called by Gemini
 /// *if function don't return type Result, it always return `Result::Ok(value)`*
 /// - `Session` struct is automatically updated with FunctionResponse only for `Ok` result
 pub fn execute_function_calls(input: TokenStream) -> TokenStream {
@@ -171,16 +172,6 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
         }
     });
 
-    let tuple_elements = (0..num_funcs).map(|i| {
-        quote! { results_array[#i].take() }
-    });
-
-    let tuple_return = if num_funcs == 1 {
-        quote! { (#(#tuple_elements),* ,) }
-    } else {
-        quote! { (#(#tuple_elements),*) }
-    };
-
     let expanded = quote! {
         {
             let mut results_array = vec![None; #num_funcs];
@@ -204,7 +195,7 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-            #tuple_return
+            results_array
         }
     };
 

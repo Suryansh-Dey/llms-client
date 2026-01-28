@@ -335,7 +335,7 @@ dependencies = [
 
 [[package]]
 name = "gemini-client-api"
-version = "6.3.3"
+version = "6.3.4"
 dependencies = [
  "base64",
  "bytes",
@@ -354,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "gemini-proc-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",

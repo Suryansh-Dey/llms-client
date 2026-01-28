@@ -42,9 +42,10 @@ async fn execute_function_calls_test() {
     ];
     session.reply(parts);
 
-    let (add_res, greet_res) = execute_function_calls!(session, add_numbers, greet);
-    assert_eq!(add_res, Some(Ok(json!(30))));
-    assert_eq!(greet_res, Some(Ok(json!("Hello, Gemini!"))));
+    let results = execute_function_calls!(session, add_numbers, greet);
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0], Some(Ok(json!(30))));
+    assert_eq!(results[1], Some(Ok(json!("Hello, Gemini!"))));
 
     let history = session.get_history();
 
@@ -74,8 +75,9 @@ async fn test_failure_no_session_update() {
     let parts = vec![FunctionCall::new("fail_fn".to_string(), Some(json!({}))).into()];
     session.reply(parts);
 
-    let (fail_res,) = execute_function_calls!(session, fail_fn);
-    assert!(fail_res.unwrap().is_err());
+    let results = execute_function_calls!(session, fail_fn);
+    assert_eq!(results.len(), 1);
+    assert!(results[0].as_ref().unwrap().is_err());
 
     let history = session.get_history();
     // Only model reply should be there.
@@ -90,8 +92,9 @@ async fn test_non_result_always_success() {
     let parts = vec![FunctionCall::new("sync_fn".to_string(), Some(json!({"x": 21}))).into()];
     session.reply(parts);
 
-    let (sync_res,) = execute_function_calls!(session, sync_fn);
-    assert_eq!(sync_res, Some(Ok(json!(42))));
+    let results = execute_function_calls!(session, sync_fn);
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0], Some(Ok(json!(42))));
 
     let history = session.get_history();
     assert_eq!(history.len(), 2);
@@ -122,9 +125,9 @@ async fn ask_with_function_calls() {
     ])]);
     session.ask_string("What files I have in current directory");
     let response = ai.ask(&mut session).await.unwrap(); //Received a function call
-    let (result,) = execute_function_calls!(session, list_files); //doesn't update session if Error
+    let result = execute_function_calls!(session, list_files); //doesn't update session if Error
     println!("function output: {:?}", result);
-    if result.is_some() {
+    if result[0].is_some() {
         //If any function call at all happened
         let response = ai.ask(&mut session).await.unwrap(); //Providing output of the function call and continue
         println!("{:?}", response.get_chat().parts());
