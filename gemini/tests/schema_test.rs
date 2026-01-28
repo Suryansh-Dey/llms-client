@@ -146,6 +146,7 @@ fn get_weather(
 #[test]
 fn gemini_function_schema_test() {
     let schema = get_weather::gemini_schema();
+    assert_eq!(get_weather::name(&schema), Some("get_weather"));
     let expected = json!({
         "name": "get_weather",
         "description": "Get the current weather in a given location",

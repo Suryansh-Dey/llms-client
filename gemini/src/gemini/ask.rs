@@ -133,9 +133,9 @@ impl Gemini {
 
     #[cfg(feature = "reqwest")]
     pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
-        if !session
+        if session
             .get_last_chat()
-            .is_some_and(|chat| *chat.role() != Role::Model)
+            .is_some_and(|chat| *chat.role() == Role::Model)
         {
             return Err(GeminiResponseError::NothingToRespond);
         }
@@ -198,9 +198,9 @@ impl Gemini {
     where
         F: FnMut(&Session, GeminiResponse) -> StreamType,
     {
-        if !session
+        if session
             .get_last_chat()
-            .is_some_and(|chat| *chat.role() != Role::Model)
+            .is_some_and(|chat| *chat.role() == Role::Model)
         {
             return Err((session, GeminiResponseError::NothingToRespond));
         }
