@@ -1,9 +1,22 @@
 use super::request::*;
 use super::response::GeminiResponse;
+use core::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::VecDeque;
 use std::{usize, vec};
+
+#[derive(Debug)]
+pub enum AddFunctionResponseError {
+    InvalidResponseFormat(serde_json::Error),
+    ///FunctionResponse cannot be added after User prompt
+    FunctionResponseAfterUser,
+}
+impl fmt::Display for AddFunctionResponseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
@@ -79,43 +92,56 @@ impl Session {
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
-    fn add_chat(&mut self, chat: Chat) -> &mut Self {
+    fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
         if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
             if last_chat.role() == chat.role() {
                 concatenate_parts(last_chat.parts_mut(), &chat.parts());
-                return self;
+                return Ok(self);
+            } else if *last_chat.role() == Role::User && *chat.role() == Role::Function {
+                return Err("Role::Function not allowed after Role::User");
             }
+        } else if *chat.role() == Role::Function {
+            return Err("Role::Function cannot be first");
         }
 
         self.history.push_back(chat);
         self.chat_no += 1;
         if self.get_history_length() > self.get_history_limit() {
             self.history.pop_front();
+            while let Some(front_chat) = self.history.front() {
+                match front_chat.role() {
+                    Role::Function => self.history.pop_front(),
+                    _ => break,
+                };
+            }
         }
-        self
+        Ok(self)
     }
     /// If ask is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("ok")`, the parts is concatenated with the previous parts.
     pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
-        self.add_chat(Chat::new(Role::User, parts))
+        self.add_chat(Chat::new(Role::User, parts)).unwrap()
     }
     /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("opportunist")`, the prompt string is concatenated with the previous prompt.
     pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
         self.add_chat(Chat::new(Role::User, vec![prompt.into().into()]))
+            .unwrap()
     }
     pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
-        self.add_chat(Chat::new(Role::Model, parts))
+        self.add_chat(Chat::new(Role::Model, parts)).unwrap()
     }
     pub fn reply_string(&mut self, prompt: impl Into<String>) -> &mut Self {
         self.add_chat(Chat::new(Role::Model, vec![prompt.into().into()]))
+            .unwrap()
     }
     pub fn add_function_response<T: Serialize>(
         &mut self,
         name: impl Into<String>,
         response: T,
-    ) -> Result<&mut Self, serde_json::Error> {
-        let res_value = serde_json::to_value(response)?;
+    ) -> Result<&mut Self, AddFunctionResponseError> {
+        let res_value = serde_json::to_value(response)
+            .map_err(|e| AddFunctionResponseError::InvalidResponseFormat(e))?;
         let final_res = if res_value.is_object() {
             res_value
         } else {
@@ -123,13 +149,14 @@ impl Session {
         };
 
         let part = FunctionResponse::new(name.into(), final_res).into();
-
-        Ok(self.add_chat(Chat::new(Role::Function, vec![part])))
+        self.add_chat(Chat::new(Role::Function, vec![part]))
+            .map_err(|_| AddFunctionResponseError::FunctionResponseAfterUser)?;
+        Ok(self)
     }
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
         if self.get_remember_reply() {
             let reply_parts = response.get_chat().parts();
-            self.add_chat(Chat::new(Role::Model, reply_parts.clone()));
+            self.reply(reply_parts.clone());
             Some(reply_parts)
         } else {
             if let Some(chat) = self.history.back() {

@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use derive_new::new;
 use getset::Getters;
@@ -7,6 +6,7 @@ use mime::{FromStrError, Mime};
 use reqwest::header::{HeaderMap, ToStrError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::str::FromStr;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -314,6 +314,11 @@ impl Chat {
     pub fn is_thinking(&self) -> bool {
         self.parts.iter().any(|p| p.is_thought())
     }
+    pub fn has_function_call(&self) -> bool {
+        self.parts
+            .iter()
+            .any(|p| matches!(p.data(), PartType::FunctionCall(_)))
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, Default)]
@@ -466,31 +471,6 @@ pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
                             updating_text.push_str(&updator_text);
                             continue;
                         }
-                    }
-                }
-                PartType::InlineData(updator_data) => {
-                    if let PartType::InlineData(ref mut updating_data) = updating_last.data {
-                        updating_data.data.push_str(&updator_data.data());
-                        continue;
-                    }
-                }
-                PartType::ExecutableCode(updator_data) => {
-                    if let PartType::ExecutableCode(ref mut updating_data) = updating_last.data {
-                        updating_data.code.push_str(&updator_data.code());
-                        continue;
-                    }
-                }
-                PartType::CodeExecutionResult(updator_data) => {
-                    if let PartType::CodeExecutionResult(ref mut updating_data) = updating_last.data
-                    {
-                        if let Some(ref mut updating_output) = updating_data.output {
-                            if let Some(updator_output) = updator_data.output() {
-                                updating_output.push_str(updator_output);
-                            }
-                        } else {
-                            updating_data.output = updator_data.output.clone();
-                        }
-                        continue;
                     }
                 }
                 _ => {}

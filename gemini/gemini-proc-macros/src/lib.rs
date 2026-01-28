@@ -189,7 +189,13 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
                     let results = gemini_client_api::futures::future::join_all(futures).await;
                     for (idx, name, res) in results {
                         if let Ok(ref val) = res {
-                            let _ = #session.add_function_response(name, val.clone());
+                            if let Err(e) = #session.add_function_response(name.clone(), val.clone()) {
+                                results_array[idx] = Some(Err(format!(
+                                    "failed to add function response for `{}`: {}",
+                                    name, e
+                                )));
+                                continue;
+                            }
                         }
                         results_array[idx] = Some(res);
                     }
