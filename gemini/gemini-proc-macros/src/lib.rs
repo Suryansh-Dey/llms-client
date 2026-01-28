@@ -164,7 +164,7 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
         quote! {
             #name_str => {
                 let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
-                let fut: std::pin::Pin<Box<dyn std::future::Future<Output = (usize, String, Result<gemini_client_api::serde_json::Value, String>)>>> = Box::pin(async move {
+                let fut: gemini_client_api::futures::future::BoxFuture<'static, (usize, String, Result<gemini_client_api::serde_json::Value, String>)> = Box::pin(async move {
                     (#i, #name_str.to_string(), #path::execute(args).await)
                 });
                 futures.push(fut);
