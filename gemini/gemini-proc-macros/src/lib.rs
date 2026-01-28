@@ -23,6 +23,15 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let param_type = (*pat_type.ty).clone();
                 let param_desc = extract_doc_comments(&pat_type.attrs);
 
+                if has_reference(&param_type) {
+                    return syn::Error::new_spanned(
+                        &param_type,
+                        "references are not supported in gemini_function. Use owned types like String instead.",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+
                 // Remove doc attributes from the function signature so it compiles
                 pat_type.attrs.retain(|attr| !attr.path().is_ident("doc"));
 
@@ -77,12 +86,6 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let mut param_types_with_lifetime = Vec::new();
-    let lifetime = syn::Lifetime::new("'a", proc_macro2::Span::call_site());
-    for ty in &param_types {
-        param_types_with_lifetime.push(add_lifetime(ty, &lifetime));
-    }
-
     let expanded = quote! {
         #input_fn
 
@@ -111,10 +114,8 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
             pub async fn execute(args: serde_json::Value) -> Result<serde_json::Value, String> {
                 use serde::Deserialize;
                 #[derive(Deserialize)]
-                struct Args<'a> {
-                    #(#param_names: #param_types_with_lifetime,)*
-                    #[serde(skip)]
-                    _phantom: std::marker::PhantomData<&'a ()>,
+                struct Args {
+                    #(#param_names: #param_types,)*
                 }
                 let args = Args::deserialize(&args).map_err(|e| e.to_string())?;
                 let result = #fn_name(#(args.#param_names),*) #call_await;
@@ -230,6 +231,15 @@ pub fn gemini_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         let field_type = &field.ty;
                         let field_desc = extract_doc_comments(&field.attrs);
 
+                        if has_reference(field_type) {
+                            return syn::Error::new_spanned(
+                                field_type,
+                                "references are not supported in gemini_schema. Use owned types instead.",
+                            )
+                            .to_compile_error()
+                            .into();
+                        }
+
                         let is_optional = is_option(field_type);
 
                         properties.push(quote! {
@@ -337,24 +347,23 @@ fn is_option(ty: &Type) -> bool {
     false
 }
 
-fn add_lifetime(ty: &Type, lifetime: &syn::Lifetime) -> Type {
-    let mut ty = ty.clone();
-    match &mut ty {
-        Type::Reference(tr) => {
-            tr.lifetime = Some(lifetime.clone());
-        }
+fn has_reference(ty: &Type) -> bool {
+    match ty {
+        Type::Reference(_) => true,
         Type::Path(tp) => {
-            for seg in &mut tp.path.segments {
-                if let syn::PathArguments::AngleBracketed(ab) = &mut seg.arguments {
-                    for arg in &mut ab.args {
+            for seg in &tp.path.segments {
+                if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments {
+                    for arg in &ab.args {
                         if let syn::GenericArgument::Type(inner) = arg {
-                            *inner = add_lifetime(inner, lifetime);
+                            if has_reference(inner) {
+                                return true;
+                            }
                         }
                     }
                 }
             }
+            false
         }
-        _ => {}
+        _ => false,
     }
-    ty
 }

@@ -38,12 +38,6 @@ impl GeminiSchema for &str {
     }
 }
 
-impl<T: GeminiSchema + ?Sized> GeminiSchema for &T {
-    fn gemini_schema() -> Value {
-        T::gemini_schema()
-    }
-}
-
 impl<T: GeminiSchema> GeminiSchema for Vec<T> {
     fn gemini_schema() -> Value {
         json!({

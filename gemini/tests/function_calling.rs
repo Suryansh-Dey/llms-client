@@ -101,7 +101,7 @@ async fn test_non_result_always_success() {
 ///Lists files in my dir
 async fn list_files(
     ///Path to the dir
-    path: &str,
+    path: String,
 ) -> Result<String, Box<dyn Error>> {
     Ok(std::fs::read_dir(path)?
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
