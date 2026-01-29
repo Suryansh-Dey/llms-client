@@ -9,6 +9,11 @@ use std::time::Duration;
 
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
+/// The main client for interacting with the Gemini API.
+///
+/// Use `Gemini::new` or `Gemini::new_with_timeout` to create an instance.
+/// You can configure various aspects of the request like model, system instructions,
+/// generation config, safety settings, and tools using the provided builder-like methods.
 #[derive(Clone, Default, Debug)]
 pub struct Gemini {
     #[cfg(feature = "reqwest")]
@@ -23,10 +28,12 @@ pub struct Gemini {
 }
 
 impl Gemini {
+    /// Creates a new `Gemini` client.
+    ///
     /// # Arguments
-    /// `api_key` get one from [Google AI studio](https://aistudio.google.com/app/apikey)
-    /// `model` should be of those mentioned [here](https://ai.google.dev/gemini-api/docs/models#model-variations) in bold black color
-    /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
+    /// * `api_key` - Your Gemini API key. Get one from [Google AI studio](https://aistudio.google.com/app/apikey).
+    /// * `model` - The model variation to use (e.g., "gemini-2.5-flash"). See [model variations](https://ai.google.dev/gemini-api/docs/models#model-variations).
+    /// * `sys_prompt` - Optional system instructions. See [system instructions](https://ai.google.dev/gemini-api/docs/text-generation#image-input).
     #[cfg(feature = "reqwest")]
     pub fn new(
         api_key: impl Into<String>,
@@ -47,7 +54,13 @@ impl Gemini {
             tool_config: None,
         }
     }
-    /// `sys_prompt` should follow [gemini doc](https://ai.google.dev/gemini-api/docs/text-generation#image-input)
+    /// Creates a new `Gemini` client with a custom API timeout.
+    ///
+    /// # Arguments
+    /// * `api_key` - Your Gemini API key.
+    /// * `model` - The model variation to use.
+    /// * `sys_prompt` - Optional system instructions.
+    /// * `api_timeout` - Custom duration for request timeouts.
     #[cfg(feature = "reqwest")]
     pub fn new_with_timeout(
         api_key: impl Into<String>,
@@ -66,7 +79,10 @@ impl Gemini {
             tool_config: None,
         }
     }
-    /// The generation config Schema should follow [Gemini docs](https://ai.google.dev/api/generate-content#generationconfig)
+    /// Returns a mutable reference to the generation configuration.
+    /// If not already set, initializes it to an empty object.
+    ///
+    /// See [Gemini docs](https://ai.google.dev/api/generate-content#generationconfig) for schema details.
     pub fn set_generation_config(&mut self) -> &mut Value {
         if let None = self.generation_config {
             self.generation_config = Some(json!({}));
@@ -101,14 +117,13 @@ impl Gemini {
         self.api_key = api_key.into();
         self
     }
-    ///To use struct as schema write #[gemini_schema] above struct then pass
-    /// `StructName::gemini_schema()`
-    /// OR
-    /// `schema` should follow [Schema of gemini](https://ai.google.dev/api/caching#Schema)
-    /// To verify your schema visit [here](https://aistudio.google.com/prompts/new_chat):
-    /// - Under tools, toggle on Structured output
-    /// - Click Edit
-    /// - Here you can create schema with `Visual Editor` or `Code Editor` with error detection
+    /// Sets the response format to JSON mode with a specific schema.
+    ///
+    /// To use a Rust struct as a schema, decorate it with `#[gemini_schema]` and pass
+    /// `StructName::gemini_schema()`.
+    ///
+    /// # Arguments
+    /// * `schema` - The JSON schema for the response. See [Gemini Schema docs](https://ai.google.dev/api/caching#Schema).
     pub fn set_json_mode(mut self, schema: Value) -> Self {
         let config = self.set_generation_config();
         config["response_mime_type"] = "application/json".into();
@@ -122,15 +137,23 @@ impl Gemini {
         }
         self
     }
+    /// Sets the tools (functions) available to the model.
     pub fn set_tools(mut self, tools: Vec<Tool>) -> Self {
         self.tools = Some(tools);
         self
     }
+    /// Removes all tools.
     pub fn unset_tools(mut self) -> Self {
         self.tools = None;
         self
     }
 
+    /// Sends a prompt to the model and waits for the full response.
+    ///
+    /// Updates the `session` history with the model's reply.
+    ///
+    /// # Errors
+    /// Returns `GeminiResponseError::NothingToRespond` if the last message in history is from the model.
     #[cfg(feature = "reqwest")]
     pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
         if session
@@ -241,19 +264,24 @@ impl Gemini {
             data_extractor,
         ))
     }
-    /// # Warning
-    /// You must read the response stream to get reply stored context in `session`.
-    /// # Example
-    ///```ignore
-    ///use futures::StreamExt
-    ///let mut response_stream = gemini.ask_as_stream(session).await.unwrap();
+    /// Sends a prompt to the model and returns a stream of responses.
     ///
-    ///while let Some(response) = response_stream.next().await {
-    ///    if let Ok(response) = response {
-    ///        println!("{}", response.get_text(""));
-    ///    }
-    ///}
-    ///```
+    /// # Warning
+    /// You must exhaust the response stream to ensure the `session` history is correctly updated.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use futures::StreamExt;
+    /// # async fn run(gemini: gemini_client_api::gemini::ask::Gemini, session: gemini_client_api::gemini::types::sessions::Session) {
+    /// let mut response_stream = gemini.ask_as_stream(session).await.unwrap();
+    ///
+    /// while let Some(response) = response_stream.next().await {
+    ///     if let Ok(response) = response {
+    ///         println!("{}", response.get_text(""));
+    ///     }
+    /// }
+    /// # }
+    /// ```
     #[cfg(feature = "reqwest")]
     pub async fn ask_as_stream(
         &self,

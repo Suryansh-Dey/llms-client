@@ -18,6 +18,10 @@ impl fmt::Display for AddFunctionResponseError {
     }
 }
 
+/// Manages the conversation history and configuration for a Gemini session.
+///
+/// A `Session` tracks the sequence of `Chat` messages (user prompts and model replies)
+/// and enforces a history limit to manage token usage.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
     history: VecDeque<Chat>,
@@ -26,9 +30,13 @@ pub struct Session {
     remember_reply: bool,
 }
 impl Session {
-    /// `history_limit`: Total number of chat of user and model allowed.  
-    /// ## Example
-    /// new(2) will allow only 1 question and 1 reply to be stored.
+    /// Creates a new `Session` with a specified history limit.
+    ///
+    /// # Arguments
+    /// * `history_limit` - The maximum number of individual messages (user and model) to keep in history.
+    ///
+    /// # Example
+    /// `Session::new(2)` will store only the last question and its reply.
     pub fn new(history_limit: usize) -> Self {
         Self {
             history: VecDeque::new(),
@@ -92,6 +100,8 @@ impl Session {
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
+    /// Not recommended to use. Use `session.reply()`, `session.ask()`,
+    /// `session.add_function_response()` instead.
     fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
         if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
             if last_chat.role() == chat.role() {
@@ -122,8 +132,9 @@ impl Session {
     pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::User, parts)).unwrap()
     }
-    /// If ask_string is called more than once without passing through `gemini.ask(&mut session)`
-    /// or `session.reply("opportunist")`, the prompt string is concatenated with the previous prompt.
+    /// Appends a user prompt to the session history.
+    ///
+    /// If called multiple times without an intervening model response, the prompts are concatenated.
     pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
         self.add_chat(Chat::new(Role::User, vec![prompt.into().into()]))
             .unwrap()
@@ -135,6 +146,13 @@ impl Session {
         self.add_chat(Chat::new(Role::Model, vec![prompt.into().into()]))
             .unwrap()
     }
+    /// Adds a function response to the session history.
+    ///
+    /// This is typically used after the model has requested a function call.
+    /// The response will be formatted as a `Role::Function` chat.
+    ///
+    /// # Errors
+    /// Returns `AddFunctionResponseError::FunctionResponseAfterUser` if trying to add a response when a user prompt is expected.
     pub fn add_function_response<T: Serialize>(
         &mut self,
         name: impl Into<String>,

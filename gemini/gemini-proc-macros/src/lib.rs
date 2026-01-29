@@ -4,6 +4,24 @@ use syn::{
     parse_macro_input, Attribute, Data, DeriveInput, Fields, FnArg, ItemFn, Lit, Meta, Pat, Type,
 };
 
+/// Attribute macro to mark a function as callable by Gemini.
+///
+/// This macro generates a schema for the function and an `execute` method to call it
+/// with JSON arguments.
+///
+/// # Requirements
+/// - Function arguments must be owned types that implement `GeminiSchema` (e.g., `String`, `i32`, `bool`).
+/// - References are not supported.
+/// - The function can be `async` and can return a `Result` (the `Ok` value must implement `Serialize`).
+///
+/// # Example
+/// ```ignore
+/// #[gemini_function]
+/// /// Returns the current weather for a location.
+/// fn get_weather(location: String) -> String {
+///     format!("The weather in {} is sunny.", location)
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(item as ItemFn);
@@ -127,13 +145,21 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+/// Macro to execute function calls requested by Gemini and update the session history.
+///
+/// # Usage
+/// `execute_function_calls!(session, function1, function2, ...)`
+///
+/// # Returns
+/// A `Vec<Option<Result<serde_json::Value, String>>>` containing the results of each function call.
+/// The length of the vector matches the number of functions provided.
+/// - `Some(Ok(value))` if the function was called and succeeded.
+/// - `Some(Err(err))` if the function was called but failed.
+/// - `None` if the function was not called.
+///
+/// # Note
+/// The `session` is automatically updated with the `FunctionResponse` for successful calls.
 #[proc_macro]
-/// - Provide all functions to be called `execute_function_calls!(session, f1, f2...)`
-/// - `Returns` Vec<Option<Result<serde_json::Value, String>>>
-/// - Returned vec length always equals the number of functions passed
-/// - `None` if f_i was not called by Gemini
-/// *if function don't return type Result, it always return `Result::Ok(value)`*
-/// - `Session` struct is automatically updated with FunctionResponse only for `Ok` result
 pub fn execute_function_calls(input: TokenStream) -> TokenStream {
     use syn::parse::{Parse, ParseStream};
     use syn::{Expr, Token};
@@ -208,6 +234,27 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+/// Attribute macro to derive the `GeminiSchema` trait for a struct or enum.
+///
+/// This allows the type to be used in structured output (`set_json_mode`) or as a parameter
+/// in a `gemini_function`.
+///
+/// # Requirements
+/// - For structs: only named fields are supported.
+/// - For enums: only unit variants (no data) are supported.
+/// - Field/variant types must also implement `GeminiSchema`.
+/// - Doc comments on fields and variants are extracted as descriptions in the schema.
+///
+/// # Example
+/// ```ignore
+/// #[gemini_schema]
+/// struct SearchResult {
+///     /// The title of the page.
+///     title: String,
+///     /// The URL of the page.
+///     url: String,
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn gemini_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);

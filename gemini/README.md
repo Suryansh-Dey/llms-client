@@ -1,162 +1,52 @@
-# Overview
-A Rust library to use Google's Gemini API with macro super powers! It is extremely flexible and modular to integrate with any framework.  
-For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream of futures, which is a pain.
+# Gemini Client Library
 
-### Features
-- Automatic context management
-- Automatic function calling. Trust me!
-- Automatic JSON schema generation
-- Inbuilt markdown to parts parser enables AI to see markdown images or files, even if they are from your device storage!
-- Vision to see images
-- Code execution by Gemini
-- File reading like PDF or any document, even audio files like MP3
-- Function call support
-- Thinking and Safety setting
-- Supports Session management in WASM environment with `default-features = false`
+A powerful, flexible, and feature-rich Rust library for Google's Gemini API, featuring procedural macros for "super powers" like automatic JSON schema generation and function calling.
 
-# Basic usage
+## Features
+
+- **Automatic Context Management**: Simple `Session` struct to handle conversation history.
+- **Procedural Macros**:
+    - `#[gemini_schema]`: Generate JSON schemas directly from your Rust structs and enums.
+    - `#[gemini_function]`: Turn Rust functions into Gemini-callable tools with minimal boilerplate.
+    - `execute_function_calls!`: Seamlessly dispatch and handle multiple function calls requested by Gemini.
+- **Multimodal Support**: Built-in markdown parser for images and local files.
+- **Advanced Capabilities**: Code execution, PDF/document/audio reading, and "Thinking" mode support.
+- **Framework Agnostic**: Modular design that works anywhere, including Actix, Axum, and WASM environments.
+
+### Basic Chat Example
+
 ```rust
-use gemini_client_api::gemini::{
-    ask::Gemini,
-    types::request::{Tool, ThinkingConfig},
-    types::sessions::Session,
-    utils::MarkdownToParts,
-};
-use futures::StreamExt;
-use serde::Deserialize;
-use std::error::Error;
-use serde_json::json;
+use gemini_client_api::gemini::ask::Gemini;
+use gemini_client_api::gemini::types::sessions::Session;
 
-async fn see_markdown() {
-    let mut session = Session::new(6);
+#[tokio::main]
+async fn main() {
+    let mut session = Session::new(10); // Keep last 10 messages
     let ai = Gemini::new(
-        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.0-flash",
-        None,
+        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set"),
+        "gemini-2.5-flash",
+        None, // Optional system instruction
     );
-    let response1 = ai.ask(session.ask_string("Hi, can you tell me which one of two bowls has more healty item?")).await.unwrap();
-    //Question and reply both automatically gets stored in `session` for context.
-    println!("{}", response1.get_chat().get_text_no_think(""));
 
-    let parts = MarkdownToParts::new("Here is their ![image](https://th.bing.com/th?id=ORMS.0ba175d4898e31ae84dc62d9cd09ec84&pid=Wdp&w=612&h=304&qlt=90&c=1&rs=1&dpr=1.5&p=0). Thanks by the way", |_|mime::IMAGE_PNG)
-        .await.process();
-    //Can even read from file path of files on your device!
-
-    let response2 = ai.ask(session.ask(parts))
-    .await.unwrap();
-
-    println!("{}", response2.get_chat().get_text_no_think(""));
+    let response = ai.ask(session.ask_string("Hello, Gemini!")).await.unwrap();
+    println!("Gemini: {}", response.get_chat().get_text_no_think(""));
 }
+```
 
-use gemini_client_api::gemini::utils::{GeminiSchema, gemini_schema};
-async fn ask_string_for_json_with_struct() {
-    #[derive(Debug, Deserialize)]
-    #[gemini_schema]
-    struct Schema {
-        positive: Vec<String>,
-        negative: Vec<String>,
-    }
-    let mut session = Session::new(6).set_remember_reply(false);
-    let response = Gemini::new(
-        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-flash",
-        Some("Classify the given words".into()),
-    )
-    .set_json_mode(Schema::gemini_schema())
-    .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance", "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
-    .await
-    .unwrap();
+## Deep Dive
 
-    let json: Schema = response.get_json().unwrap();
-    println!(
-        "positives:{:?}\nnegatives:{:?}",
-        json.positive, json.negative
-    )
-}
+Explore our comprehensive examples to learn how to use advanced features:
 
-async fn ask_streamed() {
-    let mut session = Session::new(6);
-    session.ask_string("How are you");
-    let ai = Gemini::new(
-        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-flash",
-        None,
-    );
-    let mut response_stream = ai
-        .ask_as_stream(session).await.unwrap();
-    while let Some(response) = response_stream.next().await {
-        println!("{}", response.unwrap().get_chat().get_text_no_think(""));
-    }
-}
+- [**Basic Chat**](examples/basic_chat.rs): Simple request-response interaction.
+- [**Streaming**](examples/streaming.rs): Handling real-time chunks for a snappier UI experience.
+- [**Structured Output**](examples/structured_output.rs): Forcing Gemini to reply in a specific JSON format using `#[gemini_schema]`.
+- [**Function Calling**](examples/function_calling.rs): Giving Gemini tools to interact with the real world using `#[gemini_function]`.
+- [**Thinking Mode**](examples/thinking.rs): Enabling Gemini's reasoning capabilities.
+- [**Multimodal**](examples/multimodal.rs): Sending images and files to Gemini.
 
-async fn ask_streamed_with_tools() {
-    let mut session = Session::new(6);
-    session.ask_string("find sum of first 100 prime number using code");
-    let ai = Gemini::new(
-        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-flash",
-        None,
-    )
-    .set_tools(vec![Tool::CodeExecution(json!({}))]);
-    let mut response_stream = ai
-        .ask_as_stream(session).await.unwrap();
-    while let Some(response) = response_stream.next().await {
-        if let Ok(response) = response {
-            println!("{}", response.get_chat().get_text_no_think(""));
-        }
-    }
-    println!(
-        "Complete reply: {:#?}",
-        json!(response_stream.get_session().get_last_chat().unwrap())
-    );
-}
+For WASM environments, disable default features:
 
-use gemini_client_api::gemini::utils::{GeminiSchema, execute_function_calls, gemini_function};
-#[gemini_function]
-///Lists files in my dir
-async fn list_files(
-    ///Path to the dir
-    path: String,
-) -> Result<String, Box<dyn Error>> {
-    Ok(std::fs::read_dir(path)?
-        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
-        .collect::<Vec<String>>()
-        .join(", "))
-}
-
-async fn ask_with_function_calls() {
-    let mut session = Session::new(10);
-    let ai = Gemini::new(
-        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-flash",
-        None,
-    )
-    .set_tools(vec![Tool::FunctionDeclarations(vec![
-        list_files::gemini_schema(),
-    ])]);
-    session.ask_string("What files I have in current directory");
-    let response = ai.ask(&mut session).await.unwrap(); //Received a function call
-    let result = execute_function_calls!(session, list_files); //doesn't update session if Error
-    println!("function output: {:?}", result);
-    if result[0].is_some() {
-        //If any function call at all happened
-        let response = ai.ask(&mut session).await.unwrap(); //Providing output of the function call and continue
-        println!("{:?}", response.get_chat().parts());
-    } else {
-        println!("{:?}", response.get_chat().parts());
-    }
-}
-
-async fn ask_thinking() {
-    let mut session = Session::new(4);
-    let ai = Gemini::new(
-        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
-        "gemini-2.5-flash",
-        None,
-    )
-    .set_thinking_config(ThinkingConfig::new(true, 1024));
-    session.ask_string("How to calculate width of a binary tree?");
-    let response = ai.ask(&mut session).await.unwrap();
-    println!("{}", response.get_chat().get_text_no_think(""));
-}
+```toml
+[dependencies]
+gemini-client-api = { version = "...", default-features = false }
 ```
