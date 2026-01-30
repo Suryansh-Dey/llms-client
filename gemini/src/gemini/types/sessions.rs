@@ -8,8 +8,10 @@ use std::{usize, vec};
 #[derive(thiserror::Error, Debug)]
 pub enum AddFunctionResponseError {
     #[error("Error while parsing: {0}")]
+    ///Error while parsing
     InvalidResponseFormat(serde_json::Error),
     #[error("FunctionResponse cannot be added after User prompt")]
+    ///FunctionResponse cannot be added after User prompt
     FunctionResponseAfterUser,
 }
 

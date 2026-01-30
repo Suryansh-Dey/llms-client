@@ -31,13 +31,16 @@ pub enum InlineDataError {
     #[cfg(feature = "reqwest")]
     RequestFailed(reqwest::Error),
     #[error("Checker function returned false")]
+    ///Checker function returned false
     CheckerFalse,
     #[error("Content-Type was missing in response headers")]
+    ///Content-Type was missing in response headers
     ContentTypeMissing,
     #[error(transparent)]
     #[cfg(feature = "reqwest")]
     ContentTypeParseFailed(ToStrError),
     #[error("Failed to parse mime type: {0}")]
+    ///Failed to parse mime type
     InvalidMimeType(FromStrError),
 }
 
