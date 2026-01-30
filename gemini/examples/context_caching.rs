@@ -1,5 +1,5 @@
 use gemini_client_api::gemini::ask::Gemini;
-use gemini_client_api::gemini::types::caching::CachedContent;
+use gemini_client_api::gemini::types::caching::CachedContentBuilder;
 use gemini_client_api::gemini::types::request::InlineData;
 use gemini_client_api::gemini::types::sessions::Session;
 use std::env;
@@ -10,28 +10,20 @@ async fn main() {
     let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
     let mut session = Session::new(10);
 
-    session.ask("Where is there in this pdf");
+    session.ask("Where is there in this pdf".repeat(200)); //Faking big context for example
     session.ask(InlineData::from_url("https://bitmesra.ac.in/UploadedDocuments/admingo/files/221225_List%20of%20Holiday_2026_26.pdf").await.unwrap());
 
-    let cached_content_req = CachedContent::new(
-        None, // Let the server assign the name
-        Some("Simulated Large Doc".to_string()),
-        "models/gemini-2.5-flash".to_string(), // Model must match
-        None,
-        Some(
+    let cached_content_req = CachedContentBuilder::new("gemini-2.5-flash")
+        .display_name("Simulated Large Doc")
+        .contents(
             session
                 .get_history()
                 .into_iter()
                 .map(|e| e.to_owned())
                 .collect(),
-        ),
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some("300s".to_string()), // TTL
-    );
+        )
+        .ttl("300s")
+        .build();
 
     println!("Creating cache...");
     match ai.create_cache(&cached_content_req).await {
