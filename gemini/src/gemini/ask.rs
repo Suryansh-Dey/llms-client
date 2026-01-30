@@ -1,4 +1,5 @@
 use super::error::GeminiResponseError;
+use super::types::caching::{CachedContent, CachedContentList, CachedContentUpdate};
 use super::types::request::*;
 use super::types::response::*;
 use super::types::sessions::Session;
@@ -25,6 +26,7 @@ pub struct Gemini {
     safety_settings: Option<Vec<SafetySetting>>,
     tools: Option<Vec<Tool>>,
     tool_config: Option<ToolConfig>,
+    cached_content: Option<String>,
 }
 
 impl Gemini {
@@ -52,6 +54,7 @@ impl Gemini {
             safety_settings: None,
             tools: None,
             tool_config: None,
+            cached_content: None,
         }
     }
     /// Creates a new `Gemini` client with a custom API timeout.
@@ -77,6 +80,7 @@ impl Gemini {
             safety_settings: None,
             tools: None,
             tool_config: None,
+            cached_content: None,
         }
     }
     /// Returns a mutable reference to the generation configuration.
@@ -147,6 +151,166 @@ impl Gemini {
         self.tools = None;
         self
     }
+    pub fn set_cached_content(mut self, name: impl Into<String>) -> Self {
+        self.cached_content = Some(name.into());
+        self
+    }
+    pub fn remove_cached_content(mut self) -> Self {
+        self.cached_content = None;
+        self
+    }
+
+    // Cache management methods
+
+    #[cfg(feature = "reqwest")]
+    pub async fn create_cache(
+        &self,
+        cached_content: &CachedContent,
+    ) -> Result<CachedContent, GeminiResponseError> {
+        let req_url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/cachedContents?key={}",
+            self.api_key
+        );
+
+        let response = self
+            .client
+            .post(req_url)
+            .json(cached_content)
+            .send()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+
+        if !response.status().is_success() {
+            let text = response
+                .text()
+                .await
+                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            return Err(GeminiResponseError::StatusNotOk(text));
+        }
+
+        let cached_content: CachedContent = response
+            .json()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        Ok(cached_content)
+    }
+
+    #[cfg(feature = "reqwest")]
+    pub async fn list_caches(&self) -> Result<CachedContentList, GeminiResponseError> {
+        let req_url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/cachedContents?key={}",
+            self.api_key
+        );
+
+        let response = self
+            .client
+            .get(req_url)
+            .send()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+
+        if !response.status().is_success() {
+            let text = response
+                .text()
+                .await
+                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            return Err(GeminiResponseError::StatusNotOk(text));
+        }
+
+        let list: CachedContentList = response
+            .json()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        Ok(list)
+    }
+
+    #[cfg(feature = "reqwest")]
+    pub async fn get_cache(&self, name: &str) -> Result<CachedContent, GeminiResponseError> {
+        let req_url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
+            name, self.api_key
+        );
+
+        let response = self
+            .client
+            .get(req_url)
+            .send()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+
+        if !response.status().is_success() {
+            let text = response
+                .text()
+                .await
+                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            return Err(GeminiResponseError::StatusNotOk(text));
+        }
+
+        let cached_content: CachedContent = response
+            .json()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        Ok(cached_content)
+    }
+
+    #[cfg(feature = "reqwest")]
+    pub async fn update_cache(
+        &self,
+        name: &str,
+        update: &CachedContentUpdate,
+    ) -> Result<CachedContent, GeminiResponseError> {
+        let req_url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
+            name, self.api_key
+        );
+
+        let response = self
+            .client
+            .patch(req_url)
+            .json(update)
+            .send()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+
+        if !response.status().is_success() {
+            let text = response
+                .text()
+                .await
+                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            return Err(GeminiResponseError::StatusNotOk(text));
+        }
+
+        let cached_content: CachedContent = response
+            .json()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        Ok(cached_content)
+    }
+
+    #[cfg(feature = "reqwest")]
+    pub async fn delete_cache(&self, name: &str) -> Result<(), GeminiResponseError> {
+        let req_url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
+            name, self.api_key
+        );
+
+        let response = self
+            .client
+            .delete(req_url)
+            .send()
+            .await
+            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+
+        if !response.status().is_success() {
+            let text = response
+                .text()
+                .await
+                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            return Err(GeminiResponseError::StatusNotOk(text));
+        }
+
+        Ok(())
+    }
 
     /// Sends a prompt to the model and waits for the full response.
     ///
@@ -177,6 +341,7 @@ impl Gemini {
                 self.generation_config.as_ref(),
                 self.safety_settings.as_deref(),
                 self.tool_config.as_ref(),
+                self.cached_content.clone(),
             ))
             .send()
             .await
@@ -242,6 +407,7 @@ impl Gemini {
                 self.generation_config.as_ref(),
                 self.safety_settings.as_deref(),
                 self.tool_config.as_ref(),
+                self.cached_content.clone(),
             ))
             .send()
             .await;

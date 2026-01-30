@@ -398,7 +398,7 @@ pub struct SafetySetting {
     threshold: BlockThreshold,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolConfig {
     /// Configuration for function calling.
@@ -406,7 +406,7 @@ pub struct ToolConfig {
     pub function_calling_config: Option<FunctionCallingConfig>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FunctionCallingConfig {
     /// The mode in which function calling should execute.
@@ -420,7 +420,7 @@ pub struct FunctionCallingConfig {
     pub allowed_function_names: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FunctionCallingMode {
     /// Default model behavior. Model decides whether to predict a
@@ -445,9 +445,11 @@ pub struct GeminiRequestBody<'a> {
     safety_settings: Option<&'a [SafetySetting]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_config: Option<&'a ToolConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cached_content: Option<String>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum Tool {
     /// Generally it can be `Tool::GoogleSearch(json!({}))`
