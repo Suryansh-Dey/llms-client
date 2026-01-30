@@ -1,28 +1,19 @@
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum GeminiResponseError {
+    #[error(transparent)]
     #[cfg(feature = "reqwest")]
     ReqwestError(reqwest::Error),
-    ///Contains the response string
+    #[error("Response status not Ok. Response string: {0}")]
     StatusNotOk(String),
+    #[error("Cannot Responnd if last Chat has Role::Model")]
     NothingToRespond,
 }
-impl std::fmt::Display for GeminiResponseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-impl std::error::Error for GeminiResponseError {}
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum GeminiResponseStreamError {
+    #[error(transparent)]
     #[cfg(feature = "reqwest")]
     ReqwestError(reqwest::Error),
-    ///Contains the response string
+    #[error("Invalid Response Format received. Response: {0}")]
     InvalidResposeFormat(String),
 }
-impl std::fmt::Display for GeminiResponseStreamError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-impl std::error::Error for GeminiResponseStreamError {}

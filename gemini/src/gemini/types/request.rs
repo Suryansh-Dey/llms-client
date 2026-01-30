@@ -25,14 +25,19 @@ pub struct InlineData {
     data: String,
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum InlineDataError {
+    #[error(transparent)]
     #[cfg(feature = "reqwest")]
     RequestFailed(reqwest::Error),
+    #[error("Checker function returned false")]
     CheckerFalse,
+    #[error("Content-Type was missing in response headers")]
     ContentTypeMissing,
+    #[error(transparent)]
     #[cfg(feature = "reqwest")]
     ContentTypeParseFailed(ToStrError),
+    #[error("Failed to parse mime type: {0}")]
     InvalidMimeType(FromStrError),
 }
 

@@ -1,21 +1,16 @@
 use super::request::*;
 use super::response::GeminiResponse;
-use core::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::VecDeque;
 use std::{usize, vec};
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum AddFunctionResponseError {
+    #[error("Error while parsing: {0}")]
     InvalidResponseFormat(serde_json::Error),
-    ///FunctionResponse cannot be added after User prompt
+    #[error("FunctionResponse cannot be added after User prompt")]
     FunctionResponseAfterUser,
-}
-impl fmt::Display for AddFunctionResponseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
 }
 
 /// Manages the conversation history and configuration for a Gemini session.
