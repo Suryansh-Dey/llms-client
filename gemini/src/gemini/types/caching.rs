@@ -1,8 +1,9 @@
+use std::time::Duration;
+use super::request::{SystemInstruction, Tool, ToolConfig};
 use derive_new::new;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-
-use super::request::{SystemInstruction, Tool, ToolConfig};
+use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Getters)]
 #[serde(rename_all = "camelCase")]
@@ -70,6 +71,12 @@ pub struct CachedContentUpdate {
     expire_time: Option<String>,
 }
 
+#[derive(Error, Debug)]
+pub enum CachedContentBuilderError {
+    #[error("Both ttl and expire_time cannot be set")]
+    TtlAndExpireTime,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct CachedContentBuilder {
     name: Option<String>,
@@ -79,57 +86,61 @@ pub struct CachedContentBuilder {
     contents: Option<Vec<super::request::Chat>>,
     tools: Option<Vec<Tool>>,
     tool_config: Option<ToolConfig>,
-    create_time: Option<String>,
-    update_time: Option<String>,
     expire_time: Option<String>,
     ttl: Option<String>,
 }
 
 impl CachedContentBuilder {
     pub fn new(model: impl Into<String>) -> Self {
+        let model = model.into();
         Self {
-            model: format!("models/{}", model.into()),
+            model: if model.starts_with("models/") {
+                model
+            } else {
+                format!("models/{}", model)
+            },
             ..Default::default()
         }
     }
-
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
-
     pub fn display_name(mut self, display_name: impl Into<String>) -> Self {
         self.display_name = Some(display_name.into());
         self
     }
-
     pub fn system_instruction(mut self, system_instruction: SystemInstruction) -> Self {
         self.system_instruction = Some(system_instruction);
         self
     }
-
     pub fn contents(mut self, contents: Vec<super::request::Chat>) -> Self {
         self.contents = Some(contents);
         self
     }
-
     pub fn tools(mut self, tools: Vec<Tool>) -> Self {
         self.tools = Some(tools);
         self
     }
-
     pub fn tool_config(mut self, tool_config: ToolConfig) -> Self {
         self.tool_config = Some(tool_config);
         self
     }
-
-    pub fn ttl(mut self, ttl: impl Into<String>) -> Self {
-        self.ttl = Some(ttl.into());
+    pub fn ttl(mut self, ttl: Duration) -> Self {
+        self.ttl = Some(format!("{}s", ttl.as_secs()));
         self
     }
-
-    pub fn build(self) -> CachedContent {
-        CachedContent {
+    /// Expected format: RFC 3339 format e.g. '2014-10-02T15:01:23Z'
+    pub fn expire_time(mut self, expire_time: impl Into<String>) -> Self {
+        let expire_time = expire_time.into();
+        self.expire_time = Some(expire_time);
+        self
+    }
+    pub fn build(self) -> Result<CachedContent, CachedContentBuilderError> {
+        if self.expire_time.is_some() && self.ttl.is_some() {
+            return Err(CachedContentBuilderError::TtlAndExpireTime);
+        }
+        Ok(CachedContent {
             name: self.name,
             display_name: self.display_name,
             model: self.model,
@@ -137,10 +148,10 @@ impl CachedContentBuilder {
             contents: self.contents,
             tools: self.tools,
             tool_config: self.tool_config,
-            create_time: self.create_time,
-            update_time: self.update_time,
+            create_time: None,
+            update_time: None,
             expire_time: self.expire_time,
             ttl: self.ttl,
-        }
+        })
     }
 }

@@ -3,6 +3,7 @@ use gemini_client_api::gemini::types::caching::CachedContentBuilder;
 use gemini_client_api::gemini::types::request::InlineData;
 use gemini_client_api::gemini::types::sessions::Session;
 use std::env;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() {
@@ -22,8 +23,8 @@ async fn main() {
                 .map(|e| e.to_owned())
                 .collect(),
         )
-        .ttl("300s")
-        .build();
+        .ttl(Duration::from_secs(300))
+        .build().unwrap();
 
     println!("Creating cache...");
     match ai.create_cache(&cached_content_req).await {

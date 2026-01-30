@@ -3,7 +3,7 @@ use serde_json::json;
 
 #[test]
 fn test_cached_content_serialization() {
-    let cached_content = CachedContentBuilder::new("gemini-2.5-flash").build();
+    let cached_content = CachedContentBuilder::new("gemini-2.5-flash").build().unwrap();
     let json = serde_json::to_value(&cached_content).unwrap();
     assert_eq!(json["model"], "models/gemini-2.5-flash");
 }
