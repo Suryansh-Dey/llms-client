@@ -123,7 +123,7 @@ async fn ask_with_function_calls() {
     .set_tools(vec![Tool::FunctionDeclarations(vec![
         list_files::gemini_schema(),
     ])]);
-    session.ask_string("What files I have in current directory");
+    session.ask("What files I have in current directory");
     let response = ai.ask(&mut session).await.unwrap(); //Received a function call
     let result = execute_function_calls!(session, list_files); //doesn't update session if Error
     println!("function output: {:?}", result);

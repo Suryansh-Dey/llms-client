@@ -11,6 +11,7 @@ A powerful, flexible, and feature-rich Rust library for Google's Gemini API, fea
     - `execute_function_calls!`: Seamlessly dispatch and handle multiple function calls requested by Gemini.
 - **Multimodal Support**: Built-in markdown parser for images and local files.
 - **Advanced Capabilities**: Code execution, PDF/document/audio reading, and "Thinking" mode support.
+- **Context Caching**: Efficiently manage and reuse large context windows.
 - **Framework Agnostic**: Modular design that works anywhere, including Actix, Axum, and WASM environments.
 
 ### Basic Chat Example
@@ -43,6 +44,7 @@ Explore our comprehensive examples to learn how to use advanced features:
 - [**Function Calling**](examples/function_calling.rs): Giving Gemini tools to interact with the real world using `#[gemini_function]`.
 - [**Thinking Mode**](examples/thinking.rs): Enabling Gemini's reasoning capabilities.
 - [**Multimodal**](examples/multimodal.rs): Sending images and files to Gemini.
+- [**Context Caching**](examples/context_caching.rs): Creating and using cached content for large contexts.
 
 For WASM environments, disable default features:
 

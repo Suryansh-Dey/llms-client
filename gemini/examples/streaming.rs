@@ -17,7 +17,7 @@ async fn main() {
     stdout().flush().unwrap();
 
     // Start a streaming request
-    let mut response_stream = ai.ask_as_stream(session.ask_string(prompt).clone()).await.unwrap();
+    let mut response_stream = ai.ask_as_stream(session.ask(prompt).clone()).await.unwrap();
 
     while let Some(chunk_result) = response_stream.next().await {
         match chunk_result {

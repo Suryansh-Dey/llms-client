@@ -12,7 +12,7 @@ async fn see_web_markdown() {
         "gemini-2.5-flash",
         None,
     )
-    .ask(session.ask(parts))
+    .ask(session.ask_parts(parts))
     .await
     .unwrap();
 
@@ -33,7 +33,7 @@ async fn see_fs_markdown() {
         "gemini-2.5-flash",
         None,
     )
-    .ask(session.ask(parts))
+    .ask(session.ask_parts(parts))
     .await
     .unwrap();
 

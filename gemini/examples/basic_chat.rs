@@ -18,7 +18,7 @@ async fn main() {
     let prompt = "What are the benefits of using Rust for systems programming?";
     println!("User: {}", prompt);
 
-    let response = ai.ask(session.ask_string(prompt)).await.unwrap();
+    let response = ai.ask(session.ask(prompt)).await.unwrap();
 
     // 4. Print the reply
     // get_text_no_think("") extracts text and ignores "thought" parts (if any)

@@ -12,7 +12,7 @@ async fn ask_string() {
         "gemini-2.5-flash",
         None,
     )
-    .ask(session.ask_string("Hi"))
+    .ask(session.ask("Hi"))
     .await
     .unwrap();
     println!("{}", response.get_chat().get_text_all(""));
@@ -40,7 +40,7 @@ async fn ask_string_for_json() {
         },
         "required":["positive", "negative"]
     }))
-    .ask(session.ask_string(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance" "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
+    .ask(session.ask(r#"["Joy", "Success", "Love", "Hope", "Confidence", "Peace", "Victory", "Harmony", "Inspiration", "Gratitude", "Prosperity", "Strength", "Freedom", "Comfort", "Brilliance" "Fear", "Failure", "Hate", "Doubt", "Pain", "Suffering", "Loss", "Anxiety", "Despair", "Betrayal", "Weakness", "Chaos", "Misery", "Frustration", "Darkness"]"#))
     .await
     .unwrap();
 
@@ -51,14 +51,14 @@ async fn ask_string_for_json() {
 #[tokio::test]
 async fn ask_streamed() {
     let mut session = Session::new(6);
-    session.ask_string("Can you explain me something in one line?");
+    session.ask("Can you explain me something in one line?");
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.5-flash",
         None,
     );
     ai.ask(&mut session).await.unwrap();
-    session.ask_string("machine learning");
+    session.ask("machine learning");
     let mut response_stream = ai
         .ask_as_stream_with_extractor(session, |session, _| {
             session.get_last_chat().unwrap().get_text_no_think("")
@@ -73,7 +73,7 @@ async fn ask_streamed() {
 #[tokio::test]
 async fn ask_streamed_with_tools() {
     let mut session = Session::new(6);
-    session.ask_string("find sum of first 100 prime number using code");
+    session.ask("find sum of first 100 prime number using code");
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.5-flash",
@@ -99,7 +99,7 @@ async fn ask_thinking() {
         None,
     )
     .set_thinking_config(ThinkingConfig::new(true, 1024));
-    session.ask_string("How to calculate width of a binary tree?");
+    session.ask("How to calculate width of a binary tree?");
     let response = ai.ask(&mut session).await.unwrap();
     println!("{}", response.get_chat().get_text_no_think(""));
 }

@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("User: {}\n", prompt);
 
     // 2. Ask Gemini. It might reply with one or more function calls.
-    let mut response = ai.ask(session.ask_string(prompt)).await?;
+    let mut response = ai.ask(session.ask(prompt)).await?;
 
     // 3. Loop to handle potential multiple rounds of function calls
     loop {

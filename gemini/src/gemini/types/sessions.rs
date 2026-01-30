@@ -129,27 +129,19 @@ impl Session {
     }
     /// If `ask` is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("ok")`, the parts is concatenated with the previous parts.
-    pub fn ask(&mut self, parts: Vec<Part>) -> &mut Self {
+    pub fn ask_parts(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::User, parts)).unwrap()
     }
     /// If `ask_part` is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("ok")`, the parts is concatenated with the previous parts.
-    pub fn ask_part(&mut self, part: impl Into<Part>) -> &mut Self {
-        self.ask(vec![part.into()])
+    pub fn ask(&mut self, part: impl Into<Part>) -> &mut Self {
+        self.ask_parts(vec![part.into()])
     }
     /// Appends a user prompt to the session history.
     ///
     /// If called multiple times without an intervening model response, the prompts are concatenated.
-    pub fn ask_string(&mut self, prompt: impl Into<String>) -> &mut Self {
-        self.add_chat(Chat::new(Role::User, vec![prompt.into().into()]))
-            .unwrap()
-    }
     pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::Model, parts)).unwrap()
-    }
-    pub fn reply_string(&mut self, prompt: impl Into<String>) -> &mut Self {
-        self.add_chat(Chat::new(Role::Model, vec![prompt.into().into()]))
-            .unwrap()
     }
     /// Adds a function response to the session history.
     ///

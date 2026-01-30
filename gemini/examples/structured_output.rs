@@ -8,6 +8,7 @@ use std::env;
 /// Use the `#[gemini_schema]` macro to automatically generate the JSON schema.
 #[derive(Debug, Deserialize)]
 #[gemini_schema]
+#[allow(dead_code)]
 struct MovieReview {
     /// The title of the movie.
     title: String,
@@ -33,7 +34,7 @@ async fn main() {
     let prompt = "Give me a review for the movie Interstellar.";
     println!("User: {}", prompt);
 
-    let response = ai.ask(session.ask_string(prompt)).await.unwrap();
+    let response = ai.ask(session.ask(prompt)).await.unwrap();
 
     // Extract and deserialize the JSON response
     if let Ok(review) = response.get_json::<MovieReview>() {

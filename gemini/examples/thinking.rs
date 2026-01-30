@@ -16,7 +16,7 @@ async fn main() {
     let prompt = "How many 'r's are in the word strawberry? Think step by step.";
     println!("User: {}\n", prompt);
 
-    let response = ai.ask(session.ask_string(prompt)).await.unwrap();
+    let response = ai.ask(session.ask(prompt)).await.unwrap();
 
     // Show the "thoughts" part separately
     let thoughts = response.get_chat().get_thoughts("\n");
