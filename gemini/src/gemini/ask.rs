@@ -134,7 +134,7 @@ impl Gemini {
         config["response_schema"] = schema.into();
         self
     }
-    pub fn unset_json_mode(mut self) -> Self {
+    pub fn remove_json_mode(mut self) -> Self {
         if let Some(ref mut generation_config) = self.generation_config {
             generation_config["response_schema"] = None::<Value>.into();
             generation_config["response_mime_type"] = None::<Value>.into();
@@ -147,7 +147,7 @@ impl Gemini {
         self
     }
     /// Removes all tools.
-    pub fn unset_tools(mut self) -> Self {
+    pub fn remove_tools(mut self) -> Self {
         self.tools = None;
         self
     }

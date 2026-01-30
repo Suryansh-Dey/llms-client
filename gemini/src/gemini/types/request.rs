@@ -191,6 +191,9 @@ impl Part {
             thought_signature: None,
         }
     }
+    pub fn data_mut(&mut self) -> &mut PartType {
+        &mut self.data
+    }
 }
 impl From<PartType> for Part {
     fn from(value: PartType) -> Self {
