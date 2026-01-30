@@ -4,6 +4,7 @@ use gemini_client_api::gemini::types::sessions::Session;
 use gemini_client_api::gemini::utils::MarkdownToParts;
 use std::env;
 
+#[allow(dead_code)]
 async fn raw_multimodal() {
     let mut session = Session::new(6);
     let api_key = std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");

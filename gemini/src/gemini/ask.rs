@@ -368,13 +368,10 @@ impl Gemini {
     ///```ignore
     ///use futures::StreamExt
     ///let mut response_stream = gemini.ask_as_stream_with_extractor(session,
-    ///|session, _gemini_response| session.get_last_message_text("").unwrap())
-    ///.await.unwrap(); // Use _gemini_response.get_text("") to just get the text received in every chunk
-    ///
+    ///     |session, _gemini_response| session.get_last_chat().unwrap().get_text_no_think("\n"))
+    ///    .await.unwrap(); // Use _gemini_response.get_text("") to just get the text received in every chunk
     ///while let Some(response) = response_stream.next().await {
-    ///    if let Ok(response) = response {
-    ///        println!("{}", response);
-    ///    }
+    ///    println!("{}", response.unwrap());
     ///}
     ///```
     #[cfg(feature = "reqwest")]
@@ -443,7 +440,7 @@ impl Gemini {
     ///
     /// while let Some(response) = response_stream.next().await {
     ///     if let Ok(response) = response {
-    ///         println!("{}", response.get_text(""));
+    ///         println!("{}", response.get_chat().get_text_no_think("\n"));
     ///     }
     /// }
     /// # }

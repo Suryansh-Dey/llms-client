@@ -30,7 +30,7 @@ async fn main() {
     );
 
     let response = ai.ask(session.ask("Hello, Gemini!")).await.unwrap();
-    println!("Gemini: {}", response.get_chat().get_text_no_think(""));
+    println!("Gemini: {}", response.get_chat().get_text_no_think("\n"));
 }
 ```
 
