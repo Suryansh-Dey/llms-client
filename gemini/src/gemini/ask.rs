@@ -371,7 +371,7 @@ impl Gemini {
     ///     |session, _gemini_response| session.get_last_chat().unwrap().get_text_no_think("\n"))
     ///    .await.unwrap(); // Use _gemini_response.get_text("") to just get the text received in every chunk
     ///while let Some(response) = response_stream.next().await {
-    ///    println!("{}", response.unwrap());
+    ///    println!("{}", response);
     ///}
     ///```
     #[cfg(feature = "reqwest")]
