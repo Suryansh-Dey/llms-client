@@ -119,6 +119,7 @@ impl Session {
             while let Some(front_chat) = self.history.front() {
                 match front_chat.role() {
                     Role::Function => self.history.pop_front(),
+                    Role::Model if front_chat.has_function_call() => self.history.pop_front(),
                     _ => break,
                 };
             }
