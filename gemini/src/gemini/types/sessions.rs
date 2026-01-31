@@ -42,6 +42,7 @@ impl Session {
             remember_reply: true,
         }
     }
+    ///Set to false to stop automatic context storing
     pub fn set_remember_reply(mut self, remember: bool) -> Self {
         self.remember_reply = remember;
         self
@@ -137,8 +138,14 @@ impl Session {
     /// Appends a user prompt to the session history.
     ///
     /// If called multiple times without an intervening model response, the prompts are concatenated.
-    pub fn reply(&mut self, parts: Vec<Part>) -> &mut Self {
+    pub fn reply_parts(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::Model, parts)).unwrap()
+    }
+    /// Appends a user prompt to the session history.
+    ///
+    /// If called multiple times without an intervening model response, the prompts are concatenated.
+    pub fn reply(&mut self, part: impl Into<Part>) -> &mut Self {
+        self.reply_parts(vec![part.into()])
     }
     /// Adds a function response to the session history.
     ///
@@ -168,7 +175,7 @@ impl Session {
     pub(crate) fn update<'b>(&mut self, response: &'b GeminiResponse) -> Option<&'b Vec<Part>> {
         if self.get_remember_reply() {
             let reply_parts = response.get_chat().parts();
-            self.reply(reply_parts.clone());
+            self.reply_parts(reply_parts.clone());
             Some(reply_parts)
         } else {
             if let Some(chat) = self.history.back() {

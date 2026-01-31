@@ -10,7 +10,7 @@ async fn raw_multimodal() {
     let api_key = std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
     let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
 
-    session.ask("Where is there in this pdf");
+    session.ask("What is there in this pdf");
     session.ask(InlineData::from_url("https://bitmesra.ac.in/UploadedDocuments/admingo/files/221225_List%20of%20Holiday_2026_26.pdf").await.unwrap());
 
     let response = ai.ask(&mut session).await.unwrap();

@@ -40,7 +40,7 @@ async fn execute_function_calls_test() {
         FunctionCall::new("add_numbers".to_string(), Some(json!({"a": 10, "b": 20}))).into(),
         FunctionCall::new("greet".to_string(), Some(json!({"name": "Gemini"}))).into(),
     ];
-    session.reply(parts);
+    session.reply_parts(parts);
 
     let results = execute_function_calls!(session, add_numbers, greet);
     assert_eq!(results.len(), 2);
@@ -73,7 +73,7 @@ async fn execute_function_calls_test() {
 async fn test_failure_no_session_update() {
     let mut session = Session::new(10);
     let parts = vec![FunctionCall::new("fail_fn".to_string(), Some(json!({}))).into()];
-    session.reply(parts);
+    session.reply_parts(parts);
 
     let results = execute_function_calls!(session, fail_fn);
     assert_eq!(results.len(), 1);
@@ -90,7 +90,7 @@ async fn test_failure_no_session_update() {
 async fn test_non_result_always_success() {
     let mut session = Session::new(10);
     let parts = vec![FunctionCall::new("sync_fn".to_string(), Some(json!({"x": 21}))).into()];
-    session.reply(parts);
+    session.reply_parts(parts);
 
     let results = execute_function_calls!(session, sync_fn);
     assert_eq!(results.len(), 1);

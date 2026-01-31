@@ -52,3 +52,5 @@ For WASM environments, disable default features:
 [dependencies]
 gemini-client-api = { version = "...", default-features = false }
 ```
+
+**[Change log](https://github.com/Suryansh-Dey/llms-client/blob/main/gemini/CHANGELOG.md)**
