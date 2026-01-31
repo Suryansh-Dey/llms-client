@@ -99,7 +99,7 @@ async fn ask_thinking() {
         None,
     )
     .set_thinking_config(ThinkingConfig::new(true, 1024));
-    session.ask("How to calculate width of a binary tree?");
+    session.ask("How to calculate width of a binary tree? Just give me expression in short.");
     let response = ai.ask(&mut session).await.unwrap();
     println!("{}", response.get_chat().get_text_no_think(""));
 }

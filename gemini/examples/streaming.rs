@@ -29,7 +29,7 @@ async fn main() {
                 stdout().flush().unwrap();
             }
             Err(e) => {
-                eprintln!("\nError receiving chunk: {e:?}",);
+                eprintln!("\nError receiving chunk: {e}",);
                 break;
             }
         }
@@ -67,7 +67,7 @@ async fn with_extractor() {
                 println!("Complete poem: {response}\n");
             }
             Err(e) => {
-                eprintln!("\nError receiving chunk: {e:?}",);
+                eprintln!("\nError receiving chunk: {e}",);
                 break;
             }
         }
