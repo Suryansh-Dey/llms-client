@@ -18,8 +18,7 @@ async fn main() {
 
     // 3. Ask a question
     let prompt = "What are the benefits of using Rust for systems programming?";
-    session.ask(prompt);
-    session.ask("\nKeep you answer short");
+    session.ask(prompt).ask("\nKeep you answer short"); // consecutive asks gets concatenated
 
     println!("User: {:?}", session.get_last_chat().unwrap().parts());
     let response = ai.ask(&mut session).await.unwrap();

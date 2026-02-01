@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Attribute, Data, DeriveInput, Fields, FnArg, ItemFn, Lit, Meta, Pat, Type,
+    Attribute, Data, DeriveInput, Fields, FnArg, ItemFn, Lit, Meta, Pat, Type, parse_macro_input,
 };
 
 /// Attribute macro to mark a function as callable by Gemini.

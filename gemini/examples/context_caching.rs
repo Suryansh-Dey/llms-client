@@ -11,8 +11,9 @@ async fn main() {
     let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
     let mut session = Session::new(10);
 
-    session.ask("What is there in this pdf".repeat(200)); //Faking big context for example
-    session.ask(InlineData::from_url("https://bitmesra.ac.in/UploadedDocuments/admingo/files/221225_List%20of%20Holiday_2026_26.pdf").await.unwrap());
+    //Faking big context for example
+    session.ask("What is there in this pdf".repeat(200))
+        .ask(InlineData::from_url("https://bitmesra.ac.in/UploadedDocuments/admingo/files/221225_List%20of%20Holiday_2026_26.pdf").await.unwrap());
 
     let cached_content_req = CachedContentBuilder::new("gemini-2.5-flash")
         .display_name("Simulated Large Doc")

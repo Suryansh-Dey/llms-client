@@ -52,6 +52,11 @@ pub struct CachedContent {
     #[get = "pub"]
     ttl: Option<String>, // Can be formatted as a duration string e.g. "300s"
 }
+impl CachedContent {
+    pub fn builder(model: impl Into<String>) -> CachedContentBuilder {
+        CachedContentBuilder::new(model)
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Getters)]
 #[serde(rename_all = "camelCase")]
