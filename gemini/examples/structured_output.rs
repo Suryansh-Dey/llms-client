@@ -1,6 +1,6 @@
 use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::sessions::Session;
-use gemini_client_api::gemini::utils::{gemini_schema, GeminiSchema};
+use gemini_client_api::gemini::utils::{GeminiSchema, gemini_schema};
 use serde::Deserialize;
 use std::env;
 
@@ -41,6 +41,9 @@ async fn main() {
         println!("\nGemini (Structured):");
         println!("{:#?}", review);
     } else {
-        println!("\nFailed to parse JSON response: {}", response.get_chat().get_text_no_think(""));
+        println!(
+            "\nFailed to parse JSON response: {}",
+            response.get_chat().get_text_no_think("")
+        );
     }
 }

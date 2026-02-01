@@ -20,5 +20,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Check fmt
+      run: cargo fmt --check
     - name: Run tests
       run: cargo test -- --nocapture --skip ask --skip see_web

@@ -7,7 +7,7 @@ use std::env;
 async fn main() {
     let mut session = Session::new(4);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    
+
     // Note: Thinking mode requires a supported model like gemini-2.0-flash-thinking-exp
     let ai = Gemini::new(api_key, "gemini-2.0-flash-thinking-exp", None)
         .set_thinking_config(ThinkingConfig::new(true, 1024));

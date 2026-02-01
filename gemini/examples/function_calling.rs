@@ -1,7 +1,7 @@
 use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::request::Tool;
 use gemini_client_api::gemini::types::sessions::Session;
-use gemini_client_api::gemini::utils::{execute_function_calls, gemini_function, GeminiSchema};
+use gemini_client_api::gemini::utils::{GeminiSchema, execute_function_calls, gemini_function};
 use std::env;
 use std::error::Error;
 
@@ -30,13 +30,15 @@ fn get_temperature(location: String) -> String {
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut session = Session::new(10);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    
+
     // 1. Initialize Gemini and register tools
-    let ai = Gemini::new(api_key, "gemini-2.5-flash", None)
-        .set_tools(vec![Tool::FunctionDeclarations(vec![
-            add_numbers::gemini_schema(),
-            get_temperature::gemini_schema(),
-        ])]);
+    let ai =
+        Gemini::new(api_key, "gemini-2.5-flash", None).set_tools(vec![Tool::FunctionDeclarations(
+            vec![
+                add_numbers::gemini_schema(),
+                get_temperature::gemini_schema(),
+            ],
+        )]);
 
     println!("--- Function Calling Example ---");
     let prompt = "What is 123.45 plus 678.9, and what's the weather like in London?";
@@ -49,10 +51,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         if response.get_chat().has_function_call() {
             println!("Gemini requested function calls...");
-            
+
             // 4. Use the macro to execute all requested calls and update the session
             let results = execute_function_calls!(session, add_numbers, get_temperature);
-            
+
             for (idx, res) in results.iter().enumerate() {
                 if let Some(r) = res {
                     println!("  Call #{} result: {:?}", idx, r);

@@ -24,7 +24,8 @@ async fn main() {
                 .collect(),
         )
         .ttl(Duration::from_secs(300))
-        .build().unwrap();
+        .build()
+        .unwrap();
 
     println!("Creating cache...");
     match ai.create_cache(&cached_content_req).await {

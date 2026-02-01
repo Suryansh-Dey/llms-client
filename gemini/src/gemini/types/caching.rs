@@ -1,8 +1,8 @@
-use std::time::Duration;
 use super::request::{SystemInstruction, Tool, ToolConfig};
 use derive_new::new;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Getters)]

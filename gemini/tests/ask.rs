@@ -34,7 +34,12 @@ async fn see_fs_markdown() {
         None,
     );
     ai.set_generation_config()["seed"] = 1.into();
-    let response = ai.ask(session.ask_parts(parts)).await.unwrap().get_chat().get_text_no_think("\n");
+    let response = ai
+        .ask(session.ask_parts(parts))
+        .await
+        .unwrap()
+        .get_chat()
+        .get_text_no_think("\n");
 
     assert!(response.contains("scatter plot"));
     println!("{}", response);
