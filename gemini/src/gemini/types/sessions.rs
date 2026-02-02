@@ -30,10 +30,13 @@ impl Session {
     /// Creates a new `Session` with a specified history limit.
     ///
     /// # Arguments
-    /// * `history_limit` - The maximum number of individual messages (user and model) to keep in history.
+    /// * `history_limit` - The maximum number of `Chat` to keep in history.
+    /// * Uses sliding window to maintain length.
+    /// * Might pop many elements after one new insertion to maintain valid history according to
+    /// API.
     ///
     /// # Example
-    /// `Session::new(2)` will store only the last question and its reply.
+    /// `Session::new(2)` can store only the last question and its reply.
     pub fn new(history_limit: usize) -> Self {
         Self {
             history: VecDeque::new(),
@@ -56,7 +59,7 @@ impl Session {
     pub(super) fn get_history_as_vecdeque_mut(&mut self) -> &mut VecDeque<Chat> {
         &mut self.history
     }
-    /// Count of all the chats of user and model. Divide by 2 to get No. of question reply pairs.
+    /// Count of all the chats of any role.
     pub fn get_chat_no(&self) -> usize {
         self.chat_no
     }
@@ -136,13 +139,13 @@ impl Session {
     pub fn ask(&mut self, part: impl Into<Part>) -> &mut Self {
         self.ask_parts(vec![part.into()])
     }
-    /// Appends a user prompt to the session history.
+    /// Appends a Model prompt to the session history.
     ///
     /// If called multiple times without an intervening model response, the prompts are concatenated.
     pub fn reply_parts(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::Model, parts)).unwrap()
     }
-    /// Appends a user prompt to the session history.
+    /// Appends a Model prompt to the session history.
     ///
     /// If called multiple times without an intervening model response, the prompts are concatenated.
     pub fn reply(&mut self, part: impl Into<Part>) -> &mut Self {
@@ -154,7 +157,7 @@ impl Session {
     /// The response will be formatted as a `Role::Function` chat.
     ///
     /// # Errors
-    /// Returns `AddFunctionResponseError::FunctionResponseAfterUser` if trying to add a response when a user prompt is expected.
+    /// Returns `AddFunctionResponseError::FunctionResponseAfterUser` when called after user prompt.
     pub fn add_function_response<T: Serialize>(
         &mut self,
         name: impl Into<String>,
@@ -193,8 +196,8 @@ impl Session {
     pub fn get_last_chat_mut(&mut self) -> Option<&mut Chat> {
         self.get_history_as_vecdeque_mut().back_mut()
     }
-    /// If last message is a question from user then only that is removed else the model reply and
-    /// the user's question (just before model reply)
+    /// If last Chat is of `Role::User` or `Role::Function` then only that is removed else the model reply and
+    /// the user prompt (just before model reply) are removed.
     /// # Returns
     /// Popped items as (last_chat, second_last_chat)
     pub fn forget_last_conversation(&mut self) -> (Option<Chat>, Option<Chat>) {
@@ -205,5 +208,8 @@ impl Session {
             }
         }
         (last, None)
+    }
+    pub fn remove_last_chat(&mut self) -> Option<Chat> {
+        self.history.pop_back()
     }
 }

@@ -9,11 +9,11 @@ async fn main() {
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
 
     // Note: Thinking mode requires a supported model like gemini-2.0-flash-thinking-exp
-    let ai = Gemini::new(api_key, "gemini-2.0-flash-thinking-exp", None)
+    let ai = Gemini::new(api_key, "gemini-2.5-flash", None)
         .set_thinking_config(ThinkingConfig::new(true, 1024));
 
     println!("--- Thinking Mode Example ---");
-    let prompt = "How many 'r's are in the word strawberry? Think step by step.";
+    let prompt = "How many 'r's are in the word strawberry?";
     println!("User: {}\n", prompt);
 
     let response = ai.ask(session.ask(prompt)).await.unwrap();

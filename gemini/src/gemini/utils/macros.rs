@@ -3,6 +3,7 @@ use serde_json::{Value, json};
 /// Trait for types that can generate a Gemini-compatible JSON schema.
 pub trait GeminiSchema {
     fn gemini_schema() -> Value;
+    /// Returns none if schema is of primitive type or name not provided.
     fn name(gemini_schema: &Value) -> Option<&str> {
         gemini_schema["name"].as_str()
     }
