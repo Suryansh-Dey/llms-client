@@ -1,11 +1,12 @@
 use gemini_client_api::gemini::ask::Gemini;
-use gemini_client_api::gemini::types::request::InlineData;
 use gemini_client_api::gemini::types::sessions::Session;
 use gemini_client_api::gemini::utils::MarkdownToParts;
 use std::env;
 
-#[allow(dead_code)]
+#[tokio::test]
 async fn raw_multimodal() {
+    use gemini_client_api::gemini::types::request::InlineData;
+
     let mut session = Session::new(6);
     let api_key = std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
     let ai = Gemini::new(api_key, "gemini-2.5-flash", None);

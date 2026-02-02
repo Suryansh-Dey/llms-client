@@ -40,7 +40,7 @@ async fn main() {
     session = response_stream.get_session_owned();
     println!("Updated session: {session:?}")
 }
-#[allow(dead_code)]
+#[tokio::test]
 async fn with_extractor() {
     let mut session = Session::new(10);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
