@@ -27,7 +27,7 @@ async fn main() {
 
     // Use MarkdownToParts to easily parse a string with image/file markers
     // It supports both URLs and local file paths!
-    let content = "Describe this image: ![image](https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png)";
+    let content = "Describe this image: ![](https://avatars.githubusercontent.com/u/140788315?v=4)";
     println!("Processing: {}", content);
 
     let parts = MarkdownToParts::new(content, |_| mime::IMAGE_PNG)

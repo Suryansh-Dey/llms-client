@@ -1,6 +1,6 @@
 # Gemini Client Library
 
-A powerful, flexible, and feature-rich Rust library for Google's Gemini API, featuring procedural macros for "super powers" like automatic JSON schema generation and function calling.
+A fast, flexible, and feature-rich Rust library for Google's Gemini API, featuring macros for automatic JSON schema generation and function calling. Supports all tools like Google search and maps.
 
 ## Features
 

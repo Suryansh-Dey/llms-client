@@ -64,6 +64,7 @@ impl Gemini {
     /// * `model` - The model variation to use.
     /// * `sys_prompt` - Optional system instructions.
     /// * `api_timeout` - Custom duration for request timeouts.
+    #[deprecated]
     #[cfg(feature = "reqwest")]
     pub fn new_with_timeout(
         api_key: impl Into<String>,
@@ -73,6 +74,32 @@ impl Gemini {
     ) -> Self {
         Self {
             client: Client::builder().timeout(api_timeout).build().unwrap(),
+            api_key: api_key.into(),
+            model: model.into(),
+            sys_prompt,
+            generation_config: None,
+            safety_settings: None,
+            tools: None,
+            tool_config: None,
+            cached_content: None,
+        }
+    }
+    /// Creates a new `Gemini` client with a custom API reqwest::Client.
+    ///
+    /// # Arguments
+    /// * `api_key` - Your Gemini API key.
+    /// * `model` - The model variation to use.
+    /// * `sys_prompt` - Optional system instructions.
+    /// * `client` - reqwest::Client to request gemini API.
+    #[cfg(feature = "reqwest")]
+    pub fn new_with_client(
+        api_key: impl Into<String>,
+        model: impl Into<String>,
+        sys_prompt: Option<SystemInstruction>,
+        client: Client,
+    ) -> Self {
+        Self {
+            client,
             api_key: api_key.into(),
             model: model.into(),
             sys_prompt,
