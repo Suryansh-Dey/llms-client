@@ -27,7 +27,7 @@ async fn test_callback_success() {
 
     let results = execute_function_calls_with_callback!(
         session,
-        |res| {
+        |_name, res| {
             match res {
                 Ok(val) => val,
                 Err(e) => json!({"error": e}),
@@ -58,7 +58,7 @@ async fn test_callback_failure() {
 
     let results = execute_function_calls_with_callback!(
         session,
-        |res| {
+        |_name, res| {
             match res {
                 Ok(val) => val,
                 Err(e) => json!({"error_msg": e}),

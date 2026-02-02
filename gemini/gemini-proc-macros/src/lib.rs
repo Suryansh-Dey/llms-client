@@ -150,8 +150,9 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Usage
 /// `execute_function_calls_with_callback!(session, callback, function1, function2, ...)`
 ///
-/// The `callback` should be a closure or function that takes `Result<serde_json::Value, String>`
+/// The `callback` should be a closure or function that takes `(String, Result<serde_json::Value, String>)`
 /// and returns `serde_json::Value`.
+/// (function_name, result) is passed to it
 ///
 /// # Returns
 /// A `Vec<Option<Result<serde_json::Value, String>>>` containing the results of each function call.
@@ -409,7 +410,7 @@ pub fn execute_function_calls(input: TokenStream) -> TokenStream {
 
     let input = parse_macro_input!(input as ExecuteInput);
     let callback: Expr = syn::parse_quote! {
-        |result: Result<gemini_client_api::serde_json::Value, String>| {
+        |_name: String, result: Result<gemini_client_api::serde_json::Value, String>| {
             match result {
                 Ok(value) => value,
                 Err(e) => gemini_client_api::serde_json::json!({"Error": e}),
@@ -460,7 +461,7 @@ fn generate_execute_logic(
                     let results = gemini_client_api::futures::future::join_all(futures).await;
                     for (idx, name, res) in results {
                         // Invoke callback regardless of success or failure
-                        let val_to_add = result_callback(res.clone());
+                        let val_to_add = result_callback(name.clone(), res.clone());
 
                         if let Err(e) = #session.add_function_response(name.clone(), val_to_add) {
                              results_array[idx] = Some(Err(format!(
