@@ -70,7 +70,7 @@ async fn execute_function_calls_test() {
 }
 
 #[tokio::test]
-async fn test_failure_no_session_update() {
+async fn test_failure_err_session_update() {
     let mut session = Session::new(10);
     let parts = vec![FunctionCall::new("fail_fn".to_string(), Some(json!({}))).into()];
     session.reply_parts(parts);
@@ -82,8 +82,9 @@ async fn test_failure_no_session_update() {
     let history = session.get_history();
     // Only model reply should be there.
     // No function response should be added because it failed.
-    assert_eq!(history.len(), 1);
+    assert_eq!(history.len(), 2);
     assert_eq!(*history[0].role(), Role::Model);
+    assert_eq!(*history[1].role(), Role::Function);
 }
 
 #[tokio::test]
@@ -125,7 +126,7 @@ async fn ask_with_function_calls() {
     ])]);
     session.ask("What files I have in current directory");
     let response = ai.ask(&mut session).await.unwrap(); //Received a function call
-    let result = execute_function_calls!(session, list_files); //doesn't update session if Error
+    let result = execute_function_calls!(session, list_files);
     println!("function output: {:?}", result);
     if result[0].is_some() {
         //If any function call at all happened

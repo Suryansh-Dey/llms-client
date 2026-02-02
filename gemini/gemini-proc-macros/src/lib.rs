@@ -145,95 +145,6 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-/// Macro to execute function calls requested by Gemini and update the session history.
-///
-/// # Usage
-/// `execute_function_calls!(session, function1, function2, ...)`
-///
-/// # Returns
-/// A `Vec<Option<Result<serde_json::Value, String>>>` containing the results of each function call.
-/// The length of the vector matches the number of functions provided.
-/// - `Some(Ok(value))` if the function was called and succeeded.
-/// - `Some(Err(err))` if the function was called but failed.
-/// - `None` if the function was not called.
-///
-/// # Note
-/// The `session` is automatically updated with the `FunctionResponse` for successful calls.
-#[proc_macro]
-pub fn execute_function_calls(input: TokenStream) -> TokenStream {
-    use syn::parse::{Parse, ParseStream};
-    use syn::{Expr, Token};
-
-    struct ExecuteInput {
-        session: Expr,
-        _comma: Token![,],
-        functions: syn::punctuated::Punctuated<syn::Path, Token![,]>,
-    }
-
-    impl Parse for ExecuteInput {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            Ok(ExecuteInput {
-                session: input.parse()?,
-                _comma: input.parse()?,
-                functions: input.parse_terminated(syn::Path::parse, Token![,])?,
-            })
-        }
-    }
-
-    let input = parse_macro_input!(input as ExecuteInput);
-    let session = &input.session;
-    let functions = &input.functions;
-    let num_funcs = functions.len();
-
-    let match_arms = functions.iter().enumerate().map(|(i, path)| {
-        let name_str = path.segments.last().unwrap().ident.to_string();
-        quote! {
-            #name_str => {
-                let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
-                let fut: gemini_client_api::futures::future::BoxFuture<'static, (usize, String, Result<gemini_client_api::serde_json::Value, String>)> = Box::pin(async move {
-                    (#i, #name_str.to_string(), #path::execute(args).await)
-                });
-                futures.push(fut);
-            }
-        }
-    });
-
-    let expanded = quote! {
-        {
-            let mut results_array = vec![None; #num_funcs];
-            if let Some(chat) = #session.get_last_chat() {
-                let mut futures = Vec::new();
-                for part in chat.parts() {
-                    if let gemini_client_api::gemini::types::request::PartType::FunctionCall(call) = part.data() {
-                        match call.name().as_str() {
-                            #(#match_arms)*
-                            _ => {}
-                        }
-                    }
-                }
-                if !futures.is_empty() {
-                    let results = gemini_client_api::futures::future::join_all(futures).await;
-                    for (idx, name, res) in results {
-                        if let Ok(ref val) = res {
-                            if let Err(e) = #session.add_function_response(name.clone(), val.clone()) {
-                                results_array[idx] = Some(Err(format!(
-                                    "failed to add function response for `{}`: {}",
-                                    name, e
-                                )));
-                                continue;
-                            }
-                        }
-                        results_array[idx] = Some(res);
-                    }
-                }
-            }
-            results_array
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
 /// Macro to execute function calls requested by Gemini and update the session history, with a custom callback for results.
 ///
 /// # Usage
@@ -278,62 +189,7 @@ pub fn execute_function_calls_with_callback(input: TokenStream) -> TokenStream {
     }
 
     let input = parse_macro_input!(input as ExecuteWithCallbackInput);
-    let session = &input.session;
-    let callback = &input.callback;
-    let functions = &input.functions;
-    let num_funcs = functions.len();
-
-    let match_arms = functions.iter().enumerate().map(|(i, path)| {
-        let name_str = path.segments.last().unwrap().ident.to_string();
-        quote! {
-            #name_str => {
-                let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
-                let fut: gemini_client_api::futures::future::BoxFuture<'static, (usize, String, Result<gemini_client_api::serde_json::Value, String>)> = Box::pin(async move {
-                    (#i, #name_str.to_string(), #path::execute(args).await)
-                });
-                futures.push(fut);
-            }
-        }
-    });
-
-    let expanded = quote! {
-        {
-            let mut results_array = vec![None; #num_funcs];
-            // Define callback here to ensure it's available
-            let mut result_callback = #callback;
-
-            if let Some(chat) = #session.get_last_chat() {
-                let mut futures = Vec::new();
-                for part in chat.parts() {
-                    if let gemini_client_api::gemini::types::request::PartType::FunctionCall(call) = part.data() {
-                        match call.name().as_str() {
-                            #(#match_arms)*
-                            _ => {}
-                        }
-                    }
-                }
-                if !futures.is_empty() {
-                    let results = gemini_client_api::futures::future::join_all(futures).await;
-                    for (idx, name, res) in results {
-                        // Invoke callback regardless of success or failure
-                        let val_to_add = result_callback(res.clone());
-
-                        if let Err(e) = #session.add_function_response(name.clone(), val_to_add) {
-                             results_array[idx] = Some(Err(format!(
-                                "failed to add function response for `{}`: {}",
-                                name, e
-                            )));
-                            continue;
-                        }
-                        results_array[idx] = Some(res);
-                    }
-                }
-            }
-            results_array
-        }
-    };
-
-    TokenStream::from(expanded)
+    generate_execute_logic(&input.session, &input.callback, &input.functions)
 }
 
 /// Attribute macro to derive the `GeminiSchema` trait for a struct or enum.
@@ -512,4 +368,114 @@ fn has_reference(ty: &Type) -> bool {
         }
         _ => false,
     }
+}
+
+/// Macro to execute function calls requested by Gemini and update the session history.
+///
+/// # Usage
+/// `execute_function_calls!(session, function1, function2, ...)`
+///
+/// # Returns
+/// A `Vec<Option<Result<serde_json::Value, String>>>` containing the results of each function call.
+/// The length of the vector matches the number of functions provided.
+/// - `Some(Ok(value))` if the function was called and succeeded.
+/// - `Some(Err(err))` if the function was called but failed.
+/// - `None` if the function was not called.
+///
+/// # Note
+/// The `session` is automatically updated with the `FunctionResponse` for successful calls.
+/// If a function call fails, the error is converted to a JSON object `{"Error": error_message}`
+/// and sent to the session as the function response.
+#[proc_macro]
+pub fn execute_function_calls(input: TokenStream) -> TokenStream {
+    use syn::parse::{Parse, ParseStream};
+    use syn::{Expr, Token};
+
+    struct ExecuteInput {
+        session: Expr,
+        _comma: Token![,],
+        functions: syn::punctuated::Punctuated<syn::Path, Token![,]>,
+    }
+
+    impl Parse for ExecuteInput {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            Ok(ExecuteInput {
+                session: input.parse()?,
+                _comma: input.parse()?,
+                functions: input.parse_terminated(syn::Path::parse, Token![,])?,
+            })
+        }
+    }
+
+    let input = parse_macro_input!(input as ExecuteInput);
+    let callback: Expr = syn::parse_quote! {
+        |result: Result<gemini_client_api::serde_json::Value, String>| {
+            match result {
+                Ok(value) => value,
+                Err(e) => gemini_client_api::serde_json::json!({"Error": e}),
+            }
+        }
+    };
+
+    generate_execute_logic(&input.session, &callback, &input.functions)
+}
+
+fn generate_execute_logic(
+    session: &syn::Expr,
+    callback: &syn::Expr,
+    functions: &syn::punctuated::Punctuated<syn::Path, syn::Token![,]>,
+) -> TokenStream {
+    let num_funcs = functions.len();
+
+    let match_arms = functions.iter().enumerate().map(|(i, path)| {
+        let name_str = path.segments.last().unwrap().ident.to_string();
+        quote! {
+            #name_str => {
+                let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
+                let fut: gemini_client_api::futures::future::BoxFuture<'static, (usize, String, Result<gemini_client_api::serde_json::Value, String>)> = Box::pin(async move {
+                    (#i, #name_str.to_string(), #path::execute(args).await)
+                });
+                futures.push(fut);
+            }
+        }
+    });
+
+    let expanded = quote! {
+        {
+            let mut results_array = vec![None; #num_funcs];
+            // Define callback here to ensure it's available
+            let mut result_callback = #callback;
+
+            if let Some(chat) = #session.get_last_chat() {
+                let mut futures = Vec::new();
+                for part in chat.parts() {
+                    if let gemini_client_api::gemini::types::request::PartType::FunctionCall(call) = part.data() {
+                        match call.name().as_str() {
+                            #(#match_arms)*
+                            _ => {}
+                        }
+                    }
+                }
+                if !futures.is_empty() {
+                    let results = gemini_client_api::futures::future::join_all(futures).await;
+                    for (idx, name, res) in results {
+                        // Invoke callback regardless of success or failure
+                        let val_to_add = result_callback(res.clone());
+
+                        if let Err(e) = #session.add_function_response(name.clone(), val_to_add) {
+                             results_array[idx] = Some(Err(format!(
+                                "failed to add function response for `{}`: {}",
+                                name, e
+                            )));
+                            continue;
+                        }
+                        results_array[idx] = Some(res);
+                    }
+                }
+            }
+            results_array
+        }
+    };
+
+    TokenStream::from(expanded)
 }

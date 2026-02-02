@@ -190,7 +190,7 @@ pub struct Part {
 }
 impl Part {
     pub fn is_thought(&self) -> bool {
-        self.thought_signature.is_some() || self.thought == Some(true)
+        self.thought == Some(true)
     }
     pub fn new(data: PartType) -> Self {
         Self {
