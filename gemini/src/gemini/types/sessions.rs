@@ -67,6 +67,9 @@ impl Session {
         let (left, right) = self.history.as_slices();
         left.iter().chain(right.iter()).collect()
     }
+    pub fn get_history_owned(self) -> Vec<Chat> {
+        self.history.into_iter().collect()
+    }
     pub fn get_history_length(&self) -> usize {
         self.history.len()
     }

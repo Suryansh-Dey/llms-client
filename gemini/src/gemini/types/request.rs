@@ -470,8 +470,12 @@ pub enum Tool {
     /// OR
     /// It must be of form `vec![`[functionDeclaration](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting)`, ..]`
     FunctionDeclarations(Vec<Value>),
-    /// Generally it can be `Tool::CodeExecution(json!({}))`,
+    /// Generally it can be `Tool::CodeExecution(json!({}))`
+    /// AI will execute code to respond
     CodeExecution(Value),
+    /// Generally it can be `Tool::UrlContext(json!({}))`
+    /// Uses URL provided in prompt for context
+    UrlContext(Value),
 }
 
 pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {

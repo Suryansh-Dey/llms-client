@@ -136,6 +136,8 @@ impl Gemini {
         self.model = model.into();
         self
     }
+    /// # Warning
+    /// Changing sys_prompt in middle of a conversation can confuse the model.
     pub fn set_sys_prompt(mut self, sys_prompt: Option<SystemInstruction>) -> Self {
         self.sys_prompt = sys_prompt;
         self
