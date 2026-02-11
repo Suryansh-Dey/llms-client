@@ -64,11 +64,10 @@ impl Session {
         self.chat_no
     }
     pub fn get_history(&self) -> Vec<&Chat> {
-        let (left, right) = self.history.as_slices();
-        left.iter().chain(right.iter()).collect()
+        self.history.iter().collect()
     }
-    pub fn get_history_owned(self) -> Vec<Chat> {
-        self.history.into_iter().collect()
+    pub fn get_history_owned(self) -> VecDeque<Chat> {
+        self.history
     }
     pub fn get_history_length(&self) -> usize {
         self.history.len()

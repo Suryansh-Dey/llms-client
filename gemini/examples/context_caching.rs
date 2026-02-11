@@ -17,7 +17,7 @@ async fn main() {
 
     let cached_content_req = CachedContentBuilder::new("gemini-2.5-flash")
         .display_name("Simulated Large Doc")
-        .contents(session.get_history_owned())
+        .contents(session.get_history_owned().into_iter().collect())
         .ttl(Duration::from_secs(300))
         .build()
         .unwrap();
