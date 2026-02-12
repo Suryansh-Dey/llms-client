@@ -142,14 +142,13 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let result = #fn_name(#(args.#param_names),*) #call_await;
                 #result_handling
             }
-            pub async fn execute_with_closure<F, Fut, T>(args: serde_json::Value, f: F) -> Result<T, String>
+            pub fn execute_with_closure<F, T>(args: &serde_json::Value, f: F) -> Result<T, serde_json::Error>
             where
-                F: FnOnce(#(#param_types),*) -> Fut,
-                Fut: std::future::Future<Output = T>,
+                F: FnOnce(#(#param_types),*) -> T,
             {
                 use gemini_client_api::serde::Deserialize;
-                let args = #args_struct_name::deserialize(&args).map_err(|e| e.to_string())?;
-                Ok(f(#(args.#param_names),*).await)
+                let args = #args_struct_name::deserialize(args)?;
+                Ok(f(#(args.#param_names),*))
             }
         }
     };
@@ -204,7 +203,6 @@ pub fn execute_function_calls_with_callback(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as ExecuteWithCallbackInput);
     generate_execute_logic(&input.session, &input.callback, &input.functions)
 }
-
 
 /// Attribute macro to derive the `GeminiSchema` trait for a struct or enum.
 ///

@@ -75,6 +75,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn handle_manually() {
+    use gemini_client_api::gemini::types::request::PartType;
     let mut session = Session::new(10);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
 
@@ -108,13 +109,13 @@ async fn handle_manually() {
                         if function_call.name() == "get_temperature" =>
                     {
                         get_temperature::execute_with_closure(
-                            function_call.args().as_ref().unwrap().clone(),
-                            async |location| {
+                            function_call.args().as_ref().unwrap(),
+                            |location| {
                                 println!(
                                     "[Executing Closure] getting temperature for {}",
                                     location
                                 );
-                                session
+                                session // Note: You must update session manually
                                     .add_function_response(
                                         "get_temperature",
                                         format!("temperature of {location} is 38 degree Celsius"),
@@ -122,8 +123,7 @@ async fn handle_manually() {
                                     .unwrap();
                             },
                         )
-                        .await
-                        .unwrap();
+                        .unwrap()
                     }
                     _ => {}
                 }
