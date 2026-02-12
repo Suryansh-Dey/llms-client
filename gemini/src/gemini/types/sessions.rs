@@ -80,21 +80,37 @@ impl Session {
         let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
         Some(self.history[chat_no].parts_mut())
     }
-    ///`chat_previous_no` is ith last message.
-    ///# Example
-    ///- session.get_parts(1) return last message
-    ///- session.get_parts(2) return 2nd last message
+    ///Use get_previous_chat() instead
+    #[deprecated]
     pub fn get_parts(&self, chat_previous_no: usize) -> Option<&Vec<Part>> {
         let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
         Some(self.history[chat_no].parts())
     }
-    /// `chat_no` follows 0-indexing
+    ///`chat_previous_no` is ith last message.
+    ///# Example
+    ///- session.get_previous_chat(1) return last message
+    ///- session.get_previous_chat(2) return 2nd last message
+    pub fn get_previous_chat(&self, chat_previous_no: usize) -> Option<&Chat> {
+        let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
+        self.history.get(chat_no)
+    }
+    ///`chat_previous_no` is ith last message.
+    ///# Example
+    ///- session.get_previous_chat_mut(1) return last message
+    ///- session.get_previous_chat_mut(2) return 2nd last message
+    pub fn get_previous_chat_mut(&mut self, chat_previous_no: usize) -> Option<&mut Chat> {
+        let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
+        self.history.get_mut(chat_no)
+    }
+    /// Confusing to use. Use get_history_as_vecdeque_mut() instead
+    #[deprecated]
     pub fn get_parts_no_mut(&mut self, chat_no: usize) -> Option<&mut Vec<Part>> {
         self.get_history_as_vecdeque_mut()
             .get_mut(chat_no)
             .map(|chat| chat.parts_mut())
     }
-    /// `chat_no` follows 0-indexing
+    /// Confusing to use. Use get_history() instead
+    #[deprecated]
     pub fn get_parts_no(&self, chat_no: usize) -> Option<&Vec<Part>> {
         self.get_history_as_vecdeque()
             .get(chat_no)
