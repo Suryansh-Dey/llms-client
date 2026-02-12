@@ -72,3 +72,69 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn handle_manually() {
+    let mut session = Session::new(10);
+    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
+
+    // 1. Initialize Gemini and register tools
+    let ai =
+        Gemini::new(api_key, "gemini-2.5-flash", None).set_tools(vec![Tool::FunctionDeclarations(
+            vec![
+                add_numbers::gemini_schema(),
+                get_temperature::gemini_schema(),
+            ],
+        )]);
+
+    println!("--- Function Calling Example ---");
+    let prompt = "What is 123.45 plus 678.9, and what's the weather like in London?";
+    println!("User: {}\n", prompt);
+
+    // 2. Ask Gemini. It might reply with one or more function calls.
+    let mut response = ai.ask(session.ask(prompt)).await?;
+
+    // 3. Loop to handle potential multiple rounds of function calls
+    loop {
+        if response.get_chat().has_function_call() {
+            println!("Gemini requested function calls...");
+
+            // 4. Use the macro to execute all requested calls and update the session
+            let _ = execute_function_calls!(session, add_numbers);
+
+            for part in response.get_chat().parts() {
+                match part.data() {
+                    PartType::FunctionCall(function_call)
+                        if function_call.name() == "get_temperature" =>
+                    {
+                        get_temperature::execute_with_closure(
+                            function_call.args().as_ref().unwrap().clone(),
+                            async |location| {
+                                println!(
+                                    "[Executing Closure] getting temperature for {}",
+                                    location
+                                );
+                                session
+                                    .add_function_response(
+                                        "get_temperature",
+                                        format!("temperature of {location} is 38 degree Celsius"),
+                                    )
+                                    .unwrap();
+                            },
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    _ => {}
+                }
+            }
+
+            // 5. Send the results back to Gemini to get the final natural language response
+            response = ai.ask(&mut session).await?;
+        } else {
+            // No more function calls, show the final response
+            println!("\nGemini: {}", response.get_chat().get_text_no_think(""));
+            break;
+        }
+    }
+}

@@ -26,6 +26,7 @@ use syn::{
 pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(item as ItemFn);
     let fn_name = &input_fn.sig.ident;
+    let args_struct_name = syn::Ident::new(&format!("{}_args", fn_name), fn_name.span());
     let fn_description = extract_doc_comments(&input_fn.attrs);
 
     let mut properties = Vec::new();
@@ -110,6 +111,12 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #[allow(non_camel_case_types)]
         pub struct #fn_name { }
 
+        #[allow(non_camel_case_types)]
+        #[derive(gemini_client_api::serde::Deserialize)]
+        pub struct #args_struct_name {
+            #(pub #param_names: #param_types,)*
+        }
+
         impl GeminiSchema for #fn_name {
             fn gemini_schema() -> serde_json::Value {
                 use serde_json::{json, Map};
@@ -130,14 +137,19 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl #fn_name {
             pub async fn execute(args: serde_json::Value) -> Result<serde_json::Value, String> {
-                use serde::Deserialize;
-                #[derive(Deserialize)]
-                struct Args {
-                    #(#param_names: #param_types,)*
-                }
-                let args = Args::deserialize(&args).map_err(|e| e.to_string())?;
+                use gemini_client_api::serde::Deserialize;
+                let args = #args_struct_name::deserialize(&args).map_err(|e| e.to_string())?;
                 let result = #fn_name(#(args.#param_names),*) #call_await;
                 #result_handling
+            }
+            pub async fn execute_with_closure<F, Fut, T>(args: serde_json::Value, f: F) -> Result<T, String>
+            where
+                F: FnOnce(#(#param_types),*) -> Fut,
+                Fut: std::future::Future<Output = T>,
+            {
+                use gemini_client_api::serde::Deserialize;
+                let args = #args_struct_name::deserialize(&args).map_err(|e| e.to_string())?;
+                Ok(f(#(args.#param_names),*).await)
             }
         }
     };
@@ -192,6 +204,7 @@ pub fn execute_function_calls_with_callback(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as ExecuteWithCallbackInput);
     generate_execute_logic(&input.session, &input.callback, &input.functions)
 }
+
 
 /// Attribute macro to derive the `GeminiSchema` trait for a struct or enum.
 ///
