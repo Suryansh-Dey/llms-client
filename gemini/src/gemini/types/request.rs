@@ -1,4 +1,5 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
+use core::fmt;
 use derive_new::new;
 use getset::Getters;
 use mime::{FromStrError, Mime};
@@ -175,7 +176,7 @@ pub enum PartType {
     ///For Audio file URL. Not allowed for images or PDFs, use InlineData instead.
     FileData(FileData),
 }
-#[derive(Serialize, Deserialize, Clone, Getters, Debug)]
+#[derive(Serialize, Deserialize, Clone, Getters)]
 #[serde(rename_all = "camelCase")]
 pub struct Part {
     #[get = "pub"]
@@ -187,6 +188,21 @@ pub struct Part {
     #[get = "pub"]
     #[serde(skip_serializing_if = "Option::is_none")]
     thought_signature: Option<String>,
+}
+impl fmt::Debug for Part {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Part")
+            .field("data", &self.data)
+            .field("thought", &self.thought)
+            .field(
+                "thought_signature",
+                &self
+                    .thought_signature
+                    .as_ref()
+                    .map(|s| format!("{}..truncated", &s[..3])),
+            )
+            .finish()
+    }
 }
 impl Part {
     pub fn is_thought(&self) -> bool {
