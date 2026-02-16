@@ -119,9 +119,7 @@ impl Session {
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
-    /// Not recommended to use. Use `session.reply()`, `session.ask()`,
-    /// `session.add_function_response()` instead.
-    fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
+    pub fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
         if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
             if last_chat.role() == chat.role() {
                 concatenate_parts(last_chat.parts_mut(), &chat.parts());
