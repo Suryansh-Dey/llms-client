@@ -1,6 +1,6 @@
 [package]
 name = "gemini-client-api"
-version = "7.2.8"
+version = "7.2.10"
 edition = "2024"
 repository = "https://github.com/Suryansh-Dey/llms-client"
 authors = ["Suryansh Dey <suryanshdey@gmail.com>"]
@@ -14,7 +14,7 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-reqwest = { version = "0.13", features = ["json", "stream"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream"] , optional = true}
 bytes = "1"
 base64 = "0.22.1"
 derive-new = "0.7.0"
@@ -30,7 +30,9 @@ gemini-proc-macros = { version = "1.0.2", path = "./gemini-proc-macros" }
 thiserror = "2.0.18"
 
 [features]
-default = ["full"]
+default = ["full", "rustls"]
 full = ["tokio", "reqwest"]
 tokio = ["dep:tokio"]
 reqwest = ["dep:reqwest"]
+rustls = ["reqwest/rustls"]
+native-tls = ["reqwest/native-tls"]

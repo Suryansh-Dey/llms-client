@@ -10,8 +10,8 @@ pub enum AddFunctionResponseError {
     #[error("Error while parsing: {0}")]
     ///Error while parsing
     InvalidResponseFormat(serde_json::Error),
-    #[error("FunctionResponse cannot be added after User prompt")]
-    ///FunctionResponse cannot be added after User prompt
+    #[error("FunctionResponse must be after model prompt and not first in session")]
+    ///FunctionResponse must be after model prompt and not first in session
     FunctionResponseAfterUser,
 }
 
