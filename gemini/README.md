@@ -39,11 +39,11 @@ async fn main() {
 Explore our comprehensive examples to learn how to use advanced features:
 
 - [**Basic Chat**](examples/basic_chat.rs): Simple request-response interaction.
+- [**Multimodal**](examples/multimodal.rs): Sending images and files to Gemini.
 - [**Streaming**](examples/streaming.rs): Handling real-time chunks for a snappier UI experience.
 - [**Structured Output**](examples/structured_output.rs): Forcing Gemini to reply in a specific JSON format using `#[gemini_schema]`.
 - [**Function Calling**](examples/function_calling.rs): Giving Gemini tools to interact with the real world using `#[gemini_function]`.
 - [**Thinking Mode**](examples/thinking.rs): Enabling Gemini's reasoning capabilities.
-- [**Multimodal**](examples/multimodal.rs): Sending images and files to Gemini.
 - [**Context Caching**](examples/context_caching.rs): Creating and using cached content for large contexts.
 
 For WASM environments, disable default features:

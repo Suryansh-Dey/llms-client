@@ -91,15 +91,16 @@ async fn ask_streamed_with_tools() {
 }
 
 #[tokio::test]
-async fn ask_thinking() {
+async fn thinking_test() {
     let mut session = Session::new(4);
     let ai = Gemini::new(
         std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY not found"),
         "gemini-2.5-flash",
         None,
     )
-    .set_thinking_config(ThinkingConfig::new(true, 1024));
+    .set_thinking_config(ThinkingConfig::new(true, Some(1024)));
     session.ask("How to calculate width of a binary tree? Just give me expression in short.");
     let response = ai.ask(&mut session).await.unwrap();
-    println!("{}", response.get_chat().get_text_no_think(""));
+    assert!(response.get_chat().get_text_no_think("").len() > 1);
+    assert!(response.get_chat().get_thoughts("").len() > 1);
 }

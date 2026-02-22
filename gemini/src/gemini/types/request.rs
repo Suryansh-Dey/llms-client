@@ -348,35 +348,73 @@ impl Chat {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ThinkingLevel {
+    ///Default value.
+    #[default]
+    ThinkingLevelUnspecified,
+    ///Little to no thinking.
+    Minimal,
+    Low,
+    Medium,
+    High,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum ThinkingControl {
+    /// Recommended for Gemini 3+.
+    ThinkingLevel(ThinkingLevel),
+    /// Indicates the thinking budget in tokens.
+    ThinkingBudget(i32),
+}
+impl Default for ThinkingControl {
+    fn default() -> Self {
+        ThinkingControl::ThinkingLevel(ThinkingLevel::default())
+    }
+}
+impl From<ThinkingLevel> for ThinkingControl {
+    fn from(value: ThinkingLevel) -> Self {
+        Self::ThinkingLevel(value)
+    }
+}
+impl From<i32> for ThinkingControl {
+    fn from(value: i32) -> Self {
+        Self::ThinkingBudget(value.max(-1))
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ThinkingConfig {
-    /// Indicates whether to include thoughts in the response. If true, thoughts
-    /// are returned only if the model supports thought and thoughts are available.
+    /// If true, thoughts are returned only if the model supports thought and thoughts are available.
     #[get = "pub"]
     include_thoughts: bool,
-    /// Indicates the thinking budget in tokens.
-    #[get = "pub"]
-    thinking_budget: i32,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    control: Option<ThinkingControl>,
 }
 impl ThinkingConfig {
+    pub fn control(&self) -> Option<&ThinkingControl> {
+        self.control.as_ref()
+    }
     /// Read [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for allowed range of
     /// `thinking_budget`
-    pub fn new(include_thoughts: bool, thinking_budget: u32) -> Self {
+    pub fn new(include_thoughts: bool, control: Option<impl Into<ThinkingControl>>) -> Self {
         Self {
             include_thoughts,
-            thinking_budget: thinking_budget as i32,
+            control: control.map(|v| v.into()),
         }
     }
     pub fn new_disable_thinking() -> Self {
         Self {
             include_thoughts: false,
-            thinking_budget: 0,
+            control: Some(0.into()),
         }
     }
     pub fn new_dynamic_thinking(include_thoughts: bool) -> Self {
         Self {
             include_thoughts,
-            thinking_budget: -1,
+            control: Some((-1).into()),
         }
     }
 }
