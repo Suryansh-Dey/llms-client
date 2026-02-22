@@ -98,7 +98,7 @@ async fn thinking_test() {
         "gemini-2.5-flash",
         None,
     )
-    .set_thinking_config(ThinkingConfig::new(true, Some(1024)));
+    .set_thinking_config(ThinkingConfig::new(true, 1024));
     session.ask("How to calculate width of a binary tree? Just give me expression in short.");
     let response = ai.ask(&mut session).await.unwrap();
     assert!(response.get_chat().get_text_no_think("").len() > 1);

@@ -368,11 +368,6 @@ pub enum ThinkingControl {
     /// Indicates the thinking budget in tokens.
     ThinkingBudget(i32),
 }
-impl Default for ThinkingControl {
-    fn default() -> Self {
-        ThinkingControl::ThinkingLevel(ThinkingLevel::default())
-    }
-}
 impl From<ThinkingLevel> for ThinkingControl {
     fn from(value: ThinkingLevel) -> Self {
         Self::ThinkingLevel(value)
@@ -384,7 +379,7 @@ impl From<i32> for ThinkingControl {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Getters, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Getters, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ThinkingConfig {
     /// If true, thoughts are returned only if the model supports thought and thoughts are available.
@@ -399,22 +394,25 @@ impl ThinkingConfig {
     }
     /// Read [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for allowed range of
     /// `thinking_budget`
-    pub fn new(include_thoughts: bool, control: Option<impl Into<ThinkingControl>>) -> Self {
+    pub fn new(include_thoughts: bool, control: impl Into<ThinkingControl>) -> Self {
         Self {
             include_thoughts,
-            control: control.map(|v| v.into()),
+            control: Some(control.into()),
         }
     }
     pub fn new_disable_thinking() -> Self {
-        Self {
-            include_thoughts: false,
-            control: Some(0.into()),
-        }
+        Self::new(false, 0)
     }
     pub fn new_dynamic_thinking(include_thoughts: bool) -> Self {
+        Self::new(include_thoughts, -1)
+    }
+}
+impl Default for ThinkingConfig {
+    ///Thoughts are included but thinking budget depends on model's default by google.
+    fn default() -> Self {
         Self {
-            include_thoughts,
-            control: Some((-1).into()),
+            include_thoughts: true,
+            control: None,
         }
     }
 }
