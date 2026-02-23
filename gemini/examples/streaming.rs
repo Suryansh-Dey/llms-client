@@ -10,7 +10,6 @@ async fn main() {
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
     let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
 
-    println!("--- Streaming Example ---");
     let prompt = "Write a poem about crab-like robots on Mars.";
     println!("User: {}\n", prompt);
     print!("Gemini: ");

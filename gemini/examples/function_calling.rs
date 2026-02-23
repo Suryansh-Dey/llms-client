@@ -40,7 +40,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ],
         )]);
 
-    println!("--- Function Calling Example ---");
     let prompt = "What is 123.45 plus 678.9, and what's the weather like in London?";
     println!("User: {}\n", prompt);
 

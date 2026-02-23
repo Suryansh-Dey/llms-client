@@ -12,7 +12,6 @@ async fn main() {
     let ai = Gemini::new(api_key, "gemini-3-flash-preview", None)
         .set_thinking_config(ThinkingConfig::new(true, ThinkingLevel::Low));
 
-    println!("--- Thinking Mode Example ---");
     let prompt = "How many 'r's are in the word strawberry?";
     println!("User: {}\n", prompt);
 

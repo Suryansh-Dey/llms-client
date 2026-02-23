@@ -17,13 +17,12 @@ async fn raw_multimodal() {
     let response = ai.ask(&mut session).await.unwrap();
     println!("\nGemini: {}", response.get_chat().get_text_no_think(""));
 }
+
 #[tokio::main]
 async fn main() {
     let mut session = Session::new(6);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
     let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
-
-    println!("--- Multimodal (Images/Files) Example ---");
 
     // Use MarkdownToParts to easily parse a string with image/file markers
     // It supports both URLs and local file paths!

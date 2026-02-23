@@ -24,26 +24,18 @@ struct MovieReview {
 async fn main() {
     let mut session = Session::new(2).set_remember_reply(false);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
-
-    println!("--- Structured Output (JSON Mode) Example ---");
 
     // Enable JSON mode by passing the generated schema
-    let ai = ai.set_json_mode(MovieReview::gemini_schema());
+    let ai =
+        Gemini::new(api_key, "gemini-2.5-flash", None).set_json_mode(MovieReview::gemini_schema());
 
     let prompt = "Give me a review for the movie Interstellar.";
     println!("User: {}", prompt);
 
     let response = ai.ask(session.ask(prompt)).await.unwrap();
+    let review: MovieReview = response
+        .get_json()
+        .expect("Gemini responded with wrong structure");
 
-    // Extract and deserialize the JSON response
-    if let Ok(review) = response.get_json::<MovieReview>() {
-        println!("\nGemini (Structured):");
-        println!("{:#?}", review);
-    } else {
-        println!(
-            "\nFailed to parse JSON response: {}",
-            response.get_chat().get_text_no_think("")
-        );
-    }
+    println!("Gemini structured output:\n{review:#?}");
 }
