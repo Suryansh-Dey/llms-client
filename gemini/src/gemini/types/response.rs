@@ -44,18 +44,24 @@ pub enum FinishReason {
 
 #[derive(Serialize, Deserialize, Clone, Debug, new)]
 #[serde(rename_all = "camelCase")]
-struct Candidate {
-    content: Chat,
+pub struct Candidate {
+    pub content: Chat,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GeminiResponse {
-    candidates: Vec<Candidate>,
+    pub candidates: Vec<Candidate>,
     pub usage_metadata: Value,
     pub model_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_feedback: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_status: Option<Value>,
 }
 impl GeminiResponse {
     #[cfg(feature = "reqwest")]
@@ -67,6 +73,9 @@ impl GeminiResponse {
     }
     pub fn get_chat(&self) -> &Chat {
         &self.candidates[0].content
+    }
+    pub fn get_finish_reason(&self) -> Option<&FinishReason> {
+        self.candidates[0].finish_reason.as_ref()
     }
     pub fn get_json<T>(&self) -> Result<T, serde_json::Error>
     where

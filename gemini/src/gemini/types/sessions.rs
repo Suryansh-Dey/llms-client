@@ -72,15 +72,13 @@ impl Session {
     pub fn get_history_length(&self) -> usize {
         self.history.len()
     }
-    ///`chat_previous_no` is ith last message.
-    ///# Example
-    ///- session.get_parts_mut(1) return last message
-    ///- session.get_parts_mut(2) return 2nd last message
+    ///Use `get_previous_chat_mut().parts_mut()` instead
+    #[deprecated]
     pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Vec<Part>> {
         let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
         Some(self.history[chat_no].parts_mut())
     }
-    ///Use get_previous_chat() instead
+    ///Use `get_previous_chat()` instead
     #[deprecated]
     pub fn get_parts(&self, chat_previous_no: usize) -> Option<&Vec<Part>> {
         let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;

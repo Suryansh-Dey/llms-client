@@ -1,5 +1,5 @@
 use gemini_client_api::gemini::ask::Gemini;
-use gemini_client_api::gemini::types::request::ThinkingConfig;
+use gemini_client_api::gemini::types::request::{ThinkingConfig, ThinkingLevel};
 use gemini_client_api::gemini::types::sessions::Session;
 use std::env;
 
@@ -8,9 +8,9 @@ async fn main() {
     let mut session = Session::new(4);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
 
-    // Note: Thinking mode requires a supported model like gemini-2.5-flash etc.
+    // Note: Thinking mode requires a supported model like gemini-2.5+
     let ai = Gemini::new(api_key, "gemini-3-flash-preview", None)
-        .set_thinking_config(ThinkingConfig::default());
+        .set_thinking_config(ThinkingConfig::new(true, ThinkingLevel::Low));
 
     println!("--- Thinking Mode Example ---");
     let prompt = "How many 'r's are in the word strawberry?";

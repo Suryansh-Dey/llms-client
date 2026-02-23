@@ -103,29 +103,21 @@ async fn handle_manually() {
             // 4. Use the macro to execute all requested calls and update the session
             let _ = execute_function_calls!(session, add_numbers);
 
-            for part in response.get_chat().parts() {
-                match part.data() {
-                    PartType::FunctionCall(function_call)
-                        if function_call.name() == "get_temperature" =>
-                    {
-                        get_temperature::execute_with_closure(
-                            function_call.args().as_ref().unwrap(),
-                            |location| {
-                                println!(
-                                    "[Executing Closure] getting temperature for {}",
-                                    location
-                                );
-                                session // Note: You must update session manually
-                                    .add_function_response(
-                                        "get_temperature",
-                                        format!("temperature of {location} is 38 degree Celsius"),
-                                    )
-                                    .unwrap();
-                            },
-                        )
-                        .unwrap()
-                    }
-                    _ => {}
+            for call in response.get_chat().get_function_calls() {
+                if call.name() == "get_temperature" {
+                    get_temperature::execute_with_closure(
+                        call.args().as_ref().unwrap(),
+                        |location| {
+                            println!("[Executing Closure] getting temperature for {}", location);
+                            session // Note: You must update session manually
+                                .add_function_response(
+                                    "get_temperature",
+                                    format!("temperature of {location} is 38 degree Celsius"),
+                                )
+                                .unwrap();
+                        },
+                    )
+                    .expect("Gemini responded with wrong argument format")
                 }
             }
 
