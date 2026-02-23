@@ -210,11 +210,11 @@ impl Gemini {
             .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response
-                .text()
+            let error = response
+                .json()
                 .await
                 .map_err(|e| GeminiResponseError::ReqwestError(e))?;
-            return Err(GeminiResponseError::StatusNotOk(text));
+            return Err(GeminiResponseError::StatusNotOk(error));
         }
 
         let cached_content: CachedContent = response
@@ -239,11 +239,11 @@ impl Gemini {
             .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response
-                .text()
+            let error = response
+                .json()
                 .await
                 .map_err(|e| GeminiResponseError::ReqwestError(e))?;
-            return Err(GeminiResponseError::StatusNotOk(text));
+            return Err(GeminiResponseError::StatusNotOk(error));
         }
 
         let list: CachedContentList = response
@@ -268,11 +268,11 @@ impl Gemini {
             .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response
-                .text()
+            let error = response
+                .json()
                 .await
                 .map_err(|e| GeminiResponseError::ReqwestError(e))?;
-            return Err(GeminiResponseError::StatusNotOk(text));
+            return Err(GeminiResponseError::StatusNotOk(error));
         }
 
         let cached_content: CachedContent = response
@@ -302,11 +302,11 @@ impl Gemini {
             .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response
-                .text()
+            let error = response
+                .json()
                 .await
                 .map_err(|e| GeminiResponseError::ReqwestError(e))?;
-            return Err(GeminiResponseError::StatusNotOk(text));
+            return Err(GeminiResponseError::StatusNotOk(error));
         }
 
         let cached_content: CachedContent = response
@@ -331,11 +331,11 @@ impl Gemini {
             .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response
-                .text()
+            let error = response
+                .json()
                 .await
                 .map_err(|e| GeminiResponseError::ReqwestError(e))?;
-            return Err(GeminiResponseError::StatusNotOk(text));
+            return Err(GeminiResponseError::StatusNotOk(error));
         }
 
         Ok(())
@@ -377,11 +377,11 @@ impl Gemini {
             .map_err(|e| GeminiResponseError::ReqwestError(e))?;
 
         if !response.status().is_success() {
-            let text = response
-                .text()
+            let error = response
+                .json()
                 .await
                 .map_err(|e| GeminiResponseError::ReqwestError(e))?;
-            return Err(GeminiResponseError::StatusNotOk(text));
+            return Err(GeminiResponseError::StatusNotOk(error));
         }
 
         let reply = GeminiResponse::new(response)
@@ -443,11 +443,11 @@ impl Gemini {
         };
 
         if !response.status().is_success() {
-            let text = match response.text().await {
+            let error = match response.json().await {
                 Ok(response) => response,
                 Err(e) => return Err((session, GeminiResponseError::ReqwestError(e))),
             };
-            return Err((session, GeminiResponseError::StatusNotOk(text.into())));
+            return Err((session, GeminiResponseError::StatusNotOk(error)));
         }
 
         Ok(ResponseStream::new(

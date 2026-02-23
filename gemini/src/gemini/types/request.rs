@@ -5,7 +5,7 @@ use getset::Getters;
 use mime::{FromStrError, Mime};
 #[cfg(feature = "reqwest")]
 use reqwest::header::{HeaderMap, ToStrError};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use std::str::FromStr;
 mod chat;
@@ -19,10 +19,27 @@ pub enum Role {
     Function,
 }
 
+fn deserialize_mime<'de, D>(deserializer: D) -> Result<Mime, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Mime::from_str(&s).map_err(serde::de::Error::custom)
+}
+fn serialize_mime<S>(mime: &Mime, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(mime.as_ref())
+}
 #[derive(Serialize, Deserialize, Clone, Getters, Debug)]
 pub struct InlineData {
     #[get = "pub"]
-    mime_type: String,
+    #[serde(
+        deserialize_with = "deserialize_mime",
+        serialize_with = "serialize_mime"
+    )]
+    mime_type: Mime,
     #[get = "pub"]
     ///Base64 encoded string.
     data: String,
@@ -51,10 +68,7 @@ impl InlineData {
     /// Creates a new InlineData.
     /// `data` must be a base64 encoded string.
     pub fn new(mime_type: Mime, data: String) -> Self {
-        Self {
-            mime_type: mime_type.to_string(),
-            data,
-        }
+        Self { mime_type, data }
     }
 
     #[cfg(feature = "reqwest")]
@@ -286,6 +300,7 @@ pub enum ThinkingControl {
     /// Recommended for Gemini 3+.
     ThinkingLevel(ThinkingLevel),
     /// Indicates the thinking budget in tokens.
+    /// Supported thinking budget by model [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget)
     ThinkingBudget(i32),
 }
 impl From<ThinkingLevel> for ThinkingControl {
@@ -309,6 +324,8 @@ pub struct ThinkingConfig {
     control: Option<ThinkingControl>,
 }
 impl ThinkingConfig {
+    /// Supported thinking level by model [here](https://ai.google.dev/gemini-api/docs/gemini-3#thinking_level)
+    /// Supported thinking budget by model [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget)
     pub fn control(&self) -> Option<&ThinkingControl> {
         self.control.as_ref()
     }
