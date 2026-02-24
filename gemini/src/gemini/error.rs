@@ -57,7 +57,6 @@ pub struct GeminiError {
 #[derive(thiserror::Error, Debug)]
 pub enum GeminiResponseError {
     #[error(transparent)]
-    #[cfg(feature = "reqwest")]
     ReqwestError(reqwest::Error),
     #[error("Response status not Ok.\n{0}")]
     StatusNotOk(GeminiError),
@@ -69,7 +68,6 @@ pub enum GeminiResponseError {
 #[derive(thiserror::Error, Debug)]
 pub enum GeminiResponseStreamError {
     #[error(transparent)]
-    #[cfg(feature = "reqwest")]
     ReqwestError(reqwest::Error),
     #[error("Invalid Response Format received. Response: {0}")]
     ///Invalid Response Format received. Contains response string

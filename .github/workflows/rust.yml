@@ -24,9 +24,31 @@ jobs:
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: gemini -> target
+        workspaces: gemini
 
     - name: Check fmt
       run: cargo fmt --check
     - name: Run tests
       run: cargo test -- --nocapture --skip ask --skip see_web
+
+  build-wasm:
+    defaults:
+      run:
+        working-directory: ./gemini
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: gemini
+
+    - name: Setup Rust for WASM
+      run: rustup target add wasm32-unknown-unknown
+    - name: Install wasm-pack
+      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+    - name: wasm-pack
+      run: wasm-pack build --target web --no-default-features

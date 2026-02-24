@@ -1,5 +1,6 @@
 use super::request::*;
 use super::sessions::Session;
+#[cfg(feature = "reqwest")]
 use crate::gemini::error::GeminiResponseStreamError;
 use bytes::Bytes;
 use derive_new::new;

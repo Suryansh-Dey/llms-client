@@ -3,7 +3,6 @@ use super::types::caching::{CachedContent, CachedContentList, CachedContentUpdat
 use super::types::request::*;
 use super::types::response::*;
 use super::types::sessions::Session;
-#[cfg(feature = "reqwest")]
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -17,7 +16,6 @@ const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models"
 /// generation config, safety settings, and tools using the provided builder-like methods.
 #[derive(Clone, Default, Debug)]
 pub struct Gemini {
-    #[cfg(feature = "reqwest")]
     client: Client,
     api_key: String,
     model: String,
@@ -36,7 +34,6 @@ impl Gemini {
     /// * `api_key` - Your Gemini API key. Get one from [Google AI studio](https://aistudio.google.com/app/apikey).
     /// * `model` - The model variation to use (e.g., "gemini-2.5-flash"). See [model variations](https://ai.google.dev/gemini-api/docs/models#model-variations).
     /// * `sys_prompt` - Optional system instructions. See [system instructions](https://ai.google.dev/gemini-api/docs/text-generation#image-input).
-    #[cfg(feature = "reqwest")]
     pub fn new(
         api_key: impl Into<String>,
         model: impl Into<String>,
@@ -65,7 +62,6 @@ impl Gemini {
     /// * `sys_prompt` - Optional system instructions.
     /// * `api_timeout` - Custom duration for request timeouts.
     #[deprecated]
-    #[cfg(feature = "reqwest")]
     pub fn new_with_timeout(
         api_key: impl Into<String>,
         model: impl Into<String>,
@@ -91,7 +87,6 @@ impl Gemini {
     /// * `model` - The model variation to use.
     /// * `sys_prompt` - Optional system instructions.
     /// * `client` - reqwest::Client to request gemini API.
-    #[cfg(feature = "reqwest")]
     pub fn new_with_client(
         api_key: impl Into<String>,
         model: impl Into<String>,
@@ -191,7 +186,6 @@ impl Gemini {
 
     // Cache management methods
 
-    #[cfg(feature = "reqwest")]
     pub async fn create_cache(
         &self,
         cached_content: &CachedContent,
@@ -224,7 +218,6 @@ impl Gemini {
         Ok(cached_content)
     }
 
-    #[cfg(feature = "reqwest")]
     pub async fn list_caches(&self) -> Result<CachedContentList, GeminiResponseError> {
         let req_url = format!(
             "https://generativelanguage.googleapis.com/v1beta/cachedContents?key={}",
@@ -253,7 +246,6 @@ impl Gemini {
         Ok(list)
     }
 
-    #[cfg(feature = "reqwest")]
     pub async fn get_cache(&self, name: &str) -> Result<CachedContent, GeminiResponseError> {
         let req_url = format!(
             "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
@@ -282,7 +274,6 @@ impl Gemini {
         Ok(cached_content)
     }
 
-    #[cfg(feature = "reqwest")]
     pub async fn update_cache(
         &self,
         name: &str,
@@ -316,7 +307,6 @@ impl Gemini {
         Ok(cached_content)
     }
 
-    #[cfg(feature = "reqwest")]
     pub async fn delete_cache(&self, name: &str) -> Result<(), GeminiResponseError> {
         let req_url = format!(
             "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
@@ -347,7 +337,6 @@ impl Gemini {
     ///
     /// # Errors
     /// Returns `GeminiResponseError::NothingToRespond` if the last message in history is from the model.
-    #[cfg(feature = "reqwest")]
     pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
         if session
             .get_last_chat()
@@ -403,7 +392,6 @@ impl Gemini {
     ///    println!("{}", response);
     ///}
     ///```
-    #[cfg(feature = "reqwest")]
     pub async fn ask_as_stream_with_extractor<F, StreamType>(
         &self,
         session: Session,
@@ -474,7 +462,6 @@ impl Gemini {
     /// }
     /// # }
     /// ```
-    #[cfg(feature = "reqwest")]
     pub async fn ask_as_stream(
         &self,
         session: Session,
