@@ -74,7 +74,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn handle_manually() {
-    use gemini_client_api::gemini::types::request::PartType;
     let mut session = Session::new(10);
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
 
@@ -104,19 +103,17 @@ async fn handle_manually() {
 
             for call in response.get_chat().get_function_calls() {
                 if call.name() == "get_temperature" {
-                    get_temperature::execute_with_closure(
-                        call.args().as_ref().unwrap(),
-                        |location| {
-                            println!("[Executing Closure] getting temperature for {}", location);
-                            session // Note: You must update session manually
-                                .add_function_response(
-                                    "get_temperature",
-                                    format!("temperature of {location} is 38 degree Celsius"),
-                                )
-                                .unwrap();
-                        },
-                    )
-                    .expect("Gemini responded with wrong argument format")
+                    let (location,) =
+                        get_temperature::parse_arguments(call.args().as_ref().unwrap())
+                            .expect("Gemini responded with wrong argument format");
+
+                    println!("[Executing call] getting temperature for {}", location);
+                    session // Note: You must update session manually
+                        .add_function_response(
+                            call.name(),
+                            format!("temperature of {location} is 38 degree Celsius"),
+                        )
+                        .unwrap();
                 }
             }
 

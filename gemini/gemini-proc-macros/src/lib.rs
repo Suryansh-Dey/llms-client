@@ -136,19 +136,17 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl #fn_name {
-            pub async fn execute(args: serde_json::Value) -> Result<serde_json::Value, String> {
+            pub async fn execute(args: &serde_json::Value) -> Result<serde_json::Value, String> {
                 use gemini_client_api::serde::Deserialize;
-                let args = #args_struct_name::deserialize(&args).map_err(|e| e.to_string())?;
+                let args = #args_struct_name::deserialize(args).map_err(|e| e.to_string())?;
                 let result = #fn_name(#(args.#param_names),*) #call_await;
                 #result_handling
             }
-            pub fn execute_with_closure<F, T>(args: &serde_json::Value, f: F) -> Result<T, serde_json::Error>
-            where
-                F: FnOnce(#(#param_types),*) -> T,
+            pub fn parse_arguments(args: &serde_json::Value) -> Result<(#(#param_types,)*), serde_json::Error>
             {
                 use gemini_client_api::serde::Deserialize;
                 let args = #args_struct_name::deserialize(args)?;
-                Ok(f(#(args.#param_names),*))
+                Ok((#(args.#param_names,)*))
             }
         }
     };
@@ -445,7 +443,7 @@ fn generate_execute_logic(
             #name_str => {
                 let args = call.args().clone().unwrap_or(gemini_client_api::serde_json::json!({}));
                 let fut: gemini_client_api::futures::future::BoxFuture<'static, (usize, String, Result<gemini_client_api::serde_json::Value, String>)> = Box::pin(async move {
-                    (#i, #name_str.to_string(), #path::execute(args).await)
+                    (#i, #name_str.to_string(), #path::execute(&args).await)
                 });
                 futures.push(fut);
             }
