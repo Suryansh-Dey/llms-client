@@ -1,4 +1,8 @@
-use crate::gemini::{ask::Gemini, error::GeminiResponseError, types::sessions::Session};
+use crate::gemini::{
+    ask::Gemini,
+    error::{GeminiResponseError, Status},
+    types::sessions::Session,
+};
 
 #[tokio::test]
 async fn status_not_ok_test() {
@@ -7,7 +11,9 @@ async fn status_not_ok_test() {
         .ask(session.ask("Hi"))
         .await;
     match response {
-        Err(GeminiResponseError::StatusNotOk(e)) => assert!(e.error.code == 400),
+        Err(GeminiResponseError::StatusNotOk(e)) => {
+            assert!(e.error.status == Status::InvalidArgument)
+        }
         _ => panic!("Expected invalid api key error"),
     }
 }

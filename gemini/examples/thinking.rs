@@ -10,7 +10,8 @@ async fn main() {
 
     // Note: Thinking mode requires a supported model like gemini-2.5+
     let ai = Gemini::new(api_key, "gemini-3-flash-preview", None)
-        .set_thinking_config(ThinkingConfig::new(true, ThinkingLevel::Low));
+        .set_thinking_config(ThinkingConfig::new(true, ThinkingLevel::Low)); //For gemini-2.5 only
+    //budget is allowed. Eg. `.set_thinking_config(ThinkingConfig::new(true, 1024))`
 
     let prompt = "How many 'r's are in the word strawberry?";
     println!("User: {}\n", prompt);

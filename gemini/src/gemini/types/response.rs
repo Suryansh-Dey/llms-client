@@ -13,7 +13,7 @@ use std::{
     task::{Context, Poll},
 };
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FinishReason {
     /// Default value. This value is unused.

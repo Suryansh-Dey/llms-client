@@ -76,7 +76,7 @@ pub struct CachedContentUpdate {
     expire_time: Option<String>,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum CachedContentBuilderError {
     #[error("Both ttl and expire_time cannot be set")]
     ///Both ttl and expire_time cannot be set

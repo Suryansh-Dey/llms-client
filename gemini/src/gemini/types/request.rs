@@ -112,7 +112,7 @@ impl InlineData {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Language {
     ///Unspecified language. This value should not be used.
@@ -156,7 +156,7 @@ pub struct FileData {
     file_uri: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Outcome {
     /// Unspecified status. This value should not be used.
@@ -281,7 +281,7 @@ impl From<FileData> for Part {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 /// Supported thinking level by model [here](https://ai.google.dev/gemini-api/docs/gemini-3#thinking_level)
 pub enum ThinkingLevel {
@@ -374,7 +374,7 @@ impl<'a> From<&'a str> for SystemInstruction {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum HarmCategory {
     HarmCategoryHarassment,
@@ -382,7 +382,7 @@ pub enum HarmCategory {
     HarmCategorySexuallyExplicit,
     HarmCategoryDangerousContent,
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum BlockThreshold {
     BlockNone,
@@ -420,7 +420,7 @@ pub struct FunctionCallingConfig {
     pub allowed_function_names: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FunctionCallingMode {
     /// Default model behavior. Model decides whether to predict a
