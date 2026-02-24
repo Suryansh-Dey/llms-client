@@ -308,9 +308,9 @@ impl From<ThinkingLevel> for ThinkingControl {
         Self::ThinkingLevel(value)
     }
 }
-impl From<i32> for ThinkingControl {
-    fn from(value: i32) -> Self {
-        Self::ThinkingBudget(value.max(-1))
+impl From<u32> for ThinkingControl {
+    fn from(value: u32) -> Self {
+        Self::ThinkingBudget(value as i32)
     }
 }
 
@@ -341,7 +341,10 @@ impl ThinkingConfig {
         Self::new(false, 0)
     }
     pub fn new_dynamic_thinking(include_thoughts: bool) -> Self {
-        Self::new(include_thoughts, -1)
+        Self {
+            include_thoughts,
+            control: Some(ThinkingControl::ThinkingBudget(-1)),
+        }
     }
 }
 impl Default for ThinkingConfig {
