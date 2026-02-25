@@ -72,7 +72,7 @@ impl Chat {
             .collect::<Vec<&str>>()
             .join(seperator.as_ref())
     }
-    ///`seperator` used to concatenate all text parts. TL;DR use "" as seperator.
+    ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
     ///Includes all text including thoughts
     pub fn get_text_all(&self, seperator: impl AsRef<str>) -> String {
         Self::extract_text_all(&self.parts(), seperator)

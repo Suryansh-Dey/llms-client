@@ -151,7 +151,7 @@ pub fn gemini_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    TokenStream::from(expanded)
+    expanded.into()
 }
 
 /// Macro to execute function calls requested by Gemini and update the session history, with a custom callback for results.
@@ -331,7 +331,7 @@ pub fn gemini_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #expanded
     };
 
-    TokenStream::from(output)
+    output.into()
 }
 
 fn extract_doc_comments(attrs: &[Attribute]) -> String {
@@ -487,5 +487,5 @@ fn generate_execute_logic(
         }
     };
 
-    TokenStream::from(expanded)
+    expanded.into()
 }

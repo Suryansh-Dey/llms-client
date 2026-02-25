@@ -61,7 +61,7 @@ pub enum GeminiResponseError {
     #[error("Response status not Ok.\n{0}")]
     StatusNotOk(GeminiError),
     #[error("Cannot Respond if last Chat has Role::Model")]
-    ///Cannot Responnd if last Chat has Role::Model
+    ///Cannot Respond if last Chat has Role::Model
     NothingToRespond,
 }
 

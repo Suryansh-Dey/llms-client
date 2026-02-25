@@ -10,10 +10,6 @@ use std::time::Duration;
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /// The main client for interacting with the Gemini API.
-///
-/// Use `Gemini::new` or `Gemini::new_with_timeout` to create an instance.
-/// You can configure various aspects of the request like model, system instructions,
-/// generation config, safety settings, and tools using the provided builder-like methods.
 #[derive(Clone, Default, Debug)]
 pub struct Gemini {
     client: Client,

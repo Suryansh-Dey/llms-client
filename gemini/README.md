@@ -34,9 +34,7 @@ async fn main() {
 }
 ```
 
-## Deep Dive
-
-Explore our comprehensive examples to learn how to use advanced features:
+## Examples
 
 - [**Basic Chat**](examples/basic_chat.rs): Simple request-response interaction.
 - [**Multimodal**](examples/multimodal.rs): Sending images and files to Gemini.

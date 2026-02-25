@@ -86,7 +86,6 @@ async fn handle_manually() {
             ],
         )]);
 
-    println!("--- Function Calling Example ---");
     let prompt = "What is 123.45 plus 678.9, and what's the weather like in London?";
     println!("User: {}\n", prompt);
 
@@ -98,7 +97,7 @@ async fn handle_manually() {
         if response.get_chat().has_function_call() {
             println!("Gemini requested function calls...");
 
-            // 4. Use the macro to execute all requested calls and update the session
+            // 4. Use the macro to execute one requested calls and update the session
             let _ = execute_function_calls!(session, add_numbers);
 
             for call in response.get_chat().get_function_calls() {

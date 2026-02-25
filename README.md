@@ -2,8 +2,9 @@
 ## Installation
 ```bash
 cargo add gemini-client-api
-
 ```
+view at [crate.io](https://crates.io/crates/gemini-client-api)
+
 ## Overview
 A Rust library to use Google's Gemini API with macro super powers! It is extremely flexible and modular to integrate with any framework.  
 For example, since Actix supports stream of `Result<Bytes, Error>` for response streaming, you can get it directly instead of making a wrapper stream around a response stream of futures, which is a pain.
