@@ -107,7 +107,7 @@ impl Session {
             .get_mut(chat_no)
             .map(|chat| chat.parts_mut())
     }
-    /// Confusing to use. Use get_history() instead
+    /// Confusing to use. Use get_history_as_vecdeque() instead
     #[deprecated]
     pub fn get_parts_no(&self, chat_no: usize) -> Option<&Vec<Part>> {
         self.get_history_as_vecdeque()

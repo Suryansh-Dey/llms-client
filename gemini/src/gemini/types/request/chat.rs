@@ -15,6 +15,9 @@ impl Chat {
     pub fn parts_mut(&mut self) -> &mut Vec<Part> {
         &mut self.parts
     }
+    pub fn parts_owned(self) -> Vec<Part> {
+        self.parts
+    }
     ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
     ///Don't contain thoughts
     pub fn get_text_no_think(&self, seperator: impl AsRef<str>) -> String {
