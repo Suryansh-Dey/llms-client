@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
 
-const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+pub const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /// The main client for interacting with the Gemini API.
 #[derive(Clone, Default, Debug)]

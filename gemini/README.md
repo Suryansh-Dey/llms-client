@@ -12,6 +12,7 @@ A fast, flexible, and feature-rich Rust library for Google's Gemini API, featuri
 - **Multimodal Support**: Built-in markdown parser for images and local files.
 - **Advanced Capabilities**: Code execution, PDF/document/audio reading, and "Thinking" mode support.
 - **Context Caching**: Efficiently manage and reuse large context windows.
+- **Embeddings**: Generate dense vector embeddings using the `GeminiEmbedding` client.
 - **Framework Agnostic**: Modular design that works anywhere, including Actix, Axum, and WASM environments.
 
 ### Basic Chat Example
@@ -43,6 +44,7 @@ async fn main() {
 - [**Function Calling**](examples/function_calling.rs): Giving Gemini tools to interact with the real world using `#[gemini_function]`.
 - [**Thinking Mode**](examples/thinking.rs): Enabling Gemini's reasoning capabilities.
 - [**Context Caching**](examples/context_caching.rs): Creating and using cached content for large contexts.
+- [**Embeddings**](examples/embedding.rs): Generating vector embeddings for search and retrieval.
 
 For WASM environments, disable default features:
 
