@@ -30,7 +30,7 @@ impl Session {
     /// Creates a new `Session` with a specified history limit.
     ///
     /// # Arguments
-    /// * `history_limit` - The maximum number of `Chat` to keep in history.
+    /// * `history_limit` - The maximum number of `Chat`(including all `Role`) to keep in history.
     /// * Uses sliding window to maintain length.
     /// * Might pop many elements after one new insertion to maintain valid history according to
     /// API.
@@ -225,5 +225,10 @@ impl Session {
     }
     pub fn remove_last_chat(&mut self) -> Option<Chat> {
         self.history.pop_back()
+    }
+    /// Returns Chat by absolute chat number. Eg. `get_chat_by_no(3)` will try to return 3rd (including all `Role`) `Some(Chat)` asked since session created. If it went out of history window returns `None`.
+    pub fn get_chat_by_no(&self, absolute_chat_no: usize) -> Option<&Chat> {
+        let chat_previous_no = usize::checked_sub(self.get_chat_no() + 1, absolute_chat_no)?;
+        self.get_previous_chat(chat_previous_no)
     }
 }
