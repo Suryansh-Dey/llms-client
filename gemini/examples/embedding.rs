@@ -19,9 +19,9 @@ async fn main() {
     // 3. Print the embedding information
     let embedding = response.embedding();
     println!("Embedding generated for: {:?}", prompt);
-    println!("Total Dimensions: {}", embedding.values().len());
+    println!("Total Dimensions: {}", embedding.dimension());
     println!(
         "First 5 values: {:?}",
-        &embedding.values()[..5.min(embedding.values().len())]
+        &embedding.values()[..usize::min(embedding.dimension(), 5)]
     );
 }

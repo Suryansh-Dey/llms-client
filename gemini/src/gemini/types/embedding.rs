@@ -107,6 +107,14 @@ pub struct ContentEmbedding {
     #[get = "pub"]
     values: Vec<f32>,
 }
+impl ContentEmbedding {
+    pub fn values_owned(self) -> Vec<f32> {
+        self.values
+    }
+    pub fn dimension(&self) -> usize {
+        self.values().len()
+    }
+}
 
 /// Response from the `embedContent` endpoint.
 #[derive(Serialize, Deserialize, Debug, Clone, Getters)]
@@ -114,4 +122,9 @@ pub struct ContentEmbedding {
 pub struct EmbedContentResponse {
     #[get = "pub"]
     embedding: ContentEmbedding,
+}
+impl EmbedContentResponse {
+    pub fn embedding_owned(self) -> ContentEmbedding {
+        self.embedding
+    }
 }
