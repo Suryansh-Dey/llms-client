@@ -118,6 +118,20 @@ impl Session {
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
+    /// Remove the oldest chat in the window.
+    /// # WARNING
+    /// Might delete more than 1 chat to keep session in valid state.
+    pub fn forget_oldest_chat(&mut self) -> Option<Chat> {
+        let oldest_chat = self.history.pop_front();
+        while let Some(front_chat) = self.history.front() {
+            match front_chat.role() {
+                Role::Function => self.history.pop_front(),
+                Role::Model if front_chat.has_function_call() => self.history.pop_front(),
+                _ => break,
+            };
+        }
+        oldest_chat
+    }
     pub fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
         if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
             if last_chat.role() == chat.role() {
@@ -133,14 +147,7 @@ impl Session {
         self.history.push_back(chat);
         self.chat_no += 1;
         if self.get_history_length() > self.get_history_limit() {
-            self.history.pop_front();
-            while let Some(front_chat) = self.history.front() {
-                match front_chat.role() {
-                    Role::Function => self.history.pop_front(),
-                    Role::Model if front_chat.has_function_call() => self.history.pop_front(),
-                    _ => break,
-                };
-            }
+            self.forget_oldest_chat();
         }
         Ok(self)
     }
