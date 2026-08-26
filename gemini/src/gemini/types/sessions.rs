@@ -1,5 +1,6 @@
 use super::request::*;
 use super::response::GeminiResponse;
+use derive_getters::Dissolve;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::VecDeque;
@@ -19,7 +20,7 @@ pub enum AddFunctionResponseError {
 ///
 /// A `Session` tracks the sequence of `Chat` messages (user prompts and model replies)
 /// and enforces a history limit to manage token usage.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Dissolve)]
 pub struct Session {
     history: VecDeque<Chat>,
     history_limit: usize,

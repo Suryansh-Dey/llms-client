@@ -1,6 +1,6 @@
 use super::request::Part;
+use derive_getters::{Dissolve, Getters};
 use derive_new::new;
-use getset::Getters;
 use serde::{Deserialize, Serialize};
 
 /// The type of task for which the embedding will be used.
@@ -30,16 +30,14 @@ pub enum TaskType {
 /// Configuration for the embedding request.
 ///
 /// See [Gemini docs](https://ai.google.dev/api/embeddings#EmbedContentConfig) for details.
-#[derive(Serialize, Deserialize, Debug, Clone, Getters)]
+#[derive(Dissolve, Serialize, Deserialize, Debug, Clone, Getters)]
 #[serde(rename_all = "camelCase")]
 pub struct EmbedContentConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[get = "pub"]
     task_type: Option<TaskType>,
     /// Optional reduced dimension for the output embedding.
     /// Supported by models that use [Matryoshka Representation Learning](https://ai.google.dev/gemini-api/docs/embeddings#matryoshka).
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[get = "pub"]
     output_dimensionality: Option<u32>,
 }
 impl EmbedContentConfig {
@@ -64,9 +62,8 @@ impl EmbedContentConfig {
 }
 
 /// The content to embed, matching the Gemini API `Content` structure.
-#[derive(Serialize, Deserialize, Debug, Clone, Getters)]
+#[derive(Dissolve, Serialize, Deserialize, Debug, Clone, Getters)]
 pub struct Content {
-    #[get = "pub"]
     parts: Vec<Part>,
 }
 impl Content {
@@ -102,9 +99,8 @@ pub(crate) struct EmbedContentRequest {
 }
 
 /// A list of floats representing the embedding.
-#[derive(Serialize, Deserialize, Debug, Clone, Getters, new)]
+#[derive(Dissolve, Serialize, Deserialize, Debug, Clone, Getters, new)]
 pub struct ContentEmbedding {
-    #[get = "pub"]
     values: Vec<f32>,
 }
 impl ContentEmbedding {
@@ -117,10 +113,9 @@ impl ContentEmbedding {
 }
 
 /// Response from the `embedContent` endpoint.
-#[derive(Serialize, Deserialize, Debug, Clone, Getters)]
+#[derive(Dissolve, Serialize, Deserialize, Debug, Clone, Getters)]
 #[serde(rename_all = "camelCase")]
 pub struct EmbedContentResponse {
-    #[get = "pub"]
     embedding: ContentEmbedding,
 }
 impl EmbedContentResponse {

@@ -1,14 +1,12 @@
+use derive_getters::{Dissolve, Getters};
 use derive_new::new;
-use getset::Getters;
 use serde::{Deserialize, Serialize};
 
 use crate::gemini::types::request::{FunctionCall, Part, PartType, Role};
 
-#[derive(Serialize, Deserialize, new, Getters, Debug, Clone)]
+#[derive(Dissolve, Serialize, Deserialize, new, Getters, Debug, Clone)]
 pub struct Chat {
-    #[get = "pub"]
     role: Role,
-    #[get = "pub"]
     parts: Vec<Part>,
 }
 impl Chat {

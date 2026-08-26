@@ -1,7 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use core::fmt;
+use derive_getters::{Dissolve, Getters};
 use derive_new::new;
-use getset::Getters;
 use mime::{FromStrError, Mime};
 #[cfg(feature = "reqwest")]
 use reqwest::header::{HeaderMap, ToStrError};
@@ -32,15 +32,13 @@ where
 {
     serializer.serialize_str(mime.as_ref())
 }
-#[derive(Serialize, Deserialize, Clone, Getters, Debug)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, Getters, Debug)]
 pub struct InlineData {
-    #[get = "pub"]
     #[serde(
         deserialize_with = "deserialize_mime",
         serialize_with = "serialize_mime"
     )]
     mime_type: Mime,
-    #[get = "pub"]
     ///Base64 encoded string.
     data: String,
 }
@@ -121,38 +119,30 @@ pub enum Language {
     Python,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct ExecutableCode {
-    #[get = "pub"]
     language: Language,
-    #[get = "pub"]
     code: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionCall {
-    #[get = "pub"]
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[get = "pub"]
     args: Option<Value>,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FunctionResponse {
-    #[get = "pub"]
     name: String,
-    #[get = "pub"]
     response: Value,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct FileData {
     #[serde(skip_serializing_if = "Option::is_none", alias = "mimeType")]
-    #[get = "pub"]
     mime_type: Option<String>,
     #[serde(alias = "fileUri")]
-    #[get = "pub"]
     file_uri: String,
 }
 
@@ -170,12 +160,10 @@ pub enum Outcome {
     OutcomeDeadlineExceeded,
 }
 
-#[derive(Serialize, Deserialize, Clone, new, Getters, Debug)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, new, Getters, Debug)]
 pub struct CodeExecutionResult {
-    #[get = "pub"]
     outcome: Outcome,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[get = "pub"]
     output: Option<String>,
 }
 
@@ -192,16 +180,13 @@ pub enum PartType {
     ///For Audio file URL. Not allowed for images or PDFs, use InlineData instead.
     FileData(FileData),
 }
-#[derive(Serialize, Deserialize, Clone, Getters)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, Getters)]
 #[serde(rename_all = "camelCase")]
 pub struct Part {
-    #[get = "pub"]
     #[serde(flatten)]
     data: PartType,
-    #[get = "pub"]
     #[serde(skip_serializing_if = "Option::is_none")]
     thought: Option<bool>,
-    #[get = "pub"]
     #[serde(skip_serializing_if = "Option::is_none")]
     thought_signature: Option<String>,
 }
@@ -233,6 +218,9 @@ impl Part {
     }
     pub fn data_mut(&mut self) -> &mut PartType {
         &mut self.data
+    }
+    pub fn data_owned(self) -> PartType {
+        self.data
     }
 }
 impl From<PartType> for Part {
@@ -314,21 +302,17 @@ impl From<u32> for ThinkingControl {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Getters, Debug)]
+#[derive(Dissolve, Serialize, Deserialize, Clone, Getters, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ThinkingConfig {
     /// If true, thoughts are returned only if the model supports thought and thoughts are available.
-    #[get = "pub"]
     include_thoughts: bool,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    /// Supported thinking level by model [here](https://ai.google.dev/gemini-api/docs/gemini-3#thinking_level)
+    /// Supported thinking budget by model [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget)
     control: Option<ThinkingControl>,
 }
 impl ThinkingConfig {
-    /// Supported thinking level by model [here](https://ai.google.dev/gemini-api/docs/gemini-3#thinking_level)
-    /// Supported thinking budget by model [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget)
-    pub fn control(&self) -> Option<&ThinkingControl> {
-        self.control.as_ref()
-    }
     /// Read [here](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for allowed range of
     /// `thinking_budget`
     pub fn new(include_thoughts: bool, control: impl Into<ThinkingControl>) -> Self {
@@ -357,9 +341,8 @@ impl Default for ThinkingConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, Getters, new, Debug, Clone)]
+#[derive(Dissolve, Serialize, Deserialize, Getters, new, Debug, Clone)]
 pub struct SystemInstruction {
-    #[get = "pub"]
     parts: Vec<Part>,
 }
 impl From<String> for SystemInstruction {
@@ -393,11 +376,9 @@ pub enum BlockThreshold {
     BlockMediumAndAbove,
     BlockLowAndAbove,
 }
-#[derive(Serialize, Deserialize, new, Getters, Debug, Clone)]
+#[derive(Dissolve, Serialize, Deserialize, new, Getters, Debug, Clone)]
 pub struct SafetySetting {
-    #[get = "pub"]
     category: HarmCategory,
-    #[get = "pub"]
     threshold: BlockThreshold,
 }
 

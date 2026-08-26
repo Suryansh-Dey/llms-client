@@ -1,6 +1,6 @@
 use super::types::request::*;
 use crate::utils::{self, MatchedFiles};
-use getset::Getters;
+use derive_getters::{Dissolve, Getters};
 use regex::Regex;
 #[cfg(feature = "reqwest")]
 use reqwest::header::HeaderMap;
@@ -61,11 +61,10 @@ impl MarkdownToPartsBuilder {
         }
     }
 }
-#[derive(Getters, Clone)]
+#[derive(Dissolve, Getters, Clone)]
 ///Converts markdown to parts considering `![image](link)` means Gemini will be see the images too. `link` can be URL or file path.  
 pub struct MarkdownToParts<'a> {
     markdown: &'a str,
-    #[get = "pub"]
     base64s: Vec<MatchedFiles>,
 }
 impl<'a> MarkdownToParts<'a> {
