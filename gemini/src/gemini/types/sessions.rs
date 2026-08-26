@@ -226,9 +226,14 @@ impl Session {
     pub fn remove_last_chat(&mut self) -> Option<Chat> {
         self.history.pop_back()
     }
-    /// Returns Chat by absolute chat number. Eg. `get_chat_by_no(3)` will try to return 3rd (including all `Role`) `Some(Chat)` asked since session created. If it went out of history window returns `None`.
+    /// Returns Chat by absolute chat number. Eg. `get_chat_by_no(3)` will try to return 3rd (including all `Role`) `Some(&Chat)` asked since session created. If it went out of history window returns `None`.
     pub fn get_chat_by_no(&self, absolute_chat_no: usize) -> Option<&Chat> {
         let chat_previous_no = usize::checked_sub(self.get_chat_no() + 1, absolute_chat_no)?;
         self.get_previous_chat(chat_previous_no)
+    }
+    /// Returns Chat by absolute chat number. Eg. `get_chat_by_no_mut(3)` will try to return 3rd (including all `Role`) `Some(&mut Chat)` asked since session created. If it went out of history window returns `None`.
+    pub fn get_chat_by_no_mut(&mut self, absolute_chat_no: usize) -> Option<&mut Chat> {
+        let chat_previous_no = usize::checked_sub(self.get_chat_no() + 1, absolute_chat_no)?;
+        self.get_previous_chat_mut(chat_previous_no)
     }
 }
