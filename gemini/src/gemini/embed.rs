@@ -3,7 +3,6 @@ use super::error::GeminiResponseError;
 use super::types::embedding::*;
 use super::types::request::Part;
 use reqwest::Client;
-use std::time::Duration;
 
 /// Client for generating embeddings using Gemini embedding models.
 ///
@@ -37,10 +36,7 @@ impl GeminiEmbedding {
     ///   See [embedding models](https://ai.google.dev/gemini-api/docs/models#gemini-embedding).
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(60))
-                .build()
-                .unwrap(),
+            client: Client::default(),
             api_key: api_key.into(),
             model: model.into(),
             config: None,

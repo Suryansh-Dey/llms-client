@@ -36,10 +36,7 @@ impl Gemini {
         sys_prompt: Option<SystemInstruction>,
     ) -> Self {
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(60))
-                .build()
-                .unwrap(),
+            client: Client::default(),
             api_key: api_key.into(),
             model: model.into(),
             sys_prompt,
