@@ -9,6 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use std::str::FromStr;
 mod chat;
+pub(crate) use chat::ApiChat;
 pub use chat::Chat;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -416,12 +417,19 @@ pub enum FunctionCallingMode {
     None,
 }
 
+fn serialize_contents<S>(contents: &&[&Chat], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.collect_seq(contents.iter().map(|chat| ApiChat::from(*chat)))
+}
 #[derive(Serialize, new)]
 #[serde(rename_all = "camelCase")]
 pub struct GeminiRequestBody<'a> {
     system_instruction: Option<&'a SystemInstruction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<&'a [Tool]>,
+    #[serde(serialize_with = "serialize_contents")]
     contents: &'a [&'a Chat],
     #[serde(skip_serializing_if = "Option::is_none")]
     generation_config: Option<&'a Value>,

@@ -1,9 +1,21 @@
-use super::request::{SystemInstruction, Tool, ToolConfig};
+use super::request::{ApiChat, Chat, SystemInstruction, Tool, ToolConfig};
 use derive_getters::{Dissolve, Getters};
 use derive_new::new;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::time::Duration;
 use thiserror::Error;
+
+fn serialize_contents<S>(contents: &Option<Vec<Chat>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match contents {
+        Some(contents) => {
+            serializer.serialize_some(&contents.iter().map(ApiChat::from).collect::<Vec<_>>())
+        }
+        None => serializer.serialize_none(),
+    }
+}
 
 #[derive(Dissolve, Serialize, Deserialize, Debug, Clone, Getters)]
 #[serde(rename_all = "camelCase")]
@@ -20,8 +32,11 @@ pub struct CachedContent {
     #[serde(skip_serializing_if = "Option::is_none")]
     system_instruction: Option<SystemInstruction>,
     /// The user's content to cache.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    contents: Option<Vec<super::request::Chat>>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_contents"
+    )]
+    contents: Option<Vec<Chat>>,
     /// A list of tools to be cached.
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<Tool>>,

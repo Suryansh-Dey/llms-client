@@ -4,7 +4,6 @@ use derive_getters::Dissolve;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::VecDeque;
-use std::{usize, vec};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AddFunctionResponseError {

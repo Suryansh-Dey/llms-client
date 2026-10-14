@@ -9,6 +9,26 @@ pub struct Chat {
     role: Role,
     parts: Vec<Part>,
 }
+
+/// Borrowed view of a `Chat` as sent to the API.
+/// API only documents `user` and `model` roles, so `Role::Function` is sent as `user`.
+/// `Chat`'s own serde keeps `function` so sessions can still be stored and restored.
+#[derive(Serialize)]
+pub(crate) struct ApiChat<'a> {
+    role: &'static str,
+    parts: &'a [Part],
+}
+impl<'a> From<&'a Chat> for ApiChat<'a> {
+    fn from(chat: &'a Chat) -> Self {
+        Self {
+            role: match chat.role {
+                Role::Model => "model",
+                Role::User | Role::Function => "user",
+            },
+            parts: &chat.parts,
+        }
+    }
+}
 impl Chat {
     pub fn parts_mut(&mut self) -> &mut Vec<Part> {
         &mut self.parts
