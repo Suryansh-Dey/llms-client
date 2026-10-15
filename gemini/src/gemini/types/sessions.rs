@@ -3,7 +3,7 @@ use super::response::GeminiResponse;
 use derive_getters::Dissolve;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::VecDeque;
+use std::{collections::VecDeque, fmt::Debug};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AddFunctionResponseError {
@@ -13,6 +13,28 @@ pub enum AddFunctionResponseError {
     #[error("FunctionResponse must be after model prompt and not first in session")]
     ///FunctionResponse must be after model prompt and not first in session
     FunctionResponseAfterUser,
+}
+
+#[doc(hidden)]
+pub trait CloneOverflowHandler {
+    fn clone_box(&self) -> Box<dyn OverflowHandler>;
+}
+impl<T: OverflowHandler + Clone + 'static> CloneOverflowHandler for T {
+    fn clone_box(&self) -> Box<dyn OverflowHandler> {
+        Box::new(self.clone())
+    }
+}
+pub trait OverflowHandler: CloneOverflowHandler + Send + Sync + Debug {
+    /// # Warning
+    /// `session.set_overflow_handler()` doesn't work within `handler.handle()`
+    ///
+    /// Returns true if default handler (sliding window trimming) should also be run.
+    fn handle(&mut self, session: &mut Session) -> bool;
+}
+impl Clone for Box<dyn OverflowHandler> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
 }
 
 /// Manages the conversation history and configuration for a Gemini session.
@@ -25,6 +47,8 @@ pub struct Session {
     history_limit: usize,
     chat_no: usize,
     remember_reply: bool,
+    #[serde(skip)]
+    overflow_handler: Option<Box<dyn OverflowHandler>>,
 }
 impl Session {
     /// Creates a new `Session` with a specified history limit.
@@ -43,11 +67,23 @@ impl Session {
             history_limit,
             chat_no: 0,
             remember_reply: true,
+            overflow_handler: None,
         }
     }
     ///Set to false to stop automatic context storing
     pub fn set_remember_reply(mut self, remember: bool) -> Self {
         self.remember_reply = remember;
+        self
+    }
+    /// # Arguments
+    /// `handler` will be called each time a new chat is added. It should detect if there is an
+    /// overflow and remove desired no. of chats from beginning using `session.forget_oldest_chat()`.
+    pub fn set_overflow_handler(&mut self, handler: impl OverflowHandler + 'static) -> &mut Self {
+        self.overflow_handler = Some(Box::new(handler) as Box<dyn OverflowHandler>);
+        self
+    }
+    pub fn remove_overflow_handler(&mut self) -> &mut Self {
+        self.overflow_handler = None;
         self
     }
     pub fn get_history_limit(&self) -> usize {
@@ -117,11 +153,7 @@ impl Session {
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
-    /// Remove the oldest chat in the window.
-    /// # WARNING
-    /// Might delete more than 1 chat to keep session in valid state.
-    pub fn forget_oldest_chat(&mut self) -> Option<Chat> {
-        let oldest_chat = self.history.pop_front();
+    fn remove_invalid_start(&mut self) {
         while let Some(front_chat) = self.history.front() {
             match front_chat.role() {
                 Role::Function => self.history.pop_front(),
@@ -129,26 +161,45 @@ impl Session {
                 _ => break,
             };
         }
+    }
+    /// Remove the oldest chat in the window.
+    /// # WARNING
+    /// Might delete more than 1 chat to keep session in valid state.
+    pub fn forget_oldest_chat(&mut self) -> Option<Chat> {
+        let oldest_chat = self.history.pop_front();
+        self.remove_invalid_start();
         oldest_chat
     }
     pub fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
-        if let Some(last_chat) = self.get_history_as_vecdeque_mut().back_mut() {
-            if last_chat.role() == chat.role() {
-                concatenate_parts(last_chat.parts_mut(), &chat.parts());
-                return Ok(self);
-            } else if *last_chat.role() == Role::User && *chat.role() == Role::Function {
+        match (self.history.back_mut(), chat.role()) {
+            (Some(last_chat), role) if last_chat.role() == role => {
+                concatenate_parts(last_chat.parts_mut(), chat.parts())
+            }
+            (Some(last_chat), Role::Function) if *last_chat.role() == Role::User => {
                 return Err("Role::Function not allowed after Role::User");
             }
-        } else if *chat.role() == Role::Function {
-            return Err("Role::Function cannot be first");
+            (None, Role::Function) => return Err("Role::Function cannot be first"),
+            _ => {
+                self.history.push_back(chat);
+                self.chat_no += 1;
+            }
         }
-
-        self.history.push_back(chat);
-        self.chat_no += 1;
-        if self.get_history_length() > self.get_history_limit() {
+        self.handle_overflow();
+        Ok(self)
+    }
+    fn handle_overflow(&mut self) {
+        let run_default = match self.overflow_handler.take() {
+            Some(mut handler) => {
+                let run_default = handler.handle(self);
+                self.remove_invalid_start();
+                self.overflow_handler = Some(handler);
+                run_default
+            }
+            None => true,
+        };
+        if run_default && self.get_history_length() > self.get_history_limit() {
             self.forget_oldest_chat();
         }
-        Ok(self)
     }
     /// If `ask` is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("ok")`, the parts is concatenated with the previous parts.
