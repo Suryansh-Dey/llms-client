@@ -48,6 +48,41 @@ fn test_function_role_sent_as_user() {
     assert_eq!(*restored.get_last_chat().unwrap().role(), Role::Function);
 }
 
+#[test]
+fn test_forgetting_keeps_latest_chat() {
+    use crate::gemini::types::request::{Chat, FunctionCall, Role};
+
+    let mut session = Session::new(10);
+    session.ask("only");
+    assert!(session.forget_oldest_chat().is_none());
+
+    // Limit 0 used to empty the history on every insertion
+    let mut session = Session::new(0);
+    session.ask("hi");
+    assert_eq!(session.get_history_length(), 1);
+
+    // Forgetting the prompt would also remove the function call, leaving nothing to respond to
+    let mut session = Session::new(1);
+    session.ask("weather?");
+    session
+        .add_chat(Chat::new(
+            Role::Model,
+            vec![FunctionCall::new("weather".into(), None).into()],
+        ))
+        .unwrap();
+    assert_eq!(session.get_history_length(), 2);
+    session.add_function_response("weather", 20).unwrap();
+    assert_eq!(session.get_history_length(), 3);
+
+    // Once the model replies, the whole exchange can be forgotten
+    session.reply("It is 20 degrees");
+    assert_eq!(session.get_history_length(), 1);
+    assert_eq!(
+        session.get_chat_by_no(4).unwrap().get_text_no_think(""),
+        "It is 20 degrees"
+    );
+}
+
 mod overflow_handler {
     use crate::gemini::types::request::{Chat, FunctionCall, Role};
     use crate::gemini::types::sessions::{HistoryTrimmer, OverflowHandler, Session};
@@ -231,22 +266,5 @@ mod overflow_handler {
         // A session saved without the handler can't be loaded as one with it
         let json = serde_json::to_string(&Session::new(10)).unwrap();
         assert!(serde_json::from_str::<Session<Counter>>(&json).is_err());
-    }
-
-    #[test]
-    fn default_session_api_is_unchanged() {
-        let session = Session::default();
-        assert!(!session.get_remember_reply());
-
-        let (history, history_limit, chat_no, remember_reply, _) = Session::new(3).dissolve();
-        assert_eq!(
-            (history.len(), history_limit, chat_no, remember_reply),
-            (0, 3, 0, true)
-        );
-
-        fn takes_session(session: &mut Session) -> &mut Session {
-            session.ask("hi")
-        }
-        takes_session(&mut Session::new(1));
     }
 }

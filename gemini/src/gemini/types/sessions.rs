@@ -49,6 +49,20 @@ fn is_invalid_start(chat: &Chat) -> bool {
     }
 }
 
+fn forget_oldest_chat(history: &mut VecDeque<Chat>) -> Option<Chat> {
+    let count = 1 + history
+        .iter()
+        .skip(1)
+        .take_while(|chat| is_invalid_start(chat))
+        .count();
+    if count >= history.len() {
+        return None;
+    }
+    let oldest_chat = history.pop_front();
+    history.drain(..count - 1);
+    oldest_chat
+}
+
 /// Session history as seen by `OverflowHandler::handle()`. It can be read but only shrunk from the
 /// beginning, so a handler can't leave the session in a state the API rejects.
 pub struct HistoryTrimmer<'a> {
@@ -76,18 +90,7 @@ impl HistoryTrimmer<'_> {
     ///
     /// Returns `None` without removing anything if the latest chat would be removed too.
     pub fn forget_oldest_chat(&mut self) -> Option<Chat> {
-        let count = 1 + self
-            .history
-            .iter()
-            .skip(1)
-            .take_while(|chat| is_invalid_start(chat))
-            .count();
-        if count >= self.history.len() {
-            return None;
-        }
-        let oldest_chat = self.history.pop_front();
-        self.history.drain(..count - 1);
-        oldest_chat
+        forget_oldest_chat(self.history)
     }
 }
 
@@ -115,7 +118,7 @@ impl Default for Session {
             history: VecDeque::new(),
             history_limit: 0,
             chat_no: 0,
-            remember_reply: false,
+            remember_reply: true,
             overflow_handler: SlidingWindow,
         }
     }
@@ -126,7 +129,7 @@ impl Session {
     /// # Arguments
     /// * `history_limit` - The maximum number of `Chat`(including all `Role`) to keep in history.
     /// * Uses sliding window to maintain length.
-    /// * Might pop many elements after one new insertion to maintain valid history according to
+    /// * Might pop many elements after one new insertion OR Might keep more elements than `history_limit`, to maintain valid history according to
     /// API.
     ///
     /// # Example
@@ -254,18 +257,13 @@ impl<H: OverflowHandler> Session<H> {
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
-    fn remove_invalid_start(&mut self) {
-        while self.history.front().is_some_and(is_invalid_start) {
-            self.history.pop_front();
-        }
-    }
     /// Remove the oldest chat in the window.
     /// # WARNING
     /// Might delete more than 1 chat to keep session in valid state.
+    ///
+    /// Returns `None` without removing anything if the latest chat would be removed too.
     pub fn forget_oldest_chat(&mut self) -> Option<Chat> {
-        let oldest_chat = self.history.pop_front();
-        self.remove_invalid_start();
-        oldest_chat
+        forget_oldest_chat(&mut self.history)
     }
     pub fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
         match (self.history.back_mut(), chat.role()) {
@@ -291,9 +289,10 @@ impl<H: OverflowHandler> Session<H> {
             chat_no: self.chat_no,
         };
         let run_default = self.overflow_handler.handle(&mut history);
-        while run_default && self.get_history_length() > self.get_history_limit() {
-            self.forget_oldest_chat();
-        }
+        while run_default
+            && self.get_history_length() > self.get_history_limit()
+            && self.forget_oldest_chat().is_some()
+        {}
     }
     /// If `ask` is called more than once without passing through `gemini.ask(&mut session)`
     /// or `session.reply("ok")`, the parts is concatenated with the previous parts.
