@@ -16,7 +16,7 @@ pub enum AddFunctionResponseError {
 }
 
 /// Strategy to keep `Session` history in check, e.g. by estimated token count.
-/// Set it using `Session::with_overflow_handler()`.
+/// Set it using `Session::set_overflow_handler()`.
 pub trait OverflowHandler {
     /// Called every time a chat is added to the session, including when it is concatenated into
     /// the last chat. Forget chats from the beginning using `history.forget_oldest_chat()`.
@@ -95,11 +95,12 @@ impl HistoryTrimmer<'_> {
 ///
 /// A `Session` tracks the sequence of `Chat` messages (user prompts and model replies)
 /// and enforces a history limit to manage token usage.
-/// Use `with_overflow_handler()` for custom strategies, e.g. based on token count.
+/// Use `set_overflow_handler()` for custom strategies, e.g. based on token count.
 ///
 /// # Serde
-/// The overflow handler is serialized along with the history. For the default `SlidingWindow`
-/// it is left out, so such sessions keep the same format as before overflow handlers existed.
+/// The overflow handler is serialized along with the history, so its state is restored too.
+/// The default `SlidingWindow` is serialized as `null`. A session must be deserialized with the
+/// same handler type it was serialized with.
 #[derive(Debug, Clone, Getters, Dissolve, Serialize, Deserialize)]
 pub struct Session<H = SlidingWindow> {
     history: VecDeque<Chat>,
@@ -146,6 +147,7 @@ impl<H: OverflowHandler> Session<H> {
         self.remember_reply = remember;
         self
     }
+    /// Takes out the overflow handler, leaving the session with the default `SlidingWindow`.
     pub fn remove_overflow_handler(self) -> (Session, H) {
         let Self {
             history,
@@ -163,7 +165,9 @@ impl<H: OverflowHandler> Session<H> {
         };
         (session, overflow_handler)
     }
-    /// Returns (Session with new handler, old handler)
+    /// Sets a custom `OverflowHandler` to control how history is trimmed, replacing the current one.
+    /// See `OverflowHandler::handle()` for when it is called.
+    /// Use `remove_overflow_handler()` first to keep the current handler.
     pub fn set_overflow_handler<T: OverflowHandler>(self, overflow_handler: T) -> Session<T> {
         let Self {
             history,

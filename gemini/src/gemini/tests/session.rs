@@ -54,7 +54,7 @@ mod overflow_handler {
     use serde::{Deserialize, Serialize};
 
     /// Counts calls and returns `run_default`.
-    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
     struct Counter {
         calls: usize,
         run_default: bool,
@@ -219,21 +219,13 @@ mod overflow_handler {
     }
 
     #[test]
-    fn default_session_format_is_unchanged() {
-        // Format before overflow handlers existed
-        let json = r#"{"history":[{"role":"user","parts":[{"text":"hi"}]}],"history_limit":2,"chat_no":1,"remember_reply":true}"#;
-        let session: Session = serde_json::from_str(json).unwrap();
-        assert_eq!(texts(&session), ["hi"]);
-        assert_eq!(serde_json::to_string(&session).unwrap(), json);
-    }
-
-    #[test]
     fn custom_handler_state_is_serialized() {
         let mut session = Session::new(10).set_overflow_handler(counter(false));
         session.ask("1").reply("2");
         let json = serde_json::to_string(&session).unwrap();
         let restored: Session<Counter> = serde_json::from_str(&json).unwrap();
         assert_eq!(texts(&restored), ["1", "2"]);
+        assert_eq!(restored.overflow_handler(), session.overflow_handler());
         assert_eq!(restored.overflow_handler().calls, 2);
 
         // A session saved without the handler can't be loaded as one with it
