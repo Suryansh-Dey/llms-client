@@ -24,11 +24,15 @@ impl<T: OverflowHandler + Clone + 'static> CloneOverflowHandler for T {
         Box::new(self.clone())
     }
 }
+/// Custom strategy to keep `Session` history in check, e.g. by estimated token count.
 pub trait OverflowHandler: CloneOverflowHandler + Send + Sync + Debug {
+    /// Called every time a chat is added to the session, including when it is concatenated into
+    /// the last chat. Remove chats from the beginning using `session.forget_oldest_chat()`.
+    ///
+    /// Returns true if default handler (sliding window trimming by `history_limit`) should also be run.
+    ///
     /// # Warning
     /// `session.set_overflow_handler()` doesn't work within `handler.handle()`
-    ///
-    /// Returns true if default handler (sliding window trimming) should also be run.
     fn handle(&mut self, session: &mut Session) -> bool;
 }
 impl Clone for Box<dyn OverflowHandler> {
@@ -41,6 +45,10 @@ impl Clone for Box<dyn OverflowHandler> {
 ///
 /// A `Session` tracks the sequence of `Chat` messages (user prompts and model replies)
 /// and enforces a history limit to manage token usage.
+///
+/// # Serde
+/// The overflow handler is not serialized. A deserialized `Session` has no handler, so set it
+/// again with `set_overflow_handler()` after loading.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Dissolve)]
 pub struct Session {
     history: VecDeque<Chat>,
@@ -75,9 +83,11 @@ impl Session {
         self.remember_reply = remember;
         self
     }
-    /// # Arguments
-    /// `handler` will be called each time a new chat is added. It should detect if there is an
-    /// overflow and remove desired no. of chats from beginning using `session.forget_oldest_chat()`.
+    /// Sets a custom `OverflowHandler` to control how history is trimmed.
+    /// See `OverflowHandler::handle()` for when it is called.
+    ///
+    /// # Serde
+    /// The handler is not serialized. Set it again after deserializing the `Session`.
     pub fn set_overflow_handler(&mut self, handler: impl OverflowHandler + 'static) -> &mut Self {
         self.overflow_handler = Some(Box::new(handler) as Box<dyn OverflowHandler>);
         self
@@ -197,7 +207,7 @@ impl Session {
             }
             None => true,
         };
-        if run_default && self.get_history_length() > self.get_history_limit() {
+        while run_default && self.get_history_length() > self.get_history_limit() {
             self.forget_oldest_chat();
         }
     }
