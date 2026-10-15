@@ -32,8 +32,17 @@ impl<H: OverflowHandler + ?Sized> OverflowHandler for Box<H> {
 }
 
 /// Default `OverflowHandler`. Only keeps the last `history_limit` chats.
+///
+/// Serialized as `null`. Goes through `Option<()>` so a missing field also deserializes to it,
+/// letting sessions saved before overflow handlers existed load as `Session`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "Option<()>")]
 pub struct SlidingWindow;
+impl From<Option<()>> for SlidingWindow {
+    fn from(_: Option<()>) -> Self {
+        SlidingWindow
+    }
+}
 impl OverflowHandler for SlidingWindow {
     fn handle(&mut self, _: &mut HistoryTrimmer<'_>) -> bool {
         true
@@ -114,13 +123,7 @@ pub struct Session<H = SlidingWindow> {
 }
 impl Default for Session {
     fn default() -> Self {
-        Self {
-            history: VecDeque::new(),
-            history_limit: 0,
-            chat_no: 0,
-            remember_reply: true,
-            overflow_handler: SlidingWindow,
-        }
+        Session::new(0)
     }
 }
 impl Session {

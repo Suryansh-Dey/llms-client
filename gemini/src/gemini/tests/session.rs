@@ -267,4 +267,25 @@ mod overflow_handler {
         let json = serde_json::to_string(&Session::new(10)).unwrap();
         assert!(serde_json::from_str::<Session<Counter>>(&json).is_err());
     }
+
+    #[test]
+    fn session_saved_before_overflow_handlers_loads() {
+        // Format of 7.x, without the `overflow_handler` field
+        let json = r#"{"history":[{"role":"user","parts":[{"text":"hi"}]}],"history_limit":2,"chat_no":1,"remember_reply":true}"#;
+        let mut session: Session = serde_json::from_str(json).unwrap();
+        assert_eq!(texts(&session), ["hi"]);
+        assert_eq!(session.get_chat_no(), 1);
+        session.reply("hello").ask("bye");
+        assert_eq!(texts(&session), ["hello", "bye"]);
+
+        // Saved again with the handler as `null`, which loads back too
+        let json = serde_json::to_string(&session).unwrap();
+        assert!(json.ends_with(r#""overflow_handler":null}"#));
+        let restored: Session = serde_json::from_str(&json).unwrap();
+        assert_eq!(texts(&restored), ["hello", "bye"]);
+
+        // Custom handlers still require their state to be present
+        let old = r#"{"history":[],"history_limit":2,"chat_no":0,"remember_reply":true}"#;
+        assert!(serde_json::from_str::<Session<Counter>>(old).is_err());
+    }
 }
