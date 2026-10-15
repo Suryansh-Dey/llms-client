@@ -1,6 +1,6 @@
 use super::request::*;
 use super::response::GeminiResponse;
-use derive_getters::Dissolve;
+use derive_getters::{Dissolve, Getters};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::VecDeque, fmt::Debug};
@@ -49,7 +49,7 @@ impl Clone for Box<dyn OverflowHandler> {
 /// # Serde
 /// The overflow handler is not serialized. A deserialized `Session` has no handler, so set it
 /// again with `set_overflow_handler()` after loading.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Dissolve)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Dissolve, Getters)]
 pub struct Session {
     history: VecDeque<Chat>,
     history_limit: usize,

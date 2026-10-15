@@ -2,6 +2,7 @@ use super::ask::BASE_URL;
 use super::error::GeminiResponseError;
 use super::types::embedding::*;
 use super::types::request::Part;
+use derive_getters::{Dissolve, Getters};
 use reqwest::Client;
 
 /// Client for generating embeddings using Gemini embedding models.
@@ -19,7 +20,7 @@ use reqwest::Client;
 /// println!("Embedding dimension: {}", response.embedding().values().len());
 /// # }
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Getters, Dissolve)]
 pub struct GeminiEmbedding {
     client: Client,
     api_key: String,

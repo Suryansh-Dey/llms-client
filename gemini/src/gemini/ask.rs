@@ -3,6 +3,7 @@ use super::types::caching::{CachedContent, CachedContentList, CachedContentUpdat
 use super::types::request::*;
 use super::types::response::*;
 use super::types::sessions::Session;
+use derive_getters::{Dissolve, Getters};
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -10,7 +11,7 @@ use std::time::Duration;
 pub const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /// The main client for interacting with the Gemini API.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Dissolve, Getters)]
 pub struct Gemini {
     client: Client,
     api_key: String,
