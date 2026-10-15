@@ -50,31 +50,26 @@ fn test_function_role_sent_as_user() {
 
 mod overflow_handler {
     use crate::gemini::types::request::{Chat, FunctionCall, Role};
-    use crate::gemini::types::sessions::{OverflowHandler, Session};
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
+    use crate::gemini::types::sessions::{HistoryTrimmer, OverflowHandler, Session};
+    use serde::{Deserialize, Serialize};
 
     /// Counts calls and returns `run_default`.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
     struct Counter {
-        calls: Arc<AtomicUsize>,
+        calls: usize,
         run_default: bool,
     }
     impl OverflowHandler for Counter {
-        fn handle(&mut self, _: &mut Session) -> bool {
-            self.calls.fetch_add(1, Ordering::SeqCst);
+        fn handle(&mut self, _: &mut HistoryTrimmer<'_>) -> bool {
+            self.calls += 1;
             self.run_default
         }
     }
-    fn counter(run_default: bool) -> (Counter, Arc<AtomicUsize>) {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let handler = Counter {
-            calls: calls.clone(),
+    fn counter(run_default: bool) -> Counter {
+        Counter {
+            calls: 0,
             run_default,
-        };
-        (handler, calls)
+        }
     }
 
     /// Forgets oldest chats while total text length exceeds `max_chars`.
@@ -83,22 +78,20 @@ mod overflow_handler {
         max_chars: usize,
     }
     impl OverflowHandler for CharBudget {
-        fn handle(&mut self, session: &mut Session) -> bool {
-            let chars = |session: &Session| -> usize {
-                session
-                    .get_history()
+        fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool {
+            let chars = |history: &HistoryTrimmer| -> usize {
+                history
+                    .get_history_as_vecdeque()
                     .iter()
                     .map(|chat| chat.get_text_no_think("").len())
                     .sum()
             };
-            while chars(session) > self.max_chars && session.get_history_length() > 1 {
-                session.forget_oldest_chat();
-            }
+            while chars(history) > self.max_chars && history.forget_oldest_chat().is_some() {}
             false
         }
     }
 
-    fn texts(session: &Session) -> Vec<String> {
+    fn texts<H: OverflowHandler>(session: &Session<H>) -> Vec<String> {
         session
             .get_history()
             .iter()
@@ -108,37 +101,38 @@ mod overflow_handler {
 
     #[test]
     fn returning_false_skips_default_trimming() {
-        let (handler, _) = counter(false);
-        let mut session = Session::new(2);
-        session.set_overflow_handler(handler);
+        let mut session = Session::new(2).set_overflow_handler(counter(false));
         session.ask("1").reply("2").ask("3").reply("4");
         assert_eq!(texts(&session), ["1", "2", "3", "4"]);
+        assert_eq!(session.overflow_handler().calls, 4);
     }
 
     #[test]
     fn returning_true_runs_default_trimming() {
-        let (handler, calls) = counter(true);
-        let mut session = Session::new(2);
-        session.set_overflow_handler(handler);
+        let mut session = Session::new(2).set_overflow_handler(counter(true));
         session.ask("1").reply("2").ask("3").reply("4");
         assert_eq!(texts(&session), ["3", "4"]);
-        assert_eq!(calls.load(Ordering::SeqCst), 4);
     }
 
     #[test]
     fn called_on_concatenation() {
-        let (handler, calls) = counter(true);
-        let mut session = Session::new(10);
-        session.set_overflow_handler(handler);
+        let mut session = Session::new(10).set_overflow_handler(counter(true));
         session.ask("a").ask("b").reply("c").reply("d");
         assert_eq!(session.get_history_length(), 2);
-        assert_eq!(calls.load(Ordering::SeqCst), 4);
+        assert_eq!(session.overflow_handler().calls, 4);
+    }
+
+    #[test]
+    fn handler_state_can_be_changed() {
+        let mut session = Session::new(2).set_overflow_handler(counter(true));
+        session.overflow_handler_mut().run_default = false;
+        session.ask("1").reply("2").ask("3");
+        assert_eq!(session.get_history_length(), 3);
     }
 
     #[test]
     fn budget_handler_trims_oldest_and_ignores_history_limit() {
-        let mut session = Session::new(1);
-        session.set_overflow_handler(CharBudget { max_chars: 10 });
+        let mut session = Session::new(1).set_overflow_handler(CharBudget { max_chars: 10 });
         session.ask("aaaa").reply("bbbb").ask("cc");
         assert_eq!(texts(&session), ["aaaa", "bbbb", "cc"]);
 
@@ -152,8 +146,7 @@ mod overflow_handler {
 
     #[test]
     fn forgetting_keeps_function_call_and_response_together() {
-        let mut session = Session::new(10);
-        session.set_overflow_handler(CharBudget { max_chars: 6 });
+        let mut session = Session::new(10).set_overflow_handler(CharBudget { max_chars: 6 });
         session.ask("aaaa");
         session
             .add_chat(Chat::new(
@@ -171,43 +164,97 @@ mod overflow_handler {
     }
 
     #[test]
+    fn never_forgets_latest_chat() {
+        let mut session = Session::new(10).set_overflow_handler(CharBudget { max_chars: 2 });
+        session.ask("aaaa");
+        assert_eq!(texts(&session), ["aaaa"]);
+
+        // Forgetting the prompt would also remove the function call that follows it
+        session
+            .add_chat(Chat::new(
+                Role::Model,
+                vec![FunctionCall::new("f".into(), None).into()],
+            ))
+            .unwrap();
+        assert_eq!(session.get_history_length(), 2);
+    }
+
+    #[test]
     fn remove_overflow_handler_restores_default() {
-        let (handler, calls) = counter(false);
-        let mut session = Session::new(2);
-        session.set_overflow_handler(handler);
+        let mut session = Session::new(2).set_overflow_handler(counter(false));
         session.ask("1").reply("2").ask("3");
-        assert_eq!(session.get_history_length(), 3);
+        let (mut session, handler) = session.remove_overflow_handler();
+        assert_eq!(handler.calls, 3);
 
         // Default trimming brings history back within the limit, even if it was over by more than one
-        session.remove_overflow_handler();
         session.reply("4");
         assert_eq!(texts(&session), ["3", "4"]);
-        assert_eq!(calls.load(Ordering::SeqCst), 3);
     }
 
     #[test]
-    fn clone_keeps_handler() {
-        let mut session = Session::new(1);
-        session.set_overflow_handler(CharBudget { max_chars: 100 });
+    fn clone_copies_handler_state() {
+        let mut session = Session::new(10).set_overflow_handler(counter(true));
+        session.ask("1");
         let mut cloned = session.clone();
-        cloned.ask("1").reply("2");
-        assert_eq!(cloned.get_history_length(), 2);
+        cloned.reply("2");
+        assert_eq!(session.overflow_handler().calls, 1);
+        assert_eq!(cloned.overflow_handler().calls, 2);
     }
 
     #[test]
-    fn handler_is_not_serialized() {
-        let mut session = Session::new(1);
-        session.set_overflow_handler(CharBudget { max_chars: 100 });
+    fn boxed_handler_can_be_chosen_at_runtime() {
+        let handlers: Vec<Box<dyn OverflowHandler>> = vec![
+            Box::new(counter(true)),
+            Box::new(CharBudget { max_chars: 4 }),
+        ];
+        let lengths: Vec<usize> = handlers
+            .into_iter()
+            .map(|handler| {
+                let mut session = Session::new(10).set_overflow_handler(handler);
+                session.ask("aa").reply("bb").ask("cc");
+                session.get_history_length()
+            })
+            .collect();
+        assert_eq!(lengths, [3, 2]);
+    }
+
+    #[test]
+    fn default_session_format_is_unchanged() {
+        // Format before overflow handlers existed
+        let json = r#"{"history":[{"role":"user","parts":[{"text":"hi"}]}],"history_limit":2,"chat_no":1,"remember_reply":true}"#;
+        let session: Session = serde_json::from_str(json).unwrap();
+        assert_eq!(texts(&session), ["hi"]);
+        assert_eq!(serde_json::to_string(&session).unwrap(), json);
+    }
+
+    #[test]
+    fn custom_handler_state_is_serialized() {
+        let mut session = Session::new(10).set_overflow_handler(counter(false));
         session.ask("1").reply("2");
-        assert_eq!(session.get_history_length(), 2);
+        let json = serde_json::to_string(&session).unwrap();
+        let restored: Session<Counter> = serde_json::from_str(&json).unwrap();
+        assert_eq!(texts(&restored), ["1", "2"]);
+        assert_eq!(restored.overflow_handler().calls, 2);
 
-        let mut restored: Session =
-            serde_json::from_str(&serde_json::to_string(&session).unwrap()).unwrap();
-        restored.ask("3");
-        assert_eq!(texts(&restored), ["3"]);
+        // A session saved without the handler can't be loaded as one with it
+        let json = serde_json::to_string(&Session::new(10)).unwrap();
+        assert!(serde_json::from_str::<Session<Counter>>(&json).is_err());
+    }
 
-        restored.set_overflow_handler(CharBudget { max_chars: 100 });
-        restored.reply("4");
-        assert_eq!(texts(&restored), ["3", "4"]);
+    #[test]
+    fn default_session_api_is_unchanged() {
+        let session = Session::default();
+        assert!(!session.get_remember_reply());
+
+        let (history, history_limit, chat_no, remember_reply, _) = Session::new(3).dissolve();
+        assert_eq!(
+            (history.len(), history_limit, chat_no, remember_reply),
+            (0, 3, 0, true)
+        );
+
+        fn takes_session(session: &mut Session) -> &mut Session {
+            session.ask("hi")
+        }
+        takes_session(&mut Session::new(1));
     }
 }

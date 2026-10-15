@@ -2,7 +2,7 @@ use super::error::GeminiResponseError;
 use super::types::caching::{CachedContent, CachedContentList, CachedContentUpdate};
 use super::types::request::*;
 use super::types::response::*;
-use super::types::sessions::Session;
+use super::types::sessions::{OverflowHandler, Session};
 use derive_getters::{Dissolve, Getters};
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -331,7 +331,10 @@ impl Gemini {
     ///
     /// # Errors
     /// Returns `GeminiResponseError::NothingToRespond` if the last message in history is from the model.
-    pub async fn ask(&self, session: &mut Session) -> Result<GeminiResponse, GeminiResponseError> {
+    pub async fn ask<H: OverflowHandler>(
+        &self,
+        session: &mut Session<H>,
+    ) -> Result<GeminiResponse, GeminiResponseError> {
         if session
             .get_last_chat()
             .is_some_and(|chat| *chat.role() == Role::Model)
@@ -386,13 +389,13 @@ impl Gemini {
     ///    println!("{}", response);
     ///}
     ///```
-    pub async fn ask_as_stream_with_extractor<F, StreamType>(
+    pub async fn ask_as_stream_with_extractor<F, StreamType, H: OverflowHandler>(
         &self,
-        session: Session,
+        session: Session<H>,
         data_extractor: F,
-    ) -> Result<ResponseStream<F, StreamType>, (Session, GeminiResponseError)>
+    ) -> Result<ResponseStream<F, StreamType, H>, (Session<H>, GeminiResponseError)>
     where
-        F: FnMut(&Session, GeminiResponse) -> StreamType,
+        F: FnMut(&Session<H>, GeminiResponse) -> StreamType,
     {
         if session
             .get_last_chat()
@@ -456,14 +459,14 @@ impl Gemini {
     /// }
     /// # }
     /// ```
-    pub async fn ask_as_stream(
+    pub async fn ask_as_stream<H: OverflowHandler>(
         &self,
-        session: Session,
-    ) -> Result<GeminiResponseStream, (Session, GeminiResponseError)> {
+        session: Session<H>,
+    ) -> Result<GeminiResponseStream<H>, (Session<H>, GeminiResponseError)> {
         self.ask_as_stream_with_extractor(
             session,
             (|_, gemini_response| gemini_response)
-                as fn(&Session, GeminiResponse) -> GeminiResponse,
+                as fn(&Session<H>, GeminiResponse) -> GeminiResponse,
         )
         .await
     }

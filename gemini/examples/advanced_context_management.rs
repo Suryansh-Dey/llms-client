@@ -1,29 +1,34 @@
 use gemini_client_api::gemini::ask::Gemini;
-use gemini_client_api::gemini::types::sessions::{OverflowHandler, Session};
+use gemini_client_api::gemini::types::request::Chat;
+use gemini_client_api::gemini::types::sessions::{HistoryTrimmer, OverflowHandler, Session};
+use serde::{Deserialize, Serialize};
 use std::env;
 
+/// Rough estimate: ~4 characters per token. Only text parts are counted.
+fn estimate_tokens<'a>(chats: impl IntoIterator<Item = &'a Chat>) -> usize {
+    chats
+        .into_iter()
+        .map(|chat| chat.get_text_no_think("").len() / 4)
+        .sum()
+}
+
 /// Keeps the estimated token count of the history under `max_tokens` by forgetting the oldest chats.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct TokenBudget {
     max_tokens: usize,
-}
-impl TokenBudget {
-    /// Rough estimate: ~4 characters per token. Only text parts are counted.
-    fn estimate_tokens(session: &Session) -> usize {
-        session
-            .get_history()
-            .iter()
-            .map(|chat| chat.get_text_no_think("").len() / 4)
-            .sum()
-    }
+    /// State kept by the handler. It is saved and restored along with the session.
+    forgotten_chats: usize,
 }
 impl OverflowHandler for TokenBudget {
-    fn handle(&mut self, session: &mut Session) -> bool {
-        // Never forget the latest chat, it is the prompt about to be sent (or the reply just received).
-        while Self::estimate_tokens(session) > self.max_tokens && session.get_history_length() > 1 {
-            // Might forget more than one chat to keep the history valid,
-            // e.g. a function call is forgotten together with its response.
-            session.forget_oldest_chat();
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool {
+        while estimate_tokens(history.get_history_as_vecdeque()) > self.max_tokens {
+            let length = history.get_history_length();
+            // Might forget more than one chat to keep the history valid, e.g. a function call is
+            // forgotten together with its response. Returns None instead of forgetting the latest chat.
+            if history.forget_oldest_chat().is_none() {
+                break;
+            }
+            self.forgotten_chats += length - history.get_history_length();
         }
         // Also run the default trimming, so `history_limit` stays a hard cap on the number of chats.
         true
@@ -33,8 +38,10 @@ impl OverflowHandler for TokenBudget {
 #[tokio::main]
 async fn main() {
     // 1. At most 20 chats, and at most ~300 tokens of text.
-    let mut session = Session::new(20);
-    session.set_overflow_handler(TokenBudget { max_tokens: 300 });
+    let mut session = Session::new(20).set_overflow_handler(TokenBudget {
+        max_tokens: 300,
+        forgotten_chats: 0,
+    });
 
     // 2. Create the Gemini client
     // Get your API key from https://aistudio.google.com/app/apikey
@@ -58,18 +65,19 @@ async fn main() {
         println!("User: {prompt}");
         println!("Gemini: {}", response.get_chat().get_text_no_think(""));
         println!(
-            "[chats in history: {}, estimated tokens: {}]\n",
+            "[chats in history: {}, estimated tokens: {}, forgotten chats: {}]\n",
             session.get_history_length(),
-            TokenBudget::estimate_tokens(&session)
+            estimate_tokens(session.get_history_as_vecdeque()),
+            session.overflow_handler().forgotten_chats
         );
     }
 
-    // 4. The handler is not serialized. Set it again after loading a saved session.
+    // 4. The handler is saved along with the session, so its state survives a restart.
     let saved = serde_json::to_string(&session).unwrap();
-    let mut restored: Session = serde_json::from_str(&saved).unwrap();
-    restored.set_overflow_handler(TokenBudget { max_tokens: 300 });
+    let restored: Session<TokenBudget> = serde_json::from_str(&saved).unwrap();
     println!(
-        "Restored session with {} chats",
-        restored.get_history_length()
+        "Restored session with {} chats, {} forgotten so far",
+        restored.get_history_length(),
+        restored.overflow_handler().forgotten_chats
     );
 }

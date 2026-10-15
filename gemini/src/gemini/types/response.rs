@@ -1,5 +1,6 @@
 use super::request::*;
-use super::sessions::Session;
+#[cfg(feature = "reqwest")]
+use super::sessions::{OverflowHandler, Session, SlidingWindow};
 #[cfg(feature = "reqwest")]
 use crate::gemini::error::GeminiResponseStreamError;
 use bytes::Bytes;
@@ -95,19 +96,19 @@ impl GeminiResponse {
 
 #[cfg(feature = "reqwest")]
 pin_project_lite::pin_project! {
-    pub struct ResponseStream<F,T>
-        where F:FnMut(&Session, GeminiResponse) -> T{
+    pub struct ResponseStream<F,T,H = SlidingWindow>
+        where F:FnMut(&Session<H>, GeminiResponse) -> T{
         #[pin]
         response_stream:Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static>,
-        session: Session,
+        session: Session<H>,
         data_extractor: F,
         buffer: Vec<u8>,
     }
 }
 #[cfg(feature = "reqwest")]
-impl<F, T> Stream for ResponseStream<F, T>
+impl<F, T, H: OverflowHandler> Stream for ResponseStream<F, T, H>
 where
-    F: FnMut(&Session, GeminiResponse) -> T,
+    F: FnMut(&Session<H>, GeminiResponse) -> T,
 {
     type Item = Result<T, GeminiResponseStreamError>;
 
@@ -184,15 +185,15 @@ where
     }
 }
 #[cfg(feature = "reqwest")]
-impl<F, T> ResponseStream<F, T>
+impl<F, T, H> ResponseStream<F, T, H>
 where
-    F: FnMut(&Session, GeminiResponse) -> T,
+    F: FnMut(&Session<H>, GeminiResponse) -> T,
 {
     pub(crate) fn new(
         response_stream: Box<
             dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
         >,
-        session: Session,
+        session: Session<H>,
         data_extractor: F,
     ) -> Self {
         Self {
@@ -202,13 +203,13 @@ where
             buffer: Vec::new(),
         }
     }
-    pub fn get_session(&self) -> &Session {
+    pub fn get_session(&self) -> &Session<H> {
         &self.session
     }
-    pub fn get_session_owned(self) -> Session {
+    pub fn get_session_owned(self) -> Session<H> {
         self.session
     }
 }
 #[cfg(feature = "reqwest")]
-pub type GeminiResponseStream =
-    ResponseStream<fn(&Session, GeminiResponse) -> GeminiResponse, GeminiResponse>;
+pub type GeminiResponseStream<H = SlidingWindow> =
+    ResponseStream<fn(&Session<H>, GeminiResponse) -> GeminiResponse, GeminiResponse, H>;

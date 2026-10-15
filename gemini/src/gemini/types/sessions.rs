@@ -3,7 +3,7 @@ use super::response::GeminiResponse;
 use derive_getters::{Dissolve, Getters};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{collections::VecDeque, fmt::Debug};
+use std::collections::VecDeque;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AddFunctionResponseError {
@@ -15,29 +15,79 @@ pub enum AddFunctionResponseError {
     FunctionResponseAfterUser,
 }
 
-#[doc(hidden)]
-pub trait CloneOverflowHandler {
-    fn clone_box(&self) -> Box<dyn OverflowHandler>;
-}
-impl<T: OverflowHandler + Clone + 'static> CloneOverflowHandler for T {
-    fn clone_box(&self) -> Box<dyn OverflowHandler> {
-        Box::new(self.clone())
-    }
-}
-/// Custom strategy to keep `Session` history in check, e.g. by estimated token count.
-pub trait OverflowHandler: CloneOverflowHandler + Send + Sync + Debug {
+/// Strategy to keep `Session` history in check, e.g. by estimated token count.
+/// Set it using `Session::with_overflow_handler()`.
+pub trait OverflowHandler {
     /// Called every time a chat is added to the session, including when it is concatenated into
-    /// the last chat. Remove chats from the beginning using `session.forget_oldest_chat()`.
+    /// the last chat. Forget chats from the beginning using `history.forget_oldest_chat()`.
     ///
     /// Returns true if default handler (sliding window trimming by `history_limit`) should also be run.
-    ///
-    /// # Warning
-    /// `session.set_overflow_handler()` doesn't work within `handler.handle()`
-    fn handle(&mut self, session: &mut Session) -> bool;
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool;
 }
-impl Clone for Box<dyn OverflowHandler> {
-    fn clone(&self) -> Self {
-        self.clone_box()
+/// Allows choosing the handler at runtime with `Session<Box<dyn OverflowHandler>>`.
+impl<H: OverflowHandler + ?Sized> OverflowHandler for Box<H> {
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool {
+        (**self).handle(history)
+    }
+}
+
+/// Default `OverflowHandler`. Only keeps the last `history_limit` chats.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlidingWindow;
+impl OverflowHandler for SlidingWindow {
+    fn handle(&mut self, _: &mut HistoryTrimmer<'_>) -> bool {
+        true
+    }
+}
+
+/// History can't start with a function call or response, as the prompt they belong to is gone.
+fn is_invalid_start(chat: &Chat) -> bool {
+    match chat.role() {
+        Role::Function => true,
+        Role::Model => chat.has_function_call(),
+        Role::User => false,
+    }
+}
+
+/// Session history as seen by `OverflowHandler::handle()`. It can be read but only shrunk from the
+/// beginning, so a handler can't leave the session in a state the API rejects.
+pub struct HistoryTrimmer<'a> {
+    history: &'a mut VecDeque<Chat>,
+    history_limit: usize,
+    chat_no: usize,
+}
+impl HistoryTrimmer<'_> {
+    pub fn get_history_as_vecdeque(&self) -> &VecDeque<Chat> {
+        self.history
+    }
+    pub fn get_history_length(&self) -> usize {
+        self.history.len()
+    }
+    pub fn get_history_limit(&self) -> usize {
+        self.history_limit
+    }
+    /// Count of all the chats of any role.
+    pub fn get_chat_no(&self) -> usize {
+        self.chat_no
+    }
+    /// Remove the oldest chat in the window.
+    /// # WARNING
+    /// Might delete more than 1 chat to keep session in valid state.
+    ///
+    /// Returns `None` without removing anything if the latest chat would be removed too.
+    pub fn forget_oldest_chat(&mut self) -> Option<Chat> {
+        let count = 1 + self
+            .history
+            .iter()
+            .skip(1)
+            .take_while(|chat| is_invalid_start(chat))
+            .count();
+        if count >= self.history.len() {
+            return None;
+        }
+        let oldest_chat = self.history.pop_front();
+        self.history.drain(..count - 1);
+        oldest_chat
     }
 }
 
@@ -45,18 +95,29 @@ impl Clone for Box<dyn OverflowHandler> {
 ///
 /// A `Session` tracks the sequence of `Chat` messages (user prompts and model replies)
 /// and enforces a history limit to manage token usage.
+/// Use `with_overflow_handler()` for custom strategies, e.g. based on token count.
 ///
 /// # Serde
-/// The overflow handler is not serialized. A deserialized `Session` has no handler, so set it
-/// again with `set_overflow_handler()` after loading.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Dissolve, Getters)]
-pub struct Session {
+/// The overflow handler is serialized along with the history. For the default `SlidingWindow`
+/// it is left out, so such sessions keep the same format as before overflow handlers existed.
+#[derive(Debug, Clone, Getters, Dissolve, Serialize, Deserialize)]
+pub struct Session<H = SlidingWindow> {
     history: VecDeque<Chat>,
     history_limit: usize,
     chat_no: usize,
     remember_reply: bool,
-    #[serde(skip)]
-    overflow_handler: Option<Box<dyn OverflowHandler>>,
+    overflow_handler: H,
+}
+impl Default for Session {
+    fn default() -> Self {
+        Self {
+            history: VecDeque::new(),
+            history_limit: 0,
+            chat_no: 0,
+            remember_reply: false,
+            overflow_handler: SlidingWindow,
+        }
+    }
 }
 impl Session {
     /// Creates a new `Session` with a specified history limit.
@@ -75,26 +136,52 @@ impl Session {
             history_limit,
             chat_no: 0,
             remember_reply: true,
-            overflow_handler: None,
+            overflow_handler: SlidingWindow,
         }
     }
+}
+impl<H: OverflowHandler> Session<H> {
     ///Set to false to stop automatic context storing
     pub fn set_remember_reply(mut self, remember: bool) -> Self {
         self.remember_reply = remember;
         self
     }
-    /// Sets a custom `OverflowHandler` to control how history is trimmed.
-    /// See `OverflowHandler::handle()` for when it is called.
-    ///
-    /// # Serde
-    /// The handler is not serialized. Set it again after deserializing the `Session`.
-    pub fn set_overflow_handler(&mut self, handler: impl OverflowHandler + 'static) -> &mut Self {
-        self.overflow_handler = Some(Box::new(handler) as Box<dyn OverflowHandler>);
-        self
+    pub fn remove_overflow_handler(self) -> (Session, H) {
+        let Self {
+            history,
+            history_limit,
+            chat_no,
+            remember_reply,
+            overflow_handler,
+        } = self;
+        let session = Session {
+            history,
+            history_limit,
+            chat_no,
+            remember_reply,
+            overflow_handler: SlidingWindow,
+        };
+        (session, overflow_handler)
     }
-    pub fn remove_overflow_handler(&mut self) -> &mut Self {
-        self.overflow_handler = None;
-        self
+    /// Returns (Session with new handler, old handler)
+    pub fn set_overflow_handler<T: OverflowHandler>(self, overflow_handler: T) -> Session<T> {
+        let Self {
+            history,
+            history_limit,
+            chat_no,
+            remember_reply,
+            overflow_handler: _,
+        } = self;
+        Session {
+            history,
+            history_limit,
+            chat_no,
+            remember_reply,
+            overflow_handler,
+        }
+    }
+    pub fn overflow_handler_mut(&mut self) -> &mut H {
+        &mut self.overflow_handler
     }
     pub fn get_history_limit(&self) -> usize {
         self.history_limit
@@ -164,12 +251,8 @@ impl Session {
         self.remember_reply
     }
     fn remove_invalid_start(&mut self) {
-        while let Some(front_chat) = self.history.front() {
-            match front_chat.role() {
-                Role::Function => self.history.pop_front(),
-                Role::Model if front_chat.has_function_call() => self.history.pop_front(),
-                _ => break,
-            };
+        while self.history.front().is_some_and(is_invalid_start) {
+            self.history.pop_front();
         }
     }
     /// Remove the oldest chat in the window.
@@ -198,15 +281,12 @@ impl Session {
         Ok(self)
     }
     fn handle_overflow(&mut self) {
-        let run_default = match self.overflow_handler.take() {
-            Some(mut handler) => {
-                let run_default = handler.handle(self);
-                self.remove_invalid_start();
-                self.overflow_handler = Some(handler);
-                run_default
-            }
-            None => true,
+        let mut history = HistoryTrimmer {
+            history: &mut self.history,
+            history_limit: self.history_limit,
+            chat_no: self.chat_no,
         };
+        let run_default = self.overflow_handler.handle(&mut history);
         while run_default && self.get_history_length() > self.get_history_limit() {
             self.forget_oldest_chat();
         }
