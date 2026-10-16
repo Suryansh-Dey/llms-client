@@ -1,4 +1,4 @@
-use super::ask::BASE_URL;
+use super::ask::{API_KEY_HEADER, BASE_URL};
 use super::error::GeminiResponseError;
 use super::types::embedding::*;
 use super::types::request::Part;
@@ -20,12 +20,23 @@ use reqwest::Client;
 /// println!("Embedding dimension: {}", response.embedding().values().len());
 /// # }
 /// ```
-#[derive(Clone, Debug, Getters, Dissolve)]
+/// `Debug` masks `api_key`, so it can't leak through logs or a panic message.
+#[derive(Clone, Getters, Dissolve)]
 pub struct GeminiEmbedding {
     client: Client,
     api_key: String,
     model: String,
     config: Option<EmbedContentConfig>,
+}
+impl std::fmt::Debug for GeminiEmbedding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GeminiEmbedding")
+            .field("client", &self.client)
+            .field("api_key", &"***")
+            .field("model", &self.model)
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl GeminiEmbedding {
@@ -112,10 +123,7 @@ impl GeminiEmbedding {
         &self,
         content: Vec<Part>,
     ) -> Result<EmbedContentResponse, GeminiResponseError> {
-        let req_url = format!(
-            "{BASE_URL}/{}:embedContent?key={}",
-            self.model, self.api_key
-        );
+        let req_url = format!("{BASE_URL}/{}:embedContent", self.model);
 
         let request_body = EmbedContentRequest {
             model: format!("models/{}", self.model),
@@ -130,23 +138,17 @@ impl GeminiEmbedding {
         let response = self
             .client
             .post(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .json(&request_body)
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await?;
 
         if !response.status().is_success() {
-            let error = response
-                .json()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            let error = response.json().await?;
             return Err(GeminiResponseError::StatusNotOk(error));
         }
 
-        let embed_response: EmbedContentResponse = response
-            .json()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        let embed_response: EmbedContentResponse = response.json().await?;
         Ok(embed_response)
     }
 

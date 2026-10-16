@@ -9,9 +9,15 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 pub const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+pub const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
+/// The API key is sent in this header rather than the URL query string, so it can't leak through
+/// `reqwest::Error`, which prints the request URL when displayed.
+pub(crate) const API_KEY_HEADER: &str = "x-goog-api-key";
 
 /// The main client for interacting with the Gemini API.
-#[derive(Clone, Default, Debug, Dissolve, Getters)]
+///
+/// `Debug` masks `api_key`, so it can't leak through logs or a panic message.
+#[derive(Clone, Default, Dissolve, Getters)]
 pub struct Gemini {
     client: Client,
     api_key: String,
@@ -22,6 +28,21 @@ pub struct Gemini {
     tools: Option<Vec<Tool>>,
     tool_config: Option<ToolConfig>,
     cached_content: Option<String>,
+}
+impl std::fmt::Debug for Gemini {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Gemini")
+            .field("client", &self.client)
+            .field("api_key", &"***")
+            .field("model", &self.model)
+            .field("sys_prompt", &self.sys_prompt)
+            .field("generation_config", &self.generation_config)
+            .field("safety_settings", &self.safety_settings)
+            .field("tools", &self.tools)
+            .field("tool_config", &self.tool_config)
+            .field("cached_content", &self.cached_content)
+            .finish()
+    }
 }
 
 impl Gemini {
@@ -184,87 +205,60 @@ impl Gemini {
         &self,
         cached_content: &CachedContent,
     ) -> Result<CachedContent, GeminiResponseError> {
-        let req_url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/cachedContents?key={}",
-            self.api_key
-        );
+        let req_url = format!("{API_BASE_URL}/cachedContents");
 
         let response = self
             .client
             .post(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .json(cached_content)
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await?;
 
         if !response.status().is_success() {
-            let error = response
-                .json()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            let error = response.json().await?;
             return Err(GeminiResponseError::StatusNotOk(error));
         }
 
-        let cached_content: CachedContent = response
-            .json()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        let cached_content: CachedContent = response.json().await?;
         Ok(cached_content)
     }
 
     pub async fn list_caches(&self) -> Result<CachedContentList, GeminiResponseError> {
-        let req_url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/cachedContents?key={}",
-            self.api_key
-        );
+        let req_url = format!("{API_BASE_URL}/cachedContents");
 
         let response = self
             .client
             .get(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await?;
 
         if !response.status().is_success() {
-            let error = response
-                .json()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            let error = response.json().await?;
             return Err(GeminiResponseError::StatusNotOk(error));
         }
 
-        let list: CachedContentList = response
-            .json()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        let list: CachedContentList = response.json().await?;
         Ok(list)
     }
 
     pub async fn get_cache(&self, name: &str) -> Result<CachedContent, GeminiResponseError> {
-        let req_url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
-            name, self.api_key
-        );
+        let req_url = format!("{API_BASE_URL}/{name}");
 
         let response = self
             .client
             .get(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await?;
 
         if !response.status().is_success() {
-            let error = response
-                .json()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            let error = response.json().await?;
             return Err(GeminiResponseError::StatusNotOk(error));
         }
 
-        let cached_content: CachedContent = response
-            .json()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        let cached_content: CachedContent = response.json().await?;
         Ok(cached_content)
     }
 
@@ -273,52 +267,37 @@ impl Gemini {
         name: &str,
         update: &CachedContentUpdate,
     ) -> Result<CachedContent, GeminiResponseError> {
-        let req_url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
-            name, self.api_key
-        );
+        let req_url = format!("{API_BASE_URL}/{name}");
 
         let response = self
             .client
             .patch(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .json(update)
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await?;
 
         if !response.status().is_success() {
-            let error = response
-                .json()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            let error = response.json().await?;
             return Err(GeminiResponseError::StatusNotOk(error));
         }
 
-        let cached_content: CachedContent = response
-            .json()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        let cached_content: CachedContent = response.json().await?;
         Ok(cached_content)
     }
 
     pub async fn delete_cache(&self, name: &str) -> Result<(), GeminiResponseError> {
-        let req_url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
-            name, self.api_key
-        );
+        let req_url = format!("{API_BASE_URL}/{name}");
 
         let response = self
             .client
             .delete(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await?;
 
         if !response.status().is_success() {
-            let error = response
-                .json()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            let error = response.json().await?;
             return Err(GeminiResponseError::StatusNotOk(error));
         }
 
@@ -341,14 +320,12 @@ impl Gemini {
         {
             return Err(GeminiResponseError::NothingToRespond);
         }
-        let req_url = format!(
-            "{BASE_URL}/{}:generateContent?key={}",
-            self.model, self.api_key
-        );
+        let req_url = format!("{BASE_URL}/{}:generateContent", self.model);
 
         let response = self
             .client
             .post(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .json(&GeminiRequestBody::new(
                 self.sys_prompt.as_ref(),
                 self.tools.as_deref(),
@@ -359,20 +336,14 @@ impl Gemini {
                 self.cached_content.clone(),
             ))
             .send()
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            .await?;
 
         if !response.status().is_success() {
-            let error = response
-                .json()
-                .await
-                .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+            let error = response.json().await?;
             return Err(GeminiResponseError::StatusNotOk(error));
         }
 
-        let reply = GeminiResponse::new(response)
-            .await
-            .map_err(|e| GeminiResponseError::ReqwestError(e))?;
+        let reply = GeminiResponse::new(response).await?;
         session.update(&reply);
         Ok(reply)
     }
@@ -403,14 +374,12 @@ impl Gemini {
         {
             return Err((session, GeminiResponseError::NothingToRespond));
         }
-        let req_url = format!(
-            "{BASE_URL}/{}:streamGenerateContent?alt=sse&key={}",
-            self.model, self.api_key
-        );
+        let req_url = format!("{BASE_URL}/{}:streamGenerateContent?alt=sse", self.model);
 
         let request = self
             .client
             .post(req_url)
+            .header(API_KEY_HEADER, &self.api_key)
             .json(&GeminiRequestBody::new(
                 self.sys_prompt.as_ref(),
                 self.tools.as_deref(),
@@ -424,13 +393,13 @@ impl Gemini {
             .await;
         let response = match request {
             Ok(response) => response,
-            Err(e) => return Err((session, GeminiResponseError::ReqwestError(e))),
+            Err(e) => return Err((session, e.into())),
         };
 
         if !response.status().is_success() {
             let error = match response.json().await {
                 Ok(response) => response,
-                Err(e) => return Err((session, GeminiResponseError::ReqwestError(e))),
+                Err(e) => return Err((session, e.into())),
             };
             return Err((session, GeminiResponseError::StatusNotOk(error)));
         }

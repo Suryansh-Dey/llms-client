@@ -178,7 +178,7 @@ where
                     }
                 }
                 Poll::Ready(Some(Err(e))) => {
-                    return Poll::Ready(Some(Err(GeminiResponseStreamError::ReqwestError(e))));
+                    return Poll::Ready(Some(Err(e.into())));
                 }
             }
         }

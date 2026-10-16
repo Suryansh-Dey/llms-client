@@ -64,6 +64,12 @@ pub enum GeminiResponseError {
     ///Cannot Respond if last Chat has Role::Model
     NothingToRespond,
 }
+/// Strips the URL from the error, as `reqwest::Error` prints the request URL when displayed.
+impl From<reqwest::Error> for GeminiResponseError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::ReqwestError(error.without_url())
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum GeminiResponseStreamError {
@@ -72,4 +78,10 @@ pub enum GeminiResponseStreamError {
     #[error("Invalid Response Format received. Response: {0}")]
     ///Invalid Response Format received. Contains response string
     InvalidResposeFormat(String),
+}
+/// Strips the URL from the error, as `reqwest::Error` prints the request URL when displayed.
+impl From<reqwest::Error> for GeminiResponseStreamError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::ReqwestError(error.without_url())
+    }
 }
