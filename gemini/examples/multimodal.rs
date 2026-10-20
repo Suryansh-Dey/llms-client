@@ -1,15 +1,13 @@
 use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::sessions::Session;
 use gemini_client_api::gemini::utils::MarkdownToParts;
-use std::env;
 
 #[tokio::test]
 async fn raw_multimodal() {
     use gemini_client_api::gemini::types::request::InlineData;
 
     let mut session = Session::new(6);
-    let api_key = std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
+    let ai = Gemini::from_env("gemini-2.5-flash", None).expect("GEMINI_API_KEY must be set");
 
     session.ask("What is there in this pdf")
         .ask(InlineData::from_url("https://bitmesra.ac.in/UploadedDocuments/admingo/files/221225_List%20of%20Holiday_2026_26.pdf").await.unwrap());
@@ -21,8 +19,7 @@ async fn raw_multimodal() {
 #[tokio::main]
 async fn main() {
     let mut session = Session::new(6);
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
+    let ai = Gemini::from_env("gemini-2.5-flash", None).expect("GEMINI_API_KEY must be set");
 
     // Use MarkdownToParts to easily parse a string with image/file markers
     // It supports both URLs and local file paths!

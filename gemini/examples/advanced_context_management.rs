@@ -2,7 +2,6 @@ use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::request::Chat;
 use gemini_client_api::gemini::types::sessions::{HistoryTrimmer, OverflowHandler, Session};
 use serde::{Deserialize, Serialize};
-use std::env;
 
 /// Rough estimate: ~4 characters per token. Only text parts are counted.
 fn estimate_tokens<'a>(chats: impl IntoIterator<Item = &'a Chat>) -> usize {
@@ -44,13 +43,11 @@ async fn main() {
     });
 
     // 2. Create the Gemini client
-    // Get your API key from https://aistudio.google.com/app/apikey
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(
-        api_key,
+    let ai = Gemini::from_env(
         "gemini-2.5-flash",
         Some("You are a helpful tutor. Answer in 2-3 sentences.".into()),
-    );
+    )
+    .expect("GEMINI_API_KEY must be set");
 
     // 3. Have a conversation. Old chats are forgotten as the budget fills up.
     let prompts = [

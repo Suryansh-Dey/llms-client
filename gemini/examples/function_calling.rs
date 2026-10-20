@@ -2,7 +2,6 @@ use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::request::Tool;
 use gemini_client_api::gemini::types::sessions::Session;
 use gemini_client_api::gemini::utils::{GeminiSchema, execute_function_calls, gemini_function};
-use std::env;
 use std::error::Error;
 
 /// This function will be made available to Gemini.
@@ -29,16 +28,14 @@ fn get_temperature(location: String) -> Result<String, &'static str> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut session = Session::new(10);
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
 
     // 1. Initialize Gemini and register tools
-    let ai =
-        Gemini::new(api_key, "gemini-2.5-flash", None).set_tools(vec![Tool::FunctionDeclarations(
-            vec![
-                add_numbers::gemini_schema(),
-                get_temperature::gemini_schema(),
-            ],
-        )]);
+    let ai = Gemini::from_env("gemini-2.5-flash", None)
+        .expect("GEMINI_API_KEY must be set")
+        .set_tools(vec![Tool::FunctionDeclarations(vec![
+            add_numbers::gemini_schema(),
+            get_temperature::gemini_schema(),
+        ])]);
 
     let prompt = "What is 123.45 plus 678.9, and what's the weather like in London?";
     println!("User: {}\n", prompt);
@@ -75,16 +72,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[tokio::test]
 async fn handle_manually() {
     let mut session = Session::new(10);
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
 
     // 1. Initialize Gemini and register tools
-    let ai =
-        Gemini::new(api_key, "gemini-2.5-flash", None).set_tools(vec![Tool::FunctionDeclarations(
-            vec![
-                add_numbers::gemini_schema(),
-                get_temperature::gemini_schema(),
-            ],
-        )]);
+    let ai = Gemini::from_env("gemini-2.5-flash", None)
+        .expect("GEMINI_API_KEY must be set")
+        .set_tools(vec![Tool::FunctionDeclarations(vec![
+            add_numbers::gemini_schema(),
+            get_temperature::gemini_schema(),
+        ])]);
 
     let prompt = "What is 123.45 plus 678.9, and what's the weather like in London?";
     println!("User: {}\n", prompt);
