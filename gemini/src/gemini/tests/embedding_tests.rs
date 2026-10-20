@@ -82,3 +82,15 @@ async fn embdding_dimension_and_similarity() {
     let similarity = cosin_similarity(embedding1.values_owned(), embedding2.values_owned());
     assert!(similarity > 0.98);
 }
+
+#[test]
+fn test_gemini_embedding_from_env() {
+    unsafe {
+        std::env::set_var("GEMINI_API_KEY", "test-key-123");
+    }
+    let embedder = GeminiEmbedding::from_env("gemini-embedding-001");
+    assert!(embedder.is_ok());
+    let embedder = embedder.unwrap();
+    assert_eq!(embedder.model(), "gemini-embedding-001");
+    assert_eq!(embedder.api_key(), "test-key-123");
+}

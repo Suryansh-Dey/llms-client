@@ -1,13 +1,11 @@
 use gemini_client_api::gemini::embed::GeminiEmbedding;
 use gemini_client_api::gemini::types::embedding::TaskType;
-use std::env;
 
 #[tokio::main]
 async fn main() {
     // 1. Create the Gemini Embedding client
-    // Get your API key from https://aistudio.google.com/app/apikey
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let embedder = GeminiEmbedding::new(api_key, "gemini-embedding-001")
+    let embedder = GeminiEmbedding::from_env("gemini-embedding-001")
+        .expect("GEMINI_API_KEY must be set")
         .set_task_type(TaskType::RetrievalDocument)
         // Optional: reduce dimension for Matryoshka Representation Learning
         .set_output_dimensionality(256);

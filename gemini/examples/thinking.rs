@@ -1,15 +1,14 @@
 use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::request::{ThinkingConfig, ThinkingLevel};
 use gemini_client_api::gemini::types::sessions::Session;
-use std::env;
 
 #[tokio::main]
 async fn main() {
     let mut session = Session::new(4);
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
 
     // Note: Thinking mode requires a supported model like gemini-2.5+
-    let ai = Gemini::new(api_key, "gemini-3-flash-preview", None)
+    let ai = Gemini::from_env("gemini-3-flash-preview", None)
+        .expect("GEMINI_API_KEY must be set")
         .set_thinking_config(ThinkingConfig::new(true, ThinkingLevel::Low)); //For gemini-2.5 only
     //budget is allowed. Eg. `.set_thinking_config(ThinkingConfig::new(true, 1024))`
 

@@ -6,6 +6,7 @@ use super::types::sessions::{OverflowHandler, Session};
 use derive_getters::{Dissolve, Getters};
 use reqwest::Client;
 use serde_json::{Value, json};
+use std::env;
 use std::time::Duration;
 
 pub const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -68,6 +69,19 @@ impl Gemini {
             tool_config: None,
             cached_content: None,
         }
+    }
+    /// Creates a new `Gemini` client using API key in env.
+    ///
+    /// # Arguments
+    /// * `model` - The model variation to use (e.g., "gemini-2.5-flash"). See [model variations](https://ai.google.dev/gemini-api/docs/models#model-variations).
+    /// * `sys_prompt` - Optional system instructions. See [system instructions](https://ai.google.dev/gemini-api/docs/text-generation#image-input).
+    ///
+    /// **Returns** None if GEMINI_API_KEY env variable not set.
+    pub fn from_env(
+        model: impl Into<String>,
+        sys_prompt: Option<SystemInstruction>,
+    ) -> Result<Self, env::VarError> {
+        Ok(Self::new(env::var("GEMINI_API_KEY")?, model, sys_prompt))
     }
     /// Creates a new `Gemini` client with a custom API timeout.
     ///

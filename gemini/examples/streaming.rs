@@ -1,14 +1,12 @@
 use futures::StreamExt;
 use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::sessions::Session;
-use std::env;
 use std::io::{Write, stdout};
 
 #[tokio::main]
 async fn main() {
     let mut session = Session::new(10);
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
+    let ai = Gemini::from_env("gemini-2.5-flash", None).expect("GEMINI_API_KEY must be set");
 
     let prompt = "Write a poem about crab-like robots on Mars.";
     println!("User: {}\n", prompt);
@@ -42,8 +40,7 @@ async fn main() {
 #[tokio::test]
 async fn with_extractor() {
     let mut session = Session::new(10);
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
+    let ai = Gemini::from_env("gemini-2.5-flash", None).expect("GEMINI_API_KEY must be set");
 
     println!("--- Streaming Example ---");
     let prompt = "Write a poem about crab-like robots on Mars.";

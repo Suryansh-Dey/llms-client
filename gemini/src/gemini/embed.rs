@@ -4,6 +4,7 @@ use super::types::embedding::*;
 use super::types::request::Part;
 use derive_getters::{Dissolve, Getters};
 use reqwest::Client;
+use std::env;
 
 /// Client for generating embeddings using Gemini embedding models.
 ///
@@ -53,6 +54,16 @@ impl GeminiEmbedding {
             model: model.into(),
             config: None,
         }
+    }
+    /// Creates a new `GeminiEmbedding` client using API key in env.
+    ///
+    /// # Arguments
+    /// * `model` - The embedding model to use (e.g., `"gemini-embedding-001"`).
+    ///   See [embedding models](https://ai.google.dev/gemini-api/docs/models#gemini-embedding).
+    ///
+    /// **Returns** `Err(env::VarError)` if `GEMINI_API_KEY` env variable is not set.
+    pub fn from_env(model: impl Into<String>) -> Result<Self, env::VarError> {
+        Ok(Self::new(env::var("GEMINI_API_KEY")?, model))
     }
     /// Creates a new `GeminiEmbedding` client with a custom `reqwest::Client`.
     ///

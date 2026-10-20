@@ -1,6 +1,5 @@
 use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::sessions::Session;
-use std::env;
 
 #[tokio::main]
 async fn main() {
@@ -8,13 +7,11 @@ async fn main() {
     let mut session = Session::new(6);
 
     // 2. Create the Gemini client
-    // Get your API key from https://aistudio.google.com/app/apikey
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(
-        api_key,
+    let ai = Gemini::from_env(
         "gemini-2.5-flash",
         Some("You are a senior engineer at google".into()),
-    );
+    )
+    .expect("GEMINI_API_KEY must be set");
 
     // 3. Ask a question
     let prompt = "What are the benefits of using Rust for systems programming?";

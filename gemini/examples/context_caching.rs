@@ -2,13 +2,11 @@ use gemini_client_api::gemini::ask::Gemini;
 use gemini_client_api::gemini::types::caching::CachedContentBuilder;
 use gemini_client_api::gemini::types::request::InlineData;
 use gemini_client_api::gemini::types::sessions::Session;
-use std::env;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() {
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let ai = Gemini::new(api_key, "gemini-2.5-flash", None);
+    let ai = Gemini::from_env("gemini-2.5-flash", None).expect("GEMINI_API_KEY must be set");
     let mut session = Session::new(10);
 
     //Faking big context for example

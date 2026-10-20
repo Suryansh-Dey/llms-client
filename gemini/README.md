@@ -24,11 +24,7 @@ use gemini_client_api::gemini::types::sessions::Session;
 #[tokio::main]
 async fn main() {
     let mut session = Session::new(10); // Keep last 10 messages
-    let ai = Gemini::new(
-        std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set"),
-        "gemini-2.5-flash",
-        None, // Optional system instruction
-    );
+    let ai = Gemini::from_env("gemini-2.5-flash", None).expect("GEMINI_API_KEY must be set");
 
     let response = ai.ask(session.ask("Hello, Gemini!")).await.unwrap();
     println!("Gemini: {}", response.get_chat().get_text_no_think("\n"));
