@@ -52,3 +52,44 @@ jobs:
 
     - name: wasm-pack
       run: wasm-pack build --target web --no-default-features
+
+  build-open-client:
+    defaults:
+      run:
+        working-directory: ./openai-client
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: openai-client
+
+    - name: Check fmt
+      run: cargo fmt --check
+    - name: Run tests
+      run: cargo test -- --nocapture --skip live
+
+  build-open-client-wasm:
+    defaults:
+      run:
+        working-directory: ./openai-client
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: openai-client
+
+    - name: Setup Rust for WASM
+      run: rustup target add wasm32-unknown-unknown
+    - name: Install wasm-pack
+      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+    - name: wasm-pack
+      run: wasm-pack build --target web --no-default-features

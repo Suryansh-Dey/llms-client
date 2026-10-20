@@ -22,5 +22,11 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 - Context Caching
 - Supports Session management in WASM environment with `default-features = false`
 
-# TODO
-1. Do the same for OpenAI
+
+# Open Client
+## Installation
+```bash
+cargo add open-client
+```
+Same as above, for **any OpenAI compatible API**: OpenAI, DeepSeek, Ollama, vLLM, OpenRouter, Groq, Gemini... Just `set_base_url(url)`.
+See [openai-client](openai-client/README.md), and [migration.md](openai-client/migration.md) for differences from the Gemini client.

@@ -1,6 +1,41 @@
 [package]
-name = "openai-client"
+name = "open-client"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/Suryansh-Dey/llms-client"
+authors = ["Suryansh Dey <suryanshdey@gmail.com>"]
+keywords = ["OpenAI", "DeepSeek", "LLM", "SDK", "client"]
+categories = ["web-programming", "asynchronous"]
+description = "Library to use any OpenAI compatible API (OpenAI, DeepSeek, Ollama, vLLM, OpenRouter...). Automatic context management, schema generation, function calling and more."
+readme = "README.md"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream"] , optional = true}
+bytes = "1"
+base64 = "0.23"
+derive-new = "0.7"
+futures = "0.3"
+pin-project-lite = "0.2"
+regex = "1.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", default-features = false, features = ["fs", "macros", "rt-multi-thread"], optional = true }
+mime = "0.3"
+open-client-proc-macros = { version = "0.1.0", path = "./open-client-proc-macros" }
+thiserror = "2.0"
+derive-getters = "0.5"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["fs", "macros", "rt-multi-thread", "net", "io-util"] }
+
+[features]
+default = ["full", "rustls"]
+full = ["tokio", "reqwest"]
+tokio = ["dep:tokio"]
+reqwest = ["dep:reqwest"]
+rustls = ["reqwest/rustls"]
+native-tls = ["reqwest/native-tls"]

@@ -1,0 +1,8 @@
+// Lets the proc-macros' `::open_client::..` paths resolve inside this crate too.
+extern crate self as open_client;
+
+pub mod openai;
+pub mod utils;
+pub use futures;
+pub use serde;
+pub use serde_json;

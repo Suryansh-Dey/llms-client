@@ -1,3 +1,5 @@
 /gemini/target
 /gemini/gemini-proc-macros/target
 /chatgpt/target
+/openai-client/target
+/openai-client/open-client-proc-macros/target
