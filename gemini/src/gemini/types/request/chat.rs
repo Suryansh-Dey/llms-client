@@ -40,7 +40,7 @@ impl Chat {
     ///Don't contain thoughts
     pub fn get_text_no_think(&self, seperator: impl AsRef<str>) -> String {
         let parts = self.parts();
-        let final_text = parts
+        parts
             .iter()
             .filter_map(|part| {
                 if let PartType::Text(text) = part.data() {
@@ -54,14 +54,12 @@ impl Chat {
                 }
             })
             .collect::<Vec<&str>>()
-            .join(seperator.as_ref());
-
-        final_text
+            .join(seperator.as_ref())
     }
     ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
     pub fn get_thoughts(&self, seperator: impl AsRef<str>) -> String {
         let parts = self.parts();
-        let thoughts = parts
+        parts
             .iter()
             .filter_map(|part| {
                 if let PartType::Text(text) = part.data() {
@@ -75,9 +73,7 @@ impl Chat {
                 }
             })
             .collect::<Vec<&str>>()
-            .join(seperator.as_ref());
-
-        thoughts
+            .join(seperator.as_ref())
     }
     pub fn extract_text_all(parts: &[Part], seperator: impl AsRef<str>) -> String {
         parts
@@ -96,7 +92,7 @@ impl Chat {
     ///`seperator` used to concatenate all text parts. TL;DR use "\n" as seperator.
     ///Includes all text including thoughts
     pub fn get_text_all(&self, seperator: impl AsRef<str>) -> String {
-        Self::extract_text_all(&self.parts(), seperator)
+        Self::extract_text_all(self.parts(), seperator)
     }
     pub fn is_thinking(&self) -> bool {
         self.parts().iter().any(|p| p.is_thought())

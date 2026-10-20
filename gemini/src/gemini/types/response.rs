@@ -131,25 +131,24 @@ where
                 if let Some(json_str) = String::from_utf8_lossy(&message_bytes)
                     .strip_prefix("data:")
                     .map(|s| s.trim())
+                    && !json_str.is_empty()
                 {
-                    if !json_str.is_empty() {
-                        // Parse JSON.
-                        let response = match GeminiResponse::from_str(json_str) {
-                            Ok(resp) => resp,
-                            Err(e) => {
-                                let err = GeminiResponseStreamError::InvalidResposeFormat(format!(
-                                    "JSON parsing error [{}]: {}",
-                                    e, json_str
-                                ));
-                                return Poll::Ready(Some(Err(err)));
-                            }
-                        };
+                    // Parse JSON.
+                    let response = match GeminiResponse::from_str(json_str) {
+                        Ok(resp) => resp,
+                        Err(e) => {
+                            let err = GeminiResponseStreamError::InvalidResposeFormat(format!(
+                                "JSON parsing error [{}]: {}",
+                                e, json_str
+                            ));
+                            return Poll::Ready(Some(Err(err)));
+                        }
+                    };
 
-                        // Update the session and return the data.
-                        this.session.update(&response);
-                        let data = (this.data_extractor)(this.session, response);
-                        return Poll::Ready(Some(Ok(data)));
-                    }
+                    // Update the session and return the data.
+                    this.session.update(&response);
+                    let data = (this.data_extractor)(this.session, response);
+                    return Poll::Ready(Some(Ok(data)));
                 }
                 continue;
             }

@@ -35,7 +35,8 @@ pub async fn get_file_base64s(
     for file in regex.captures_iter(markdown.as_ref()) {
         let capture = file.get(0).unwrap();
         let url = file[1].to_string();
-        tasks.push((async |capture: regex::Match<'_>, url: String| {
+        let client = client.clone();
+        tasks.push(async move {
             let (mime_type, base64) = if url.starts_with("https://") || url.starts_with("http://") {
                 let response = client.get(&url).send().await;
                 match response {
@@ -43,10 +44,8 @@ pub async fn get_file_base64s(
                         let mime_type = response
                             .headers()
                             .get("Content-Type")
-                            .map(|mime| mime.to_str().ok())
-                            .flatten()
-                            .map(|mime| Mime::from_str(mime).ok())
-                            .flatten();
+                            .and_then(|mime| mime.to_str().ok())
+                            .and_then(|mime| Mime::from_str(mime).ok());
 
                         let base64 = response
                             .bytes()
@@ -62,7 +61,7 @@ pub async fn get_file_base64s(
                     _ => (None, None),
                 }
             } else {
-                let base64 = tokio::fs::read(url.clone())
+                let base64 = tokio::fs::read(&url)
                     .await
                     .ok()
                     .map(|bytes| STANDARD.encode(&bytes));
@@ -77,7 +76,7 @@ pub async fn get_file_base64s(
                 mime_type,
                 base64,
             }
-        })(capture, url));
+        });
     }
     join_all(tasks).await
 }

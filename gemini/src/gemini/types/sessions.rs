@@ -133,7 +133,7 @@ impl Session {
     /// * `history_limit` - The maximum number of `Chat`(including all `Role`) to keep in history.
     /// * Uses sliding window to maintain length.
     /// * Might pop many elements after one new insertion OR Might keep more elements than `history_limit`, to maintain valid history according to
-    /// API.
+    ///   API.
     ///
     /// # Example
     /// `Session::new(2)` can store only the last question and its reply.
@@ -271,7 +271,7 @@ impl<H: OverflowHandler> Session<H> {
     pub fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
         match (self.history.back_mut(), chat.role()) {
             (Some(last_chat), role) if last_chat.role() == role => {
-                concatenate_parts(last_chat.parts_mut(), chat.parts())
+                concatenate_parts(last_chat.parts_mut(), chat.parts_owned())
             }
             (Some(last_chat), Role::Function) if *last_chat.role() == Role::User => {
                 return Err("Role::Function not allowed after Role::User");
@@ -332,7 +332,7 @@ impl<H: OverflowHandler> Session<H> {
         response: T,
     ) -> Result<&mut Self, AddFunctionResponseError> {
         let res_value = serde_json::to_value(response)
-            .map_err(|e| AddFunctionResponseError::InvalidResponseFormat(e))?;
+            .map_err(AddFunctionResponseError::InvalidResponseFormat)?;
         let final_res = if res_value.is_object() {
             res_value
         } else {
@@ -350,10 +350,10 @@ impl<H: OverflowHandler> Session<H> {
             self.reply_parts(reply_parts.clone());
             Some(reply_parts)
         } else {
-            if let Some(chat) = self.history.back() {
-                if let Role::User = chat.role() {
-                    self.history.pop_back();
-                }
+            if let Some(chat) = self.history.back()
+                && let Role::User = chat.role()
+            {
+                self.history.pop_back();
             }
             None
         }
@@ -370,10 +370,10 @@ impl<H: OverflowHandler> Session<H> {
     /// Popped items as (last_chat, second_last_chat)
     pub fn forget_last_conversation(&mut self) -> (Option<Chat>, Option<Chat>) {
         let last = self.history.pop_back();
-        if let Some(chat) = self.history.back() {
-            if let Role::User = chat.role() {
-                return (last, self.history.pop_back());
-            }
+        if let Some(chat) = self.history.back()
+            && let Role::User = chat.role()
+        {
+            return (last, self.history.pop_back());
         }
         (last, None)
     }

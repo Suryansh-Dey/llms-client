@@ -125,7 +125,7 @@ impl Gemini {
     ///
     /// See [Gemini docs](https://ai.google.dev/api/generate-content#generationconfig) for schema details.
     pub fn set_generation_config(&mut self) -> &mut Value {
-        if let None = self.generation_config {
+        if self.generation_config.is_none() {
             self.generation_config = Some(json!({}));
         }
         self.generation_config.as_mut().unwrap()
@@ -135,10 +135,10 @@ impl Gemini {
         self
     }
     pub fn set_thinking_config(mut self, config: ThinkingConfig) -> Self {
-        if let Value::Object(map) = self.set_generation_config() {
-            if let Ok(thinking_value) = serde_json::to_value(config) {
-                map.insert("thinking_config".to_string(), thinking_value);
-            }
+        if let Value::Object(map) = self.set_generation_config()
+            && let Ok(thinking_value) = serde_json::to_value(config)
+        {
+            map.insert("thinking_config".to_string(), thinking_value);
         }
         self
     }
@@ -170,7 +170,7 @@ impl Gemini {
     pub fn set_json_mode(mut self, schema: Value) -> Self {
         let config = self.set_generation_config();
         config["response_mime_type"] = "application/json".into();
-        config["response_schema"] = schema.into();
+        config["response_schema"] = schema;
         self
     }
     pub fn remove_json_mode(mut self) -> Self {
@@ -329,7 +329,7 @@ impl Gemini {
             .json(&GeminiRequestBody::new(
                 self.sys_prompt.as_ref(),
                 self.tools.as_deref(),
-                &session.get_history().as_slice(),
+                session.get_history().as_slice(),
                 self.generation_config.as_ref(),
                 self.safety_settings.as_deref(),
                 self.tool_config.as_ref(),

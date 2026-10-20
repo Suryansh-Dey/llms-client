@@ -79,7 +79,7 @@ impl GeminiEmbedding {
         let output_dimensionality = self
             .config
             .as_ref()
-            .and_then(|c| c.output_dimensionality().clone());
+            .and_then(|c| *c.output_dimensionality());
         self.config = Some(EmbedContentConfig::new(
             Some(task_type),
             output_dimensionality,
@@ -132,7 +132,7 @@ impl GeminiEmbedding {
             output_dimensionality: self
                 .config
                 .as_ref()
-                .and_then(|c| c.output_dimensionality().clone()),
+                .and_then(|c| *c.output_dimensionality()),
         };
 
         let response = self

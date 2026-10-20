@@ -48,7 +48,7 @@ fn magnitude(a: Vec<f32>) -> f32 {
     for v in a {
         sum += v * v;
     }
-    return f32::sqrt(sum);
+    f32::sqrt(sum)
 }
 fn cosin_similarity(a: Vec<f32>, b: Vec<f32>) -> f32 {
     let mut dot = 0.0;
@@ -56,7 +56,7 @@ fn cosin_similarity(a: Vec<f32>, b: Vec<f32>) -> f32 {
     for (ai, bi) in a.iter().zip(&b) {
         dot += ai * bi;
     }
-    return dot / magnitude(a) / magnitude(b);
+    dot / magnitude(a) / magnitude(b)
 }
 #[tokio::test]
 async fn embdding_dimension_and_similarity() {

@@ -176,7 +176,7 @@ impl<'a> MarkdownToParts<'a> {
                 removed_length += end;
             }
         }
-        if self.markdown.len() != 0 {
+        if !self.markdown.is_empty() {
             parts.push(self.markdown.into());
         }
         parts

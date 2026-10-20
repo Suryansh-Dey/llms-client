@@ -77,7 +77,7 @@ impl InlineData {
     ) -> Result<Self, InlineDataError> {
         let response = reqwest::get(url)
             .await
-            .map_err(|e| InlineDataError::RequestFailed(e))?;
+            .map_err(InlineDataError::RequestFailed)?;
         if !checker(response.headers()) {
             return Err(InlineDataError::CheckerFalse);
         }
@@ -87,14 +87,13 @@ impl InlineData {
             .get("Content-Type")
             .ok_or(InlineDataError::ContentTypeMissing)?
             .to_str()
-            .map_err(|e| InlineDataError::ContentTypeParseFailed(e))?;
-        let mime_type =
-            Mime::from_str(mime_type).map_err(|e| InlineDataError::InvalidMimeType(e))?;
+            .map_err(InlineDataError::ContentTypeParseFailed)?;
+        let mime_type = Mime::from_str(mime_type).map_err(InlineDataError::InvalidMimeType)?;
 
         let body = response
             .bytes()
             .await
-            .map_err(|e| InlineDataError::RequestFailed(e))?;
+            .map_err(InlineDataError::RequestFailed)?;
 
         Ok(InlineData::new(mime_type, STANDARD.encode(body)))
     }
@@ -425,7 +424,7 @@ where
 }
 #[derive(Serialize, new)]
 #[serde(rename_all = "camelCase")]
-pub struct GeminiRequestBody<'a> {
+pub(crate) struct GeminiRequestBody<'a> {
     system_instruction: Option<&'a SystemInstruction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<&'a [Tool]>,
@@ -459,21 +458,16 @@ pub enum Tool {
     UrlContext(Value),
 }
 
-pub fn concatenate_parts(updating: &mut Vec<Part>, updator: &[Part]) {
+pub fn concatenate_parts(updating: &mut Vec<Part>, updator: impl IntoIterator<Item = Part>) {
     for updator_part in updator {
-        if let Some(updating_last) = updating.last_mut() {
-            match &updator_part.data {
-                PartType::Text(updator_text) => {
-                    if updating_last.is_thought() == updator_part.is_thought() {
-                        if let PartType::Text(ref mut updating_text) = updating_last.data {
-                            updating_text.push_str(&updator_text);
-                            continue;
-                        }
-                    }
-                }
-                _ => {}
-            }
+        if let Some(updating_last) = updating.last_mut()
+            && updating_last.is_thought() == updator_part.is_thought()
+            && let PartType::Text(updator_text) = &updator_part.data
+            && let PartType::Text(ref mut updating_text) = updating_last.data
+        {
+            updating_text.push_str(updator_text);
+            continue;
         }
-        updating.push(updator_part.clone());
+        updating.push(updator_part);
     }
 }
