@@ -78,6 +78,8 @@ impl InlineData {
         Self { mime_type, data }
     }
 
+    /// Downloads `url`, with the mime type from its `Content-Type` header. The body is only
+    /// downloaded if `checker` returns true for the response headers.
     #[cfg(feature = "reqwest")]
     pub async fn from_url_with_check<F: FnOnce(&HeaderMap) -> bool>(
         url: &str,
@@ -106,6 +108,7 @@ impl InlineData {
         Ok(InlineData::new(mime_type, STANDARD.encode(body)))
     }
 
+    /// Downloads `url`, with the mime type from its `Content-Type` header.
     #[cfg(feature = "reqwest")]
     pub async fn from_url(url: &str) -> Result<Self, InlineDataError> {
         Self::from_url_with_check(url, |_| true).await
@@ -134,6 +137,10 @@ pub struct ImageUrl {
     detail: Option<ImageDetail>,
 }
 impl ImageUrl {
+    /// An image the API server fetches. `url` is an `https://` URL reachable by the server
+    /// (e.g. public or pre-signed), or a `data:` URL with base64 content. OpenAI accepts
+    /// only images; some servers, e.g. Gemini, also accept other files such as PDF.
+    /// `detail` sets the resolution the model sees, where supported.
     pub fn new(url: String, detail: Option<ImageDetail>) -> Self {
         Self { url, detail }
     }

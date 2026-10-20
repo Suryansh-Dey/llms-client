@@ -3,7 +3,6 @@ use open_client::mime;
 use open_client::openai::ask::OpenAI;
 use open_client::openai::types::request::{ImageDetail, ImageUrl, InlineData};
 use open_client::openai::types::sessions::Session;
-use open_client::openai::utils::MarkdownToParts;
 
 const CHART: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png");
 const LOGO: &str = "https://www.rust-lang.org/logos/rust-logo-512x512.png";
@@ -27,15 +26,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let response = ai.ask(&mut session).await?;
     println!("AI: {}", response.get_chat().get_text_no_think(""));
 
-    // Markdown with images, e.g. from a chat UI. Links can be URLs or file paths.
-    let markdown =
-        format!("Which of these is a scatter plot, ![first]({LOGO}) or ![second]({CHART})?");
-    let parts = MarkdownToParts::builder()
-        // For links whose type isn't known from the response headers
-        .guess_mime_type(|_| mime::IMAGE_PNG)
-        .build(&markdown)
-        .await
-        .process();
+    // Text and images interleaved, in the order the model should see them
+    let parts = vec![
+        "Which of these is a scatter plot, the first".into(),
+        ImageUrl::new(LOGO.into(), Some(ImageDetail::Low)).into(),
+        "or the second?".into(),
+        InlineData::from_path(CHART, mime::IMAGE_PNG).await?.into(),
+    ];
     let response = ai.ask(session.ask_parts(parts)).await?;
     println!("AI: {}", response.get_chat().get_text_no_think(""));
     Ok(())

@@ -2,8 +2,6 @@
 extern crate self as open_client;
 
 pub mod openai;
-#[cfg(feature = "reqwest")]
-mod utils;
 pub use futures;
 pub use mime;
 #[cfg(feature = "reqwest")]

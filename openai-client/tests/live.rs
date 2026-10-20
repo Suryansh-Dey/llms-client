@@ -12,7 +12,7 @@ use open_client::openai::error::OpenAIResponseError;
 use open_client::openai::types::request::{InlineData, MultimodalResponse, ReasoningEffort, Tool};
 use open_client::openai::types::sessions::Session;
 use open_client::openai::utils::{
-    MarkdownToParts, OpenAISchema, execute_function_calls, openai_function, openai_schema,
+    OpenAISchema, execute_function_calls, openai_function, openai_schema,
 };
 use serde::Deserialize;
 
@@ -136,11 +136,11 @@ async fn function_calling_loop() {
 
 #[tokio::test]
 #[ignore = "needs OPENAI_API_KEY"]
-async fn image_from_markdown() {
-    let markdown = format!("What kind of chart is this? ![chart]({IMAGE})");
-    let parts = MarkdownToParts::builder().build(&markdown).await.process();
+async fn image_in_prompt() {
+    let chart = InlineData::from_path(IMAGE, mime::IMAGE_PNG).await.unwrap();
     let mut session = Session::new(2);
-    let response = ai(None).ask(session.ask_parts(parts)).await.unwrap();
+    session.ask("What kind of chart is this?").ask(chart);
+    let response = ai(None).ask(&mut session).await.unwrap();
     let reply = response.get_chat().get_text_no_think("").to_lowercase();
     assert!(reply.contains("scatter"), "{reply}");
 }

@@ -12,7 +12,7 @@ Sibling of [gemini-client-api](https://crates.io/crates/gemini-client-api) with 
     - `#[openai_schema]`: Generate strict mode compatible JSON schemas directly from your Rust structs and enums.
     - `#[openai_function]`: Turn Rust functions into tools with minimal boilerplate.
     - `execute_function_calls!`: Seamlessly dispatch and handle multiple (parallel) function calls.
-- **Multimodal Support**: Images, audio and files (e.g. PDF), plus a built-in markdown parser for images and local files.
+- **Multimodal Support**: Images, audio and files (e.g. PDF), from local files, URLs or base64.
 - **Multimodal function responses**: Functions can return images too, e.g. a screenshot.
 - **Streaming**: Function call arguments streamed in pieces are assembled for you.
 - **Reasoning**: `reasoning_effort` and thoughts from `reasoning_content` / `reasoning` (DeepSeek, Qwen, vLLM, Ollama, OpenRouter..).
@@ -66,7 +66,7 @@ Examples use `OpenAI::from_env()`. Set `OPENAI_API_KEY`, and `OPENAI_BASE_URL` (
 - [**Function Calling**](examples/function_calling.rs): Rust functions as tools with `#[openai_function]` and `execute_function_calls!`.
 - [**Manual Function Calling**](examples/manual_function_calling.rs): Checking calls before acting, and responding with an image.
 - [**Structured Output**](examples/structured_output.rs): A reply in your own type using `#[openai_schema]`.
-- [**Multimodal**](examples/multimodal.rs): Local files, image URLs and markdown with images.
+- [**Multimodal**](examples/multimodal.rs): Local files, image URLs, and text interleaved with images.
 - [**Thinking**](examples/thinking.rs): Thoughts of reasoning models in a tool calling loop (DeepSeek).
 - [**Context Management**](examples/context_management.rs): A token budget `OverflowHandler` calibrated with `usage`.
 - [**Embeddings**](examples/embedding.rs): Semantic search.

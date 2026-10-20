@@ -9,5 +9,3 @@ mod http;
 mod request;
 #[cfg(feature = "reqwest")]
 mod stream;
-#[cfg(feature = "reqwest")]
-mod utils;

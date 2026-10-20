@@ -1,6 +1,6 @@
 # Migrating from gemini-client-api
 
-`open-client` has the same structure as [gemini-client-api](https://crates.io/crates/gemini-client-api) 7.x: the same `Session`, `OverflowHandler`, `Chat` / `Part` / `PartType`, `MarkdownToParts`, `ask` / `ask_as_stream` / `ask_as_stream_with_extractor`, macros and features. Most code migrates by renaming. This document lists every difference in the public API, most of them coming from the OpenAI specification.
+`open-client` has the same structure as [gemini-client-api](https://crates.io/crates/gemini-client-api) 7.x: the same `Session`, `OverflowHandler`, `Chat` / `Part` / `PartType`, `ask` / `ask_as_stream` / `ask_as_stream_with_extractor`, macros and features. Most code migrates by renaming. This document lists every difference in the public API, most of them coming from the OpenAI specification.
 
 ## Renames
 
@@ -117,8 +117,16 @@ session.add_function_response(call.id(), MultimodalResponse::new(vec![
 Helpers that were public in gemini-client-api are private, and APIs it deprecated or replaced are left out.
 
 - `GeminiRequestBody` and `concatenate_parts()` are private.
-- The `utils` module (`get_file_base64s()`, `MatchedFiles`) is private. `mime` is re-exported at the crate root (`open_client::mime`), and `utils::{HeaderMap, HeaderValue}` are replaced by the re-exported `open_client::reqwest`.
-- `MarkdownToParts::new()`, `new_checked()`, `from_regex()` and `from_regex_checked()` are removed. Use `MarkdownToParts::builder()`, which has all their options. `MarkdownToParts` has no getters or `dissolve()`, and needs the `reqwest` feature.
+- The crate-root `utils` module is removed. `mime` is re-exported at the crate root (`open_client::mime`), and `utils::{HeaderMap, HeaderValue}` are replaced by the re-exported `open_client::reqwest`.
+- `MarkdownToParts` is removed, along with `get_file_base64s()`, `MatchedFiles` and the `regex` dependency. It read every file path and downloaded every URL found in the text, which is unsafe when the text comes from users or models, and OpenAI compatible servers fetch image URLs themselves. Build the parts yourself:
+  ```rust
+  session.ask_parts(vec![
+      "Compare these:".into(),
+      ImageUrl::new("https://example.com/a.png".into(), None).into(), // fetched by the server
+      InlineData::from_url("https://example.com/b.png").await?.into(), // downloaded, sent as base64
+      InlineData::from_path("c.png", mime::IMAGE_PNG).await?.into(),
+  ]);
+  ```
 - The deprecated `Session::get_parts()`, `get_parts_mut()`, `get_parts_no()` and `get_parts_no_mut()` are removed. Use `get_previous_chat()`, `get_previous_chat_mut()` and `get_history_as_vecdeque()`.
 - `GeminiSchema::name(&schema)` is removed. Use `Tool::name()`.
 

@@ -3,9 +3,8 @@
 use crate::openai::ask::OpenAI;
 use crate::openai::embed::OpenAIEmbedding;
 use crate::openai::error::OpenAIResponseError;
-use crate::openai::types::request::{PartType, Role};
+use crate::openai::types::request::{InlineData, InlineDataError, Role};
 use crate::openai::types::sessions::Session;
-use crate::openai::utils::MarkdownToParts;
 use futures::StreamExt;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -268,28 +267,25 @@ async fn embeddings_count_must_match_inputs() {
 }
 
 #[tokio::test]
-async fn markdown_image_is_downloaded() {
+async fn inline_data_from_url() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
     let png = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png")).unwrap();
-    let (base_url, _) = serve(200, "image/png", png.clone()).await;
-    let markdown = format!("Before ![chart]({base_url}/lda.png) after");
-    let parts = MarkdownToParts::builder()
-        // Not used, as the server sends Content-Type
-        .guess_mime_type(|_| mime::IMAGE_JPEG)
-        .build(&markdown)
+    let (base_url, request) = serve(200, "image/png", png.clone()).await;
+    let data = InlineData::from_url(&format!("{base_url}/lda.png"))
         .await
-        .process();
+        .unwrap();
+    assert_eq!(request.await.unwrap().line, "GET /v1/lda.png HTTP/1.1");
+    assert_eq!(*data.mime_type(), mime::IMAGE_PNG);
+    assert_eq!(STANDARD.decode(data.data()).unwrap(), png);
 
-    assert_eq!(parts.len(), 3);
-    assert!(
-        matches!(parts[0].data(), PartType::Text(text) if text.starts_with("Before ![chart]("))
-    );
-    match parts[1].data() {
-        PartType::InlineData(data) => {
-            assert_eq!(*data.mime_type(), mime::IMAGE_PNG);
-            use base64::{Engine, engine::general_purpose::STANDARD};
-            assert_eq!(STANDARD.decode(data.data()).unwrap(), png);
-        }
-        other => panic!("Expected InlineData, got {other:?}"),
-    }
-    assert!(matches!(parts[2].data(), PartType::Text(text) if text == " after"));
+    // The checker sees the headers before the body is downloaded
+    let (base_url, _) = serve(200, "text/html", "<html></html>").await;
+    let result = InlineData::from_url_with_check(&base_url, |headers| {
+        headers["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("image/")
+    })
+    .await;
+    assert!(matches!(result, Err(InlineDataError::CheckerFalse)));
 }
