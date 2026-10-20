@@ -1,3 +1,7 @@
+> [!Warning]
+> **Status**: gemini-client-api project is currently in maintenance mode / archived. Fewer updates are expected.
+> If you are starting, [open-client](https://crates.io/crates/open-client) is preferred because Gemini supports OpenAI complaint endpoints hence you get access to Gemini with flexibility to switch to any OpenAI complaint API.
+
 # Gemini
 ## Installation
 ```bash

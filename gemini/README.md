@@ -49,4 +49,6 @@ For WASM environments, disable default features:
 gemini-client-api = { version = "...", default-features = false }
 ```
 
-**[Change log](https://github.com/Suryansh-Dey/llms-client/blob/main/gemini/CHANGELOG.md)**
+> [!Warning]
+> **Status**: This project is currently in maintenance mode / archived. Fewer updates are expected.
+> If you are starting, [open-client](https://crates.io/crates/open-client) is preferred because Gemini supports OpenAI complaint endpoints hence you get access to Gemini with flexibility to switch to any OpenAI complaint API.
