@@ -1,22 +1,24 @@
 //! Tests against a local HTTP server, checking what is sent and how replies are handled.
+//! Parsing of streamed events is tested in `stream.rs`.
 use crate::openai::ask::OpenAI;
 use crate::openai::embed::OpenAIEmbedding;
-use crate::openai::error::{OpenAIResponseError, OpenAIResponseStreamError};
-use crate::openai::types::request::Role;
+use crate::openai::error::OpenAIResponseError;
+use crate::openai::types::request::{PartType, Role};
 use crate::openai::types::sessions::Session;
+use crate::openai::utils::MarkdownToParts;
 use futures::StreamExt;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-pub(crate) struct Request {
-    pub line: String,
-    pub headers: Vec<(String, String)>,
-    pub body: Value,
+struct Request {
+    line: String,
+    headers: Vec<(String, String)>,
+    body: Value,
 }
 impl Request {
-    pub fn header(&self, name: &str) -> Option<&str> {
+    fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .iter()
             .find(|(key, _)| key.eq_ignore_ascii_case(name))
@@ -24,16 +26,18 @@ impl Request {
     }
 }
 
-/// Serves one request with `status` and `chunks` as body, written one by one.
-/// Returns base URL and the received request.
-pub(crate) async fn serve(
+/// Serves one request with `status` and `body`. Returns the base URL and the received request.
+async fn serve(
     status: u16,
     content_type: &str,
-    chunks: Vec<String>,
+    body: impl Into<Vec<u8>>,
 ) -> (String, JoinHandle<Request>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
-    let content_type = content_type.to_string();
+    let head = format!(
+        "HTTP/1.1 {status} STATUS\r\nContent-Type: {content_type}\r\nConnection: close\r\n\r\n"
+    );
+    let body = body.into();
     let handle = tokio::spawn(async move {
         let (mut socket, _) = listener.accept().await.unwrap();
         let mut buffer = Vec::new();
@@ -45,8 +49,8 @@ pub(crate) async fn serve(
                 break p;
             }
         };
-        let head = String::from_utf8_lossy(&buffer[..header_end]).to_string();
-        let mut lines = head.lines();
+        let request_head = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+        let mut lines = request_head.lines();
         let line = lines.next().unwrap().to_string();
         let headers: Vec<(String, String)> = lines
             .filter_map(|l| l.split_once(':'))
@@ -60,22 +64,15 @@ pub(crate) async fn serve(
             let n = socket.read(&mut chunk).await.unwrap();
             buffer.extend_from_slice(&chunk[..n]);
         }
-        let body = serde_json::from_slice(&buffer[header_end + 4..]).unwrap_or(Value::Null);
+        let request_body = serde_json::from_slice(&buffer[header_end + 4..]).unwrap_or(Value::Null);
 
-        let head = format!(
-            "HTTP/1.1 {status} STATUS\r\nContent-Type: {content_type}\r\nConnection: close\r\n\r\n"
-        );
         socket.write_all(head.as_bytes()).await.unwrap();
-        for chunk in chunks {
-            socket.write_all(chunk.as_bytes()).await.unwrap();
-            socket.flush().await.unwrap();
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
+        socket.write_all(&body).await.unwrap();
         socket.shutdown().await.ok();
         Request {
             line,
             headers,
-            body,
+            body: request_body,
         }
     });
     (base_url, handle)
@@ -99,11 +96,10 @@ async fn ask_sends_request_to_base_url() {
     let (base_url, request) = serve(
         200,
         "application/json",
-        vec![completion(
-            json!({"role": "assistant", "content": "Hello!"}),
-        )],
+        completion(json!({"role": "assistant", "content": "Hello!"})),
     )
     .await;
+    // Trailing slash is ignored
     let mut ai = OpenAI::new("secret", "mock-model", Some("Be brief".into()))
         .set_base_url(format!("{base_url}/"));
     ai.set_generation_config()["temperature"] = 0.5.into();
@@ -133,14 +129,14 @@ async fn ask_sends_request_to_base_url() {
 }
 
 #[tokio::test]
-async fn empty_api_key_sends_no_authorization() {
+async fn no_api_key_sends_no_authorization() {
     let (base_url, request) = serve(
         200,
         "application/json",
-        vec![completion(json!({"role": "assistant", "content": "ok"}))],
+        completion(json!({"role": "assistant", "content": "ok"})),
     )
     .await;
-    let ai = OpenAI::new("", "local-model", None).set_base_url(base_url);
+    let ai = OpenAI::with_no_api_key("local-model", None).set_base_url(base_url);
     ai.ask(Session::new(2).ask("Hi")).await.unwrap();
     assert_eq!(request.await.unwrap().header("authorization"), None);
 }
@@ -148,9 +144,10 @@ async fn empty_api_key_sends_no_authorization() {
 #[tokio::test]
 async fn error_status_is_parsed() {
     let body = json!({"error": {"message": "Incorrect API key", "type": "invalid_request_error", "param": null, "code": "invalid_api_key"}});
-    let (base_url, _) = serve(401, "application/json", vec![body.to_string()]).await;
+    let (base_url, _) = serve(401, "application/json", body.to_string()).await;
     let ai = OpenAI::new("wrong", "mock-model", None).set_base_url(base_url);
-    match ai.ask(Session::new(2).ask("Hi")).await {
+    let mut session = Session::new(2);
+    match ai.ask(session.ask("Hi")).await {
         Err(OpenAIResponseError::StatusNotOk(e)) => {
             assert_eq!(e.status, 401);
             assert_eq!(e.error.message, "Incorrect API key");
@@ -159,125 +156,51 @@ async fn error_status_is_parsed() {
         }
         other => panic!("Expected StatusNotOk, got {other:?}"),
     }
+    // The prompt stays, so it can be retried
+    assert_eq!(session.get_history_length(), 1);
+}
+
+#[tokio::test]
+async fn error_object_with_ok_status() {
+    let body = json!({"error": {"message": "Rate limit exceeded", "code": 429}});
+    let (base_url, _) = serve(200, "application/json", body.to_string()).await;
+    let ai = OpenAI::new("key", "mock-model", None).set_base_url(base_url);
+    match ai.ask(Session::new(2).ask("Hi")).await {
+        Err(OpenAIResponseError::StatusNotOk(e)) => {
+            assert_eq!(e.status, 200);
+            assert_eq!(e.error.message, "Rate limit exceeded");
+        }
+        other => panic!("Expected StatusNotOk, got {other:?}"),
+    }
 }
 
 #[tokio::test]
 async fn invalid_response_contains_body() {
-    let (base_url, _) = serve(200, "text/html", vec!["<html>Not an API</html>".into()]).await;
-    let ai = OpenAI::new("", "mock-model", None).set_base_url(base_url);
+    let (base_url, _) = serve(200, "text/html", "<html>Not an API</html>").await;
+    let ai = OpenAI::new("key", "mock-model", None).set_base_url(base_url);
     match ai.ask(Session::new(2).ask("Hi")).await {
         Err(OpenAIResponseError::InvalidResponseFormat(e)) => assert!(e.contains("Not an API")),
         other => panic!("Expected InvalidResponseFormat, got {other:?}"),
     }
 }
 
-fn chunk(delta: Value, finish_reason: Option<&str>) -> String {
-    let chunk = json!({
-        "id": "chatcmpl-1",
-        "object": "chat.completion.chunk",
-        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}]
-    });
-    format!("data: {chunk}\n\n")
-}
-
 #[tokio::test]
-async fn stream_assembles_reply() {
-    let chunks = vec![
-        ": keep alive\n\n".to_string(),
-        chunk(
-            json!({"role": "assistant", "reasoning_content": "Thinking"}),
-            None,
-        ),
-        chunk(json!({"reasoning_content": " hard"}), None),
-        chunk(json!({"content": "Hel"}), None),
-        // An event split across network chunks, with CRLF line endings
-        format!(
-            "data: {}",
-            json!({"choices": [{"index": 0, "delta": {"content": "lo"}}]})
-        ),
-        "\r\n\r\n".to_string(),
-        chunk(
-            json!({"tool_calls": [{"index": 0, "id": "call_a", "type": "function", "function": {"name": "add", "arguments": ""}}]}),
-            None,
-        ),
-        chunk(
-            json!({"tool_calls": [{"index": 0, "function": {"arguments": "{\"a\": 1,"}}]}),
-            None,
-        ),
-        chunk(
-            json!({"tool_calls": [{"index": 1, "id": "call_b", "type": "function", "function": {"name": "add", "arguments": "{\"a\": 3, \"b\": 4}"}}]}),
-            None,
-        ),
-        chunk(
-            json!({"tool_calls": [{"index": 0, "function": {"arguments": " \"b\": 2}"}}]}),
-            None,
-        ),
-        chunk(json!({}), Some("tool_calls")),
-        format!(
-            "data: {}\n\n",
-            json!({"choices": [], "usage": {"total_tokens": 9}})
-        ),
-        "data: [DONE]\n\n".to_string(),
-    ];
-    let (base_url, request) = serve(200, "text/event-stream", chunks).await;
-    let ai = OpenAI::new("key", "mock-model", None).set_base_url(base_url);
-    let mut session = Session::new(10);
-    session.ask("Add 1 + 2 and 3 + 4");
-
-    let mut stream = ai.ask_as_stream(session).await.unwrap();
-    let mut text = String::new();
-    let mut usage = None;
-    while let Some(response) = stream.next().await {
-        let response = response.unwrap();
-        text.push_str(&response.get_chat().get_text_no_think(""));
-        usage = response.usage.or(usage);
-    }
-    assert_eq!(text, "Hello");
-    assert_eq!(usage, Some(json!({"total_tokens": 9})));
-
-    let session = stream.get_session_owned();
-    assert_eq!(session.get_history_length(), 2);
-    let reply = session.get_last_chat().unwrap();
-    assert_eq!(reply.get_thoughts(""), "Thinking hard");
-    assert_eq!(reply.get_text_no_think(""), "Hello");
-    let calls: Vec<_> = reply
-        .get_function_calls()
-        .map(|call| (call.id().as_str(), call.args().unwrap()))
-        .collect();
-    assert_eq!(
-        calls,
-        [
-            ("call_a", json!({"a": 1, "b": 2})),
-            ("call_b", json!({"a": 3, "b": 4}))
-        ]
-    );
-    assert_eq!(request.await.unwrap().body["stream"], true);
-}
-
-#[tokio::test]
-async fn stream_error_event() {
-    let chunks = vec![
-        chunk(json!({"content": "Hi"}), None),
-        format!(
-            "data: {}\n\n",
-            json!({"error": {"message": "Provider overloaded", "code": 502}})
-        ),
-    ];
-    let (base_url, _) = serve(200, "text/event-stream", chunks).await;
+async fn ask_as_stream() {
+    let chunk = json!({"choices": [{"index": 0, "delta": {"content": "Hello"}}]});
+    let body = format!("data: {chunk}\n\ndata: [DONE]\n\n");
+    let (base_url, request) = serve(200, "text/event-stream", body).await;
     let ai = OpenAI::new("key", "mock-model", None).set_base_url(base_url);
     let mut session = Session::new(10);
     session.ask("Hi");
+
     let mut stream = ai.ask_as_stream(session).await.unwrap();
-    assert!(stream.next().await.unwrap().is_ok());
-    match stream.next().await.unwrap() {
-        Err(OpenAIResponseStreamError::ApiError(e)) => {
-            assert_eq!(e.message, "Provider overloaded");
-            assert_eq!(e.code, Some(json!(502)));
-        }
-        other => panic!("Expected ApiError, got {other:?}"),
+    let mut text = String::new();
+    while let Some(response) = stream.next().await {
+        text.push_str(&response.unwrap().get_chat().get_text_no_think(""));
     }
-    // Stream without [DONE] still ends
-    assert!(stream.next().await.is_none());
+    assert_eq!(text, "Hello");
+    assert_eq!(stream.get_session().get_history_length(), 2);
+    assert_eq!(request.await.unwrap().body["stream"], true);
 }
 
 #[tokio::test]
@@ -285,10 +208,10 @@ async fn stream_status_not_ok_returns_session() {
     let (base_url, _) = serve(
         404,
         "application/json",
-        vec![r#"{"error": "model 'x' not found"}"#.into()],
+        r#"{"error": "model 'x' not found"}"#,
     )
     .await;
-    let ai = OpenAI::new("", "x", None).set_base_url(base_url);
+    let ai = OpenAI::new("key", "x", None).set_base_url(base_url);
     let mut session = Session::new(10);
     session.ask("Hi");
     match ai.ask_as_stream(session).await {
@@ -312,7 +235,7 @@ async fn embeddings() {
         "model": "mock-embedding",
         "usage": {"prompt_tokens": 2, "total_tokens": 2}
     });
-    let (base_url, request) = serve(200, "application/json", vec![body.to_string()]).await;
+    let (base_url, request) = serve(200, "application/json", body.to_string()).await;
     let embedder = OpenAIEmbedding::new("key", "mock-embedding")
         .set_base_url(base_url)
         .set_dimensions(2);
@@ -322,7 +245,6 @@ async fn embeddings() {
         .unwrap();
     assert_eq!(response.embedding().values(), &[0.1, 0.2]);
     assert_eq!(response.embeddings()[1].values(), &[0.3, 0.4]);
-    assert_eq!(response.embedding().dimension(), 2);
 
     let request = request.await.unwrap();
     assert_eq!(request.line, "POST /v1/embeddings HTTP/1.1");
@@ -330,4 +252,44 @@ async fn embeddings() {
         request.body,
         json!({"model": "mock-embedding", "input": ["first", "second"], "dimensions": 2})
     );
+}
+
+#[tokio::test]
+async fn embeddings_count_must_match_inputs() {
+    let body = json!({"data": [{"index": 0, "embedding": [0.1]}]});
+    let (base_url, _) = serve(200, "application/json", body.to_string()).await;
+    let embedder = OpenAIEmbedding::new("key", "mock-embedding").set_base_url(base_url);
+    match embedder.embed_texts(vec!["a".into(), "b".into()]).await {
+        Err(OpenAIResponseError::InvalidResponseFormat(e)) => {
+            assert_eq!(e, "Expected 2 embeddings, received 1")
+        }
+        other => panic!("Expected InvalidResponseFormat, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn markdown_image_is_downloaded() {
+    let png = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png")).unwrap();
+    let (base_url, _) = serve(200, "image/png", png.clone()).await;
+    let markdown = format!("Before ![chart]({base_url}/lda.png) after");
+    let parts = MarkdownToParts::builder()
+        // Not used, as the server sends Content-Type
+        .guess_mime_type(|_| mime::IMAGE_JPEG)
+        .build(&markdown)
+        .await
+        .process();
+
+    assert_eq!(parts.len(), 3);
+    assert!(
+        matches!(parts[0].data(), PartType::Text(text) if text.starts_with("Before ![chart]("))
+    );
+    match parts[1].data() {
+        PartType::InlineData(data) => {
+            assert_eq!(*data.mime_type(), mime::IMAGE_PNG);
+            use base64::{Engine, engine::general_purpose::STANDARD};
+            assert_eq!(STANDARD.decode(data.data()).unwrap(), png);
+        }
+        other => panic!("Expected InlineData, got {other:?}"),
+    }
+    assert!(matches!(parts[2].data(), PartType::Text(text) if text == " after"));
 }

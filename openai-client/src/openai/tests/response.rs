@@ -1,6 +1,5 @@
-use crate::openai::types::request::{FunctionCall, PartType, Role};
+use crate::openai::types::request::{FunctionCall, Role};
 use crate::openai::types::response::{FinishReason, OpenAIResponse};
-use crate::openai::types::sessions::Session;
 use serde_json::{Value, json};
 
 fn response(message: Value, finish_reason: &str) -> OpenAIResponse {
@@ -96,50 +95,4 @@ fn get_json_ignores_thoughts_and_code_fence() {
     assert_eq!(json, json!({"a": [1, 2]}));
     let plain = self::response(json!({"content": " {\"a\": 1} "}), "stop");
     assert_eq!(plain.get_json::<Value>().unwrap(), json!({"a": 1}));
-}
-
-fn delta(delta: Value) -> OpenAIResponse {
-    serde_json::from_value(json!({"choices": [{"index": 0, "delta": delta}]})).unwrap()
-}
-
-#[test]
-fn stream_deltas_are_merged_in_session() {
-    let mut session = Session::new(10);
-    session.ask("Hi");
-    for chunk in [
-        json!({"role": "assistant", "content": ""}),
-        json!({"reasoning_content": "a"}),
-        json!({"reasoning_content": "b"}),
-        json!({"content": "c"}),
-        json!({"content": "d"}),
-        // Server repeating id and name in every delta, without index
-        json!({"tool_calls": [{"id": "x", "function": {"name": "f", "arguments": "{\"p\""}}]}),
-        json!({"tool_calls": [{"id": "x", "function": {"name": "f", "arguments": ":1}"}}]}),
-        // Name split in pieces
-        json!({"tool_calls": [{"index": 1, "id": "y", "function": {"name": "ge", "arguments": ""}}]}),
-        json!({"tool_calls": [{"index": 1, "function": {"name": "t", "arguments": "{}"}}]}),
-    ] {
-        session.update(&delta(chunk));
-    }
-    assert_eq!(session.get_history_length(), 2);
-    let reply = session.get_last_chat().unwrap();
-    let parts: Vec<String> = reply
-        .parts()
-        .iter()
-        .map(|part| match part.data() {
-            PartType::Text(text) if part.is_thought() => format!("thought:{text}"),
-            PartType::Text(text) => format!("text:{text}"),
-            PartType::FunctionCall(c) => format!("call:{}:{}:{}", c.id(), c.name(), c.arguments()),
-            _ => "other".into(),
-        })
-        .collect();
-    assert_eq!(
-        parts,
-        [
-            "thought:ab",
-            "text:cd",
-            "call:x:f:{\"p\":1}",
-            "call:y:get:{}"
-        ]
-    );
 }

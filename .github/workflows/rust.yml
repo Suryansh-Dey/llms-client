@@ -68,9 +68,17 @@ jobs:
         workspaces: openai-client
 
     - name: Check fmt
-      run: cargo fmt --check
+      run: cargo fmt --check && cargo fmt --check --manifest-path open-client-proc-macros/Cargo.toml
+    - name: Clippy
+      run: |
+        cargo clippy --all-targets -- -D warnings
+        cargo clippy --no-default-features -- -D warnings
+        cargo clippy --manifest-path open-client-proc-macros/Cargo.toml -- -D warnings
+    - name: Check without tokio
+      run: cargo check --no-default-features --features reqwest,rustls
     - name: Run tests
-      run: cargo test -- --nocapture --skip live
+      # Live tests are ignored, run them with `cargo test -- --ignored`
+      run: cargo test
 
   build-open-client-wasm:
     defaults:
@@ -88,8 +96,5 @@ jobs:
 
     - name: Setup Rust for WASM
       run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm-pack
-      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-    - name: wasm-pack
-      run: wasm-pack build --target web --no-default-features
+    - name: Build for WASM
+      run: cargo build --target wasm32-unknown-unknown --no-default-features

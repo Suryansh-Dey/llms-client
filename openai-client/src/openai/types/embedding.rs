@@ -1,5 +1,4 @@
 use derive_getters::{Dissolve, Getters};
-use derive_new::new;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -14,7 +13,7 @@ pub(crate) struct EmbeddingRequest<'a> {
 }
 
 /// A list of floats representing the embedding of one input.
-#[derive(Dissolve, Serialize, Deserialize, Debug, Clone, Getters, new)]
+#[derive(Dissolve, Serialize, Deserialize, Debug, Clone, Getters)]
 pub struct Embedding {
     #[serde(rename = "embedding")]
     values: Vec<f32>,
@@ -23,6 +22,9 @@ pub struct Embedding {
     index: usize,
 }
 impl Embedding {
+    pub fn new(values: Vec<f32>, index: usize) -> Self {
+        Self { values, index }
+    }
     pub fn values_owned(self) -> Vec<f32> {
         self.values
     }

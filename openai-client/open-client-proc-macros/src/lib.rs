@@ -26,7 +26,7 @@ use syn::{
 pub fn openai_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(item as ItemFn);
     let fn_name = &input_fn.sig.ident;
-    let args_struct_name = syn::Ident::new(&format!("{}_args", fn_name), fn_name.span());
+    let vis = &input_fn.vis;
     let fn_description = extract_doc_comments(&input_fn.attrs);
 
     let mut properties = Vec::new();
@@ -35,42 +35,47 @@ pub fn openai_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut param_types = Vec::new();
 
     for arg in input_fn.sig.inputs.iter_mut() {
-        if let FnArg::Typed(pat_type) = arg {
-            if let Pat::Ident(pat_ident) = &*pat_type.pat {
-                let param_name = pat_ident.ident.clone();
-                let param_name_str = param_name.to_string();
-                let param_type = (*pat_type.ty).clone();
-                let param_desc = extract_doc_comments(&pat_type.attrs);
+        let FnArg::Typed(pat_type) = arg else {
+            return syn::Error::new_spanned(arg, "methods are not supported in openai_function")
+                .to_compile_error()
+                .into();
+        };
+        let Pat::Ident(pat_ident) = &*pat_type.pat else {
+            return syn::Error::new_spanned(
+                &pat_type.pat,
+                "openai_function arguments must be plain names, as they are the JSON keys",
+            )
+            .to_compile_error()
+            .into();
+        };
+        let param_name = pat_ident.ident.clone();
+        let param_name_str = param_name.to_string();
+        let param_type = (*pat_type.ty).clone();
+        let param_desc = extract_doc_comments(&pat_type.attrs);
 
-                if has_reference(&param_type) {
-                    return syn::Error::new_spanned(
-                        &param_type,
-                        "references are not supported in openai_function. Use owned types like String instead.",
-                    )
-                    .to_compile_error()
-                    .into();
-                }
-
-                // Remove doc attributes from the function signature so it compiles
-                pat_type.attrs.retain(|attr| !attr.path().is_ident("doc"));
-
-                properties.push(quote! {
-                    let mut schema = <#param_type as ::open_client::openai::utils::OpenAISchema>::openai_schema();
-                    if !#param_desc.is_empty() {
-                        if let Some(obj) = schema.as_object_mut() {
-                            obj.insert("description".to_string(), ::open_client::serde_json::json!(#param_desc));
-                        }
-                    }
-                    props.insert(#param_name_str.to_string(), schema);
-                });
-
-                // `Option` is nullable but still required, as needed by strict mode.
-                required.push(param_name_str);
-
-                param_names.push(param_name);
-                param_types.push(param_type);
-            }
+        if has_reference(&param_type) {
+            return syn::Error::new_spanned(
+                &param_type,
+                "references are not supported in openai_function. Use owned types like String instead.",
+            )
+            .to_compile_error()
+            .into();
         }
+
+        // Remove doc attributes from the function signature so it compiles
+        pat_type.attrs.retain(|attr| !attr.path().is_ident("doc"));
+
+        let schema = with_description(
+            quote! { <#param_type as ::open_client::openai::utils::OpenAISchema>::openai_schema() },
+            &param_desc,
+        );
+        properties.push(quote! { props.insert(#param_name_str.to_string(), #schema); });
+
+        // `Option` is nullable but still required, as needed by strict mode.
+        required.push(param_name_str);
+
+        param_names.push(param_name);
+        param_types.push(param_type);
     }
 
     let fn_name_str = fn_name.to_string();
@@ -102,52 +107,54 @@ pub fn openai_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
+    let schema = with_description(
+        quote! {
+            json!({
+                "name": #fn_name_str,
+                "parameters": {
+                    "type": "object",
+                    "properties": props,
+                    "required": [#(#required),*],
+                    "additionalProperties": false
+                }
+            })
+        },
+        &fn_description,
+    );
+    let props = build_props(&properties);
+
+    // The struct has the function's name and visibility, so `fn_name::openai_schema()` works
+    // wherever the function can be called. Braced, so it doesn't clash with the function.
     let expanded = quote! {
         #input_fn
 
         #[allow(non_camel_case_types)]
-        pub struct #fn_name { }
-
-        #[allow(non_camel_case_types)]
-        #[derive(::open_client::serde::Deserialize)]
-        #[serde(crate = "::open_client::serde")]
-        pub struct #args_struct_name {
-            #(pub #param_names: #param_types,)*
-        }
+        #vis struct #fn_name { }
 
         impl ::open_client::openai::utils::OpenAISchema for #fn_name {
             fn openai_schema() -> ::open_client::serde_json::Value {
                 use ::open_client::serde_json::{json, Map};
-                let mut props = Map::new();
-                #(#properties)*
-
-                let mut schema = json!({
-                    "name": #fn_name_str,
-                    "parameters": {
-                        "type": "object",
-                        "properties": props,
-                        "required": [#(#required),*],
-                        "additionalProperties": false
-                    }
-                });
-                if !#fn_description.is_empty() {
-                    schema["description"] = json!(#fn_description);
-                }
-                schema
+                #props
+                #schema
             }
         }
 
         impl #fn_name {
+            /// Parses the arguments generated by the model, and calls the function with them.
             pub async fn execute(args: &::open_client::serde_json::Value) -> Result<::open_client::serde_json::Value, String> {
-                use ::open_client::serde::Deserialize;
-                let args = #args_struct_name::deserialize(args).map_err(|e| e.to_string())?;
-                let result = #fn_name(#(args.#param_names),*) #call_await;
+                let (#(#param_names,)*) = Self::parse_arguments(args).map_err(|e| e.to_string())?;
+                let result = #fn_name(#(#param_names),*) #call_await;
                 #result_handling
             }
+            /// Parses the arguments generated by the model into a tuple of the function's arguments.
             pub fn parse_arguments(args: &::open_client::serde_json::Value) -> Result<(#(#param_types,)*), ::open_client::serde_json::Error>
             {
-                use ::open_client::serde::Deserialize;
-                let args = #args_struct_name::deserialize(args)?;
+                #[derive(::open_client::serde::Deserialize)]
+                #[serde(crate = "::open_client::serde")]
+                struct Arguments {
+                    #(#param_names: #param_types,)*
+                }
+                let args = <Arguments as ::open_client::serde::Deserialize>::deserialize(args)?;
                 Ok((#(args.#param_names,)*))
             }
         }
@@ -255,43 +262,45 @@ pub fn openai_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             .into();
                         }
 
-                        properties.push(quote! {
-                            let mut schema = <#field_type as ::open_client::openai::utils::OpenAISchema>::openai_schema();
-                            if !#field_desc.is_empty() {
-                                if let Some(obj) = schema.as_object_mut() {
-                                    obj.insert("description".to_string(), ::open_client::serde_json::json!(#field_desc));
-                                }
-                            }
-                            props.insert(#field_name_str.to_string(), schema);
-                        });
+                        let schema = with_description(
+                            quote! { <#field_type as ::open_client::openai::utils::OpenAISchema>::openai_schema() },
+                            &field_desc,
+                        );
+                        properties
+                            .push(quote! { props.insert(#field_name_str.to_string(), #schema); });
 
                         // `Option` is nullable but still required, as needed by strict mode.
                         required.push(field_name_str);
                     }
                 }
-                _ => panic!("openai_schema only supports named fields in structs"),
+                fields => {
+                    return syn::Error::new_spanned(
+                        fields,
+                        "openai_schema only supports structs with named fields",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
             }
 
+            let props = build_props(&properties);
+            let schema = with_description(
+                quote! {
+                    json!({
+                        "type": "object",
+                        "properties": props,
+                        "required": [#(#required),*],
+                        "additionalProperties": false
+                    })
+                },
+                &description,
+            );
             quote! {
                 impl #impl_generics ::open_client::openai::utils::OpenAISchema for #name #ty_generics #where_clause {
                     fn openai_schema() -> ::open_client::serde_json::Value {
                         use ::open_client::serde_json::{json, Map};
-                        let mut props = Map::new();
-                        #(#properties)*
-
-                        let mut schema = json!({
-                            "type": "object",
-                            "properties": props,
-                            "required": [#(#required),*],
-                            "additionalProperties": false
-                        });
-
-                        if !#description.is_empty() {
-                            if let Some(obj) = schema.as_object_mut() {
-                                obj.insert("description".to_string(), json!(#description));
-                            }
-                        }
-                        schema
+                        #props
+                        #schema
                     }
                 }
             }
@@ -300,31 +309,39 @@ pub fn openai_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut variants = Vec::new();
             for variant in &data.variants {
                 if !matches!(variant.fields, Fields::Unit) {
-                    panic!("openai_schema only supports unit variants in enums");
+                    return syn::Error::new_spanned(
+                        variant,
+                        "openai_schema only supports unit variants in enums",
+                    )
+                    .to_compile_error()
+                    .into();
                 }
                 variants.push(variant.ident.to_string());
             }
 
+            let schema = with_description(
+                quote! {
+                    json!({
+                        "type": "string",
+                        "enum": [#(#variants),*]
+                    })
+                },
+                &description,
+            );
             quote! {
                 impl #impl_generics ::open_client::openai::utils::OpenAISchema for #name #ty_generics #where_clause {
                     fn openai_schema() -> ::open_client::serde_json::Value {
                         use ::open_client::serde_json::json;
-                        let mut schema = json!({
-                            "type": "string",
-                            "enum": [#(#variants),*]
-                        });
-
-                        if !#description.is_empty() {
-                            if let Some(obj) = schema.as_object_mut() {
-                                obj.insert("description".to_string(), json!(#description));
-                            }
-                        }
-                        schema
+                        #schema
                     }
                 }
             }
         }
-        _ => panic!("openai_schema only supports structs and enums"),
+        Data::Union(_) => {
+            return syn::Error::new_spanned(name, "openai_schema only supports structs and enums")
+                .to_compile_error()
+                .into();
+        }
     };
 
     let output = quote! {
@@ -335,17 +352,44 @@ pub fn openai_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Schema expression with `"description"` added, if `description` isn't empty.
+fn with_description(
+    schema: proc_macro2::TokenStream,
+    description: &str,
+) -> proc_macro2::TokenStream {
+    if description.is_empty() {
+        return schema;
+    }
+    quote! {{
+        let mut schema = #schema;
+        if let Some(obj) = schema.as_object_mut() {
+            obj.insert("description".to_string(), ::open_client::serde_json::json!(#description));
+        }
+        schema
+    }}
+}
+
+/// Declares `props`, the map of `properties` of an object schema.
+fn build_props(properties: &[proc_macro2::TokenStream]) -> proc_macro2::TokenStream {
+    if properties.is_empty() {
+        quote! { let props = Map::new(); }
+    } else {
+        quote! {
+            let mut props = Map::new();
+            #(#properties)*
+        }
+    }
+}
+
 fn extract_doc_comments(attrs: &[Attribute]) -> String {
     let mut doc_comments = Vec::new();
     for attr in attrs {
-        if attr.path().is_ident("doc") {
-            if let Meta::NameValue(nv) = &attr.meta {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(lit_str) = &expr_lit.lit {
-                        doc_comments.push(lit_str.value().trim().to_string());
-                    }
-                }
-            }
+        if attr.path().is_ident("doc")
+            && let Meta::NameValue(nv) = &attr.meta
+            && let syn::Expr::Lit(expr_lit) = &nv.value
+            && let Lit::Str(lit_str) = &expr_lit.lit
+        {
+            doc_comments.push(lit_str.value().trim().to_string());
         }
     }
     doc_comments.join("\n")
@@ -358,10 +402,10 @@ fn has_reference(ty: &Type) -> bool {
             for seg in &tp.path.segments {
                 if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments {
                     for arg in &ab.args {
-                        if let syn::GenericArgument::Type(inner) = arg {
-                            if has_reference(inner) {
-                                return true;
-                            }
+                        if let syn::GenericArgument::Type(inner) = arg
+                            && has_reference(inner)
+                        {
+                            return true;
                         }
                     }
                 }

@@ -195,7 +195,7 @@ impl OpenAIResponse {
         let text = Chat::extract_text(parts, "", Some(false));
         let mut json = text.trim();
         if let Some(fenced) = json.strip_prefix("```") {
-            json = fenced.trim_start_matches("json");
+            json = fenced.strip_prefix("json").unwrap_or(fenced);
             json = json.strip_suffix("```").unwrap_or(json).trim();
         }
         serde_json::from_str::<T>(json)

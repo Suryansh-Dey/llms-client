@@ -10,14 +10,10 @@ description = "Library to use any OpenAI compatible API (OpenAI, DeepSeek, Ollam
 readme = "README.md"
 license = "MIT"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 [dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream"] , optional = true}
 bytes = "1"
 base64 = "0.23"
-derive-new = "0.7"
 futures = "0.3"
 pin-project-lite = "0.2"
 regex = "1.12"

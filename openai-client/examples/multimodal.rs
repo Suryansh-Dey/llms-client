@@ -1,45 +1,42 @@
+//! Images and files in prompts.
+use open_client::mime;
 use open_client::openai::ask::OpenAI;
+use open_client::openai::types::request::{ImageDetail, ImageUrl, InlineData};
 use open_client::openai::types::sessions::Session;
 use open_client::openai::utils::MarkdownToParts;
-use std::env;
 
-#[tokio::test]
-async fn raw_multimodal() {
-    use open_client::openai::types::request::{ImageUrl, InlineData};
-
-    let mut session = Session::new(6);
-    let api_key = std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let ai = OpenAI::new(api_key, "gpt-5-mini", None);
-
-    session
-        .ask("What is there in this image and this pdf")
-        // Image URL fetched by the API server
-        .ask(ImageUrl::from(
-            "https://avatars.githubusercontent.com/u/140788315?v=4",
-        ))
-        // Downloaded and sent as base64
-        .ask(InlineData::from_url("https://bitmesra.ac.in/UploadedDocuments/admingo/files/221225_List%20of%20Holiday_2026_26.pdf").await.unwrap());
-
-    let response = ai.ask(&mut session).await.unwrap();
-    println!("\nAI: {}", response.get_chat().get_text_no_think(""));
-}
+const CHART: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png");
+const LOGO: &str = "https://www.rust-lang.org/logos/rust-logo-512x512.png";
 
 #[tokio::main]
-async fn main() {
-    let mut session = Session::new(6);
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let ai = OpenAI::new(api_key, "gpt-5-mini", None);
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let ai = OpenAI::from_env("gpt-5-mini", Some("Answer in one sentence.".into()))?;
+    let mut session = Session::new(10);
 
-    // Use MarkdownToParts to easily parse a string with image/file markers
-    // It supports both URLs and local file paths!
-    let content = "Describe this image: ![](https://avatars.githubusercontent.com/u/140788315?v=4)";
-    println!("Processing: {}", content);
+    // A local file, sent as base64. Besides images, audio (e.g. `audio/wav`) and other files
+    // (e.g. `application/pdf`) can be sent, if the model supports them.
+    let chart = InlineData::from_path(CHART, mime::IMAGE_PNG).await?;
+    session.ask("What kind of chart is this?").ask(chart);
+    let response = ai.ask(&mut session).await?;
+    println!("AI: {}", response.get_chat().get_text_no_think(""));
 
-    let parts = MarkdownToParts::new(content, |_| mime::IMAGE_PNG)
+    // An image URL, fetched by the API server. Use `InlineData::from_url()` to download it
+    // yourself, for servers that can't fetch URLs.
+    let logo = ImageUrl::new(LOGO.into(), Some(ImageDetail::Low));
+    session.ask("Whose logo is this?").ask(logo);
+    let response = ai.ask(&mut session).await?;
+    println!("AI: {}", response.get_chat().get_text_no_think(""));
+
+    // Markdown with images, e.g. from a chat UI. Links can be URLs or file paths.
+    let markdown =
+        format!("Which of these is a scatter plot, ![first]({LOGO}) or ![second]({CHART})?");
+    let parts = MarkdownToParts::builder()
+        // For links whose type isn't known from the response headers
+        .guess_mime_type(|_| mime::IMAGE_PNG)
+        .build(&markdown)
         .await
         .process();
-
-    let response = ai.ask(session.ask_parts(parts)).await.unwrap();
-
-    println!("\nAI: {}", response.get_chat().get_text_no_think(""));
+    let response = ai.ask(session.ask_parts(parts)).await?;
+    println!("AI: {}", response.get_chat().get_text_no_think(""));
+    Ok(())
 }

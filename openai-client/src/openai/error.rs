@@ -104,3 +104,12 @@ impl From<reqwest::Error> for OpenAIResponseStreamError {
         Self::ReqwestError(error.without_url())
     }
 }
+
+/// Error of `from_env()` constructors: an environment variable is missing or not valid unicode.
+#[derive(thiserror::Error, Debug)]
+#[error("`{name}` environment variable: {source}")]
+pub struct EnvVarError {
+    pub name: &'static str,
+    #[source]
+    pub source: std::env::VarError,
+}

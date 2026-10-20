@@ -1,9 +1,12 @@
+#[cfg(feature = "reqwest")]
 use super::types::request::*;
-use crate::utils::{self, MatchedFiles};
-use derive_getters::{Dissolve, Getters};
+#[cfg(feature = "reqwest")]
+use crate::utils::MatchedFiles;
+#[cfg(feature = "reqwest")]
 use regex::Regex;
 #[cfg(feature = "reqwest")]
 use reqwest::header::HeaderMap;
+#[cfg(feature = "reqwest")]
 use std::time::Duration;
 mod macros;
 pub use macros::OpenAISchema;
@@ -11,48 +14,53 @@ pub use open_client_proc_macros::{
     execute_function_calls, execute_function_calls_with_callback, openai_function, openai_schema,
 };
 
+#[cfg(feature = "reqwest")]
 const REQ_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Builds `MarkdownToParts`. Create it with `MarkdownToParts::builder()`.
+#[cfg(feature = "reqwest")]
 pub struct MarkdownToPartsBuilder {
     regex: Option<Regex>,
     guess_mime_type: Option<fn(url: &str) -> mime::Mime>,
-    #[cfg(feature = "reqwest")]
     decide_download: Option<fn(headers: &HeaderMap) -> bool>,
     timeout: Option<Duration>,
 }
+#[cfg(feature = "reqwest")]
 impl MarkdownToPartsBuilder {
-    ///# Panics
-    ///`regex` must have a Regex with only 1 capture group with file URL as first capture
-    ///group, else it PANICS when `.build()` is called.
+    /// Regex matching the files, with the file URL as its first capture group.
+    /// Default is `(?s)!\[.*?].?\((.*?)\)`, i.e. markdown images `![alt](link)`.
+    ///
+    /// # Panics
+    /// `.build()` panics if `regex` has no capture group.
     pub fn regex(mut self, regex: Regex) -> Self {
         self.regex = Some(regex);
         self
     }
-    /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
-    /// with no "Content-Type" header.
+    /// Used to detect mime type of a file path or a web resource with no "Content-Type" header.
+    /// Default is `image/png`.
     pub fn guess_mime_type(mut self, guess_mime_type: fn(url: &str) -> mime::Mime) -> Self {
         self.guess_mime_type = Some(guess_mime_type);
         self
     }
-    /// `decide_download` is used to decide if to download. If it returns false, resource will not
-    /// be fetched and won't be in `parts`
-    #[cfg(feature = "reqwest")]
+    /// Decides if a web resource is downloaded, from its response headers. If it returns false,
+    /// the resource is not fetched and stays as text. Default downloads everything.
     pub fn decide_download(mut self, decide_download: fn(headers: &HeaderMap) -> bool) -> Self {
         self.decide_download = Some(decide_download);
         self
     }
+    /// Timeout of each download. Default is 10 seconds.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
-    #[cfg(feature = "reqwest")]
-    pub async fn build<'a>(self, markdown: &'a str) -> MarkdownToParts<'a> {
+    /// Downloads web resources and reads local files of `markdown`.
+    pub async fn build(self, markdown: &str) -> MarkdownToParts<'_> {
         MarkdownToParts {
             markdown,
-            base64s: utils::get_file_base64s(
+            base64s: crate::utils::get_file_base64s(
                 markdown,
                 self.regex
-                    .unwrap_or(Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap()),
+                    .unwrap_or_else(|| Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap()),
                 self.guess_mime_type.unwrap_or(|_| mime::IMAGE_PNG),
                 self.decide_download.unwrap_or(|_| true),
                 self.timeout.unwrap_or(REQ_TIMEOUT),
@@ -61,101 +69,39 @@ impl MarkdownToPartsBuilder {
         }
     }
 }
-#[derive(Dissolve, Getters, Clone)]
-///Converts markdown to parts considering `![image](link)` means the model will see the images too. `link` can be URL or file path.  
+
+/// Converts markdown to parts considering `![image](link)` means the model will see the images too.
+/// `link` can be a URL or a file path.
+///
+/// # Example
+/// ```no_run
+/// # async fn run() {
+/// use open_client::openai::utils::MarkdownToParts;
+/// let parts = MarkdownToParts::builder()
+///     .guess_mime_type(|_| open_client::mime::IMAGE_JPEG)
+///     .build("What is in this image? ![photo](photo.jpg)")
+///     .await
+///     .process();
+/// # }
+/// ```
+#[cfg(feature = "reqwest")]
+#[derive(Clone)]
 pub struct MarkdownToParts<'a> {
     markdown: &'a str,
     base64s: Vec<MatchedFiles>,
 }
+#[cfg(feature = "reqwest")]
 impl<'a> MarkdownToParts<'a> {
     pub fn builder() -> MarkdownToPartsBuilder {
         MarkdownToPartsBuilder {
             regex: None,
             guess_mime_type: None,
-            #[cfg(feature = "reqwest")]
             decide_download: None,
             timeout: None,
         }
     }
-    ///# Panics
-    ///`regex` must have a Regex with only 1 capture group with file URL as first capture
-    ///group, else it PANICS.
-    /// # Arguments
-    /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
-    /// with no "Content-Type" header.
-    /// `decide_download` is used to decide if to download. If it returns false, resource will not
-    /// be fetched and won't be in `parts`
-    /// # Example
-    /// ```ignore
-    /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_| mime::IMAGE_PNG, |_| true)
-    /// ```
-    #[cfg(feature = "reqwest")]
-    pub async fn from_regex_checked(
-        markdown: &'a str,
-        regex: Regex,
-        guess_mime_type: fn(url: &str) -> mime::Mime,
-        decide_download: fn(headers: &HeaderMap) -> bool,
-    ) -> Self {
-        Self {
-            base64s: utils::get_file_base64s(
-                markdown,
-                regex,
-                guess_mime_type,
-                decide_download,
-                REQ_TIMEOUT,
-            )
-            .await,
-            markdown,
-        }
-    }
-    ///# Panics
-    ///`regex` must have a Regex with only 1 capture group with file URL as first capture
-    ///group, else it PANICS.
-    /// # Arguments
-    /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
-    /// with no "Content-Type" header.
-    /// # Example
-    /// ```ignore
-    /// from_regex("Your markdown string...", Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap(), |_|
-    /// mime::IMAGE_PNG)
-    /// ```
-    #[cfg(feature = "reqwest")]
-    pub async fn from_regex(
-        markdown: &'a str,
-        regex: Regex,
-        guess_mime_type: fn(url: &str) -> mime::Mime,
-    ) -> Self {
-        Self::from_regex_checked(markdown, regex, guess_mime_type, |_| true).await
-    }
-    /// # Arguments
-    /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
-    /// with no "Content-Type" header.
-    /// `decide_download` is used to decide if to download. If it returns false, resource will not
-    /// be fetched and won't be in `parts`
-    /// # Example
-    /// ```ignore
-    /// new("Your markdown string...", |_| mime::IMAGE_PNG, |_| true)
-    /// ```
-    #[cfg(feature = "reqwest")]
-    pub async fn new_checked(
-        markdown: &'a str,
-        guess_mime_type: fn(url: &str) -> mime::Mime,
-        decide_download: fn(headers: &HeaderMap) -> bool,
-    ) -> Self {
-        let image_regex = Regex::new(r"(?s)!\[.*?].?\((.*?)\)").unwrap();
-        Self::from_regex_checked(markdown, image_regex, guess_mime_type, decide_download).await
-    }
-    /// # Arguments
-    /// `guess_mime_type` is used to detect mimi_type of URL pointing to file system or web resource
-    /// with no "Content-Type" header.
-    /// # Example
-    /// ```ignore
-    /// new("Your markdown string...", |_| mime::IMAGE_PNG)
-    /// ```
-    #[cfg(feature = "reqwest")]
-    pub async fn new(markdown: &'a str, guess_mime_type: fn(url: &str) -> mime::Mime) -> Self {
-        Self::new_checked(markdown, guess_mime_type, |_| true).await
-    }
+    /// Splits the markdown into text and the files it links. Files which couldn't be fetched stay
+    /// as text.
     pub fn process(mut self) -> Vec<Part> {
         let mut parts: Vec<Part> = Vec::new();
         let mut removed_length = 0;
@@ -176,7 +122,7 @@ impl<'a> MarkdownToParts<'a> {
                 removed_length += end;
             }
         }
-        if self.markdown.len() != 0 {
+        if !self.markdown.is_empty() {
             parts.push(self.markdown.into());
         }
         parts

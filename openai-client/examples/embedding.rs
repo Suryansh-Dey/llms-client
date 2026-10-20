@@ -1,31 +1,47 @@
+//! Semantic search: the documents most similar in meaning to a query, using embeddings.
 use open_client::openai::embed::OpenAIEmbedding;
-use std::env;
+
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+    let norm = |v: &[f32]| v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    dot / (norm(a) * norm(b))
+}
 
 #[tokio::main]
-async fn main() {
-    // 1. Create the Embedding client. Use `.set_base_url()` for other APIs.
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let embedder = OpenAIEmbedding::new(api_key, "text-embedding-3-small")
-        // Optional: reduce dimension (supported by text-embedding-3 and later)
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let embedder = OpenAIEmbedding::from_env("text-embedding-3-small")?
+        // Optional: smaller embeddings, supported by text-embedding-3 and later.
         .set_dimensions(256);
 
-    // 2. Generate embedding for a single text
-    let prompt = "Rust is a blazing fast and memory-efficient systems programming language.";
-    let response = embedder.embed_text(prompt).await.unwrap();
+    let documents = [
+        "Rust guarantees memory safety without a garbage collector.",
+        "Tokio is an asynchronous runtime for Rust.",
+        "The Eiffel Tower was finished in 1889.",
+        "Photosynthesis turns light into chemical energy.",
+    ];
+    let query = "How do I write async code in Rust?";
 
-    // 3. Print the embedding information
-    let embedding = response.embedding();
-    println!("Embedding generated for: {:?}", prompt);
-    println!("Total Dimensions: {}", embedding.dimension());
-    println!(
-        "First 5 values: {:?}",
-        &embedding.values()[..usize::min(embedding.dimension(), 5)]
-    );
+    // One request for all texts. Embeddings are in the same order as the texts.
+    let mut texts: Vec<String> = documents.iter().map(|d| d.to_string()).collect();
+    texts.push(query.to_string());
+    let mut embeddings = embedder.embed_texts(texts).await?.embeddings_owned();
+    let query_embedding = embeddings.pop().unwrap();
 
-    // 4. Many texts in one request, one embedding per text in the same order
-    let response = embedder
-        .embed_texts(vec!["I love Rust".into(), "Rust loves me".into()])
-        .await
-        .unwrap();
-    println!("Got {} embeddings", response.embeddings().len());
+    let mut ranked: Vec<(f32, &str)> = embeddings
+        .iter()
+        .zip(documents)
+        .map(|(e, document)| {
+            (
+                cosine_similarity(e.values(), query_embedding.values()),
+                document,
+            )
+        })
+        .collect();
+    ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
+
+    println!("Query: {query}");
+    for (similarity, document) in ranked {
+        println!("{similarity:.3}  {document}");
+    }
+    Ok(())
 }

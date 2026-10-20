@@ -2,7 +2,11 @@
 extern crate self as open_client;
 
 pub mod openai;
-pub mod utils;
+#[cfg(feature = "reqwest")]
+mod utils;
 pub use futures;
+pub use mime;
+#[cfg(feature = "reqwest")]
+pub use reqwest;
 pub use serde;
 pub use serde_json;

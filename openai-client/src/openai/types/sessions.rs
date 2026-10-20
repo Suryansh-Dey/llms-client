@@ -1,4 +1,5 @@
 use super::request::*;
+#[cfg(feature = "reqwest")]
 use super::response::OpenAIResponse;
 use derive_getters::{Dissolve, Getters};
 use serde::{Deserialize, Serialize};
@@ -9,8 +10,8 @@ pub enum AddFunctionResponseError {
     #[error("Error while parsing: {0}")]
     ///Error while parsing
     InvalidResponseFormat(serde_json::Error),
-    #[error("FunctionResponse must be after model prompt and not first in session")]
-    ///FunctionResponse must be after model prompt and not first in session
+    #[error("Function response must follow an assistant reply, not a user prompt or nothing")]
+    ///Function response must follow an assistant reply, not a user prompt or nothing
     FunctionResponseAfterUser,
     #[error("No unanswered function call with id `{0}` in the last model reply")]
     ///No unanswered function call with this id in the last model reply
@@ -33,18 +34,9 @@ impl<H: OverflowHandler + ?Sized> OverflowHandler for Box<H> {
     }
 }
 
-/// Default `OverflowHandler`. Only keeps the last `history_limit` chats.
-///
-/// Serialized as `null`. Goes through `Option<()>` so a missing field also deserializes to it,
-/// letting sessions saved before overflow handlers existed load as `Session`.
+/// Default `OverflowHandler`. Only keeps the last `history_limit` chats. Serialized as `null`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Option<()>")]
 pub struct SlidingWindow;
-impl From<Option<()>> for SlidingWindow {
-    fn from(_: Option<()>) -> Self {
-        SlidingWindow
-    }
-}
 impl OverflowHandler for SlidingWindow {
     fn handle(&mut self, _: &mut HistoryTrimmer<'_>) -> bool {
         true
@@ -134,8 +126,8 @@ impl Session {
     /// # Arguments
     /// * `history_limit` - The maximum number of `Chat`(including all `Role`) to keep in history.
     /// * Uses sliding window to maintain length.
-    /// * Might pop many elements after one new insertion OR Might keep more elements than `history_limit`, to maintain valid history according to
-    /// API.
+    /// * Might pop many elements after one new insertion OR Might keep more elements than
+    ///   `history_limit`, to maintain valid history according to API.
     ///
     /// # Example
     /// `Session::new(2)` can store only the last question and its reply.
@@ -217,18 +209,6 @@ impl<H: OverflowHandler> Session<H> {
     pub fn get_history_length(&self) -> usize {
         self.history.len()
     }
-    ///Use `get_previous_chat_mut().parts_mut()` instead
-    #[deprecated]
-    pub fn get_parts_mut(&mut self, chat_previous_no: usize) -> Option<&mut Vec<Part>> {
-        let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
-        Some(self.history[chat_no].parts_mut())
-    }
-    ///Use `get_previous_chat()` instead
-    #[deprecated]
-    pub fn get_parts(&self, chat_previous_no: usize) -> Option<&Vec<Part>> {
-        let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
-        Some(self.history[chat_no].parts())
-    }
     ///`chat_previous_no` is ith last message.
     ///# Example
     ///- session.get_previous_chat(1) return last message
@@ -245,20 +225,6 @@ impl<H: OverflowHandler> Session<H> {
         let chat_no = self.get_history_length().checked_sub(chat_previous_no)?;
         self.history.get_mut(chat_no)
     }
-    /// Confusing to use. Use get_history_as_vecdeque_mut() instead
-    #[deprecated]
-    pub fn get_parts_no_mut(&mut self, chat_no: usize) -> Option<&mut Vec<Part>> {
-        self.get_history_as_vecdeque_mut()
-            .get_mut(chat_no)
-            .map(|chat| chat.parts_mut())
-    }
-    /// Confusing to use. Use get_history_as_vecdeque() instead
-    #[deprecated]
-    pub fn get_parts_no(&self, chat_no: usize) -> Option<&Vec<Part>> {
-        self.get_history_as_vecdeque()
-            .get(chat_no)
-            .map(|chat| chat.parts())
-    }
     pub fn get_remember_reply(&self) -> bool {
         self.remember_reply
     }
@@ -273,7 +239,7 @@ impl<H: OverflowHandler> Session<H> {
     pub fn add_chat(&mut self, chat: Chat) -> Result<&mut Self, &'static str> {
         match (self.history.back_mut(), chat.role()) {
             (Some(last_chat), role) if last_chat.role() == role => {
-                concatenate_parts(last_chat.parts_mut(), chat.parts())
+                concatenate_parts(last_chat.parts_mut(), chat.parts_owned())
             }
             (Some(last_chat), Role::Tool) if *last_chat.role() == Role::User => {
                 return Err("Role::Tool not allowed after Role::User");
@@ -309,15 +275,15 @@ impl<H: OverflowHandler> Session<H> {
     pub fn ask(&mut self, part: impl Into<Part>) -> &mut Self {
         self.ask_parts(vec![part.into()])
     }
-    /// Appends a Model prompt to the session history.
+    /// Appends an assistant reply to the session history.
     ///
-    /// If called multiple times without an intervening model response, the prompts are concatenated.
+    /// If called multiple times without a user prompt in between, the replies are concatenated.
     pub fn reply_parts(&mut self, parts: Vec<Part>) -> &mut Self {
         self.add_chat(Chat::new(Role::Assistant, parts)).unwrap()
     }
-    /// Appends a Model prompt to the session history.
+    /// Appends an assistant reply to the session history.
     ///
-    /// If called multiple times without an intervening model response, the prompts are concatenated.
+    /// If called multiple times without a user prompt in between, the replies are concatenated.
     pub fn reply(&mut self, part: impl Into<Part>) -> &mut Self {
         self.reply_parts(vec![part.into()])
     }
@@ -373,7 +339,7 @@ impl<H: OverflowHandler> Session<H> {
             .clone();
         let parts = response
             .into_function_response()
-            .map_err(|e| AddFunctionResponseError::InvalidResponseFormat(e))?;
+            .map_err(AddFunctionResponseError::InvalidResponseFormat)?;
 
         let part = FunctionResponse::new(call_id.to_string(), name, parts).into();
         self.add_chat(Chat::new(Role::Tool, vec![part]))
@@ -387,10 +353,10 @@ impl<H: OverflowHandler> Session<H> {
             self.reply_parts(reply_parts.clone());
             Some(reply_parts)
         } else {
-            if let Some(chat) = self.history.back() {
-                if let Role::User = chat.role() {
-                    self.history.pop_back();
-                }
+            if let Some(chat) = self.history.back()
+                && let Role::User = chat.role()
+            {
+                self.history.pop_back();
             }
             None
         }
@@ -407,10 +373,10 @@ impl<H: OverflowHandler> Session<H> {
     /// Popped items as (last_chat, second_last_chat)
     pub fn forget_last_conversation(&mut self) -> (Option<Chat>, Option<Chat>) {
         let last = self.history.pop_back();
-        if let Some(chat) = self.history.back() {
-            if let Role::User = chat.role() {
-                return (last, self.history.pop_back());
-            }
+        if let Some(chat) = self.history.back()
+            && let Role::User = chat.role()
+        {
+            return (last, self.history.pop_back());
         }
         (last, None)
     }

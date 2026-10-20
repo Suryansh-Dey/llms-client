@@ -6,16 +6,16 @@ use std::str::FromStr;
 
 fn body(session: &Session, config: Option<&Value>, send_reasoning: bool) -> Value {
     let history = session.get_history();
-    let body = OpenAIRequestBody::new(
-        "model",
-        None,
-        &history,
-        None,
-        None,
-        config,
-        false,
+    let body = OpenAIRequestBody {
+        model: "model",
+        sys_prompt: None,
+        messages: &history,
+        tools: None,
+        tool_choice: None,
+        generation_config: config,
+        stream: false,
         send_reasoning,
-    );
+    };
     serde_json::to_value(&body).unwrap()
 }
 fn messages(session: &Session, send_reasoning: bool) -> Value {
@@ -220,16 +220,16 @@ fn generation_config_is_merged_without_reserved_keys() {
     }
 
     let history = session.get_history();
-    let streamed = OpenAIRequestBody::new(
-        "model",
-        None,
-        &history,
-        None,
-        None,
-        Some(&config),
-        true,
-        false,
-    );
+    let streamed = OpenAIRequestBody {
+        model: "model",
+        sys_prompt: None,
+        messages: &history,
+        tools: None,
+        tool_choice: None,
+        generation_config: Some(&config),
+        stream: true,
+        send_reasoning: false,
+    };
     let streamed = serde_json::to_value(&streamed).unwrap();
     assert_eq!(streamed["stream"], true);
     assert_eq!(streamed["stream_options"], json!({"include_usage": true}));
@@ -245,16 +245,16 @@ fn tools_and_tool_choice() {
     let history = session.get_history();
     let choice = ToolChoice::Function("f".into());
     let sys_prompt = SystemInstruction::from("System");
-    let body = OpenAIRequestBody::new(
-        "model",
-        Some(&sys_prompt),
-        &history,
-        Some(&tools),
-        Some(&choice),
-        None,
-        false,
-        false,
-    );
+    let body = OpenAIRequestBody {
+        model: "model",
+        sys_prompt: Some(&sys_prompt),
+        messages: &history,
+        tools: Some(&tools),
+        tool_choice: Some(&choice),
+        generation_config: None,
+        stream: false,
+        send_reasoning: false,
+    };
     let body = serde_json::to_value(&body).unwrap();
     assert_eq!(
         body["tools"],
@@ -284,11 +284,11 @@ fn tools_and_tool_choice() {
     assert_eq!(choice, ToolChoice::Function("f".into()));
 }
 
-#[cfg(feature = "reqwest")]
 #[test]
 fn client_configuration() {
     use crate::openai::ask::{DEFAULT_BASE_URL, OpenAI};
     let schema = json!({"type": "object"});
+    assert!(OpenAI::with_no_api_key("model", None).api_key().is_empty());
     let ai = OpenAI::new("key", "model", None);
     assert_eq!(ai.base_url(), DEFAULT_BASE_URL);
     let ai = ai

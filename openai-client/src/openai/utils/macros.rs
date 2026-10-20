@@ -6,10 +6,6 @@ use serde_json::{Value, json};
 /// all properties are `required` and `Option<T>` is nullable instead of optional.
 pub trait OpenAISchema {
     fn openai_schema() -> Value;
-    /// Returns none if schema is of primitive type or name not provided.
-    fn name(openai_schema: &Value) -> Option<&str> {
-        openai_schema["name"].as_str()
-    }
 }
 
 macro_rules! impl_primitive {

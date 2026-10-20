@@ -1,4 +1,4 @@
-use super::error::{ApiError, OpenAIError, OpenAIResponseError};
+use super::error::{ApiError, EnvVarError, OpenAIError, OpenAIResponseError};
 use super::types::request::*;
 use super::types::response::*;
 use super::types::sessions::{OverflowHandler, Session};
@@ -17,6 +17,22 @@ pub(crate) fn authorize(request: RequestBuilder, api_key: &str) -> RequestBuilde
     } else {
         request.bearer_auth(api_key)
     }
+}
+/// Reads `OPENAI_API_KEY` (required) and `OPENAI_BASE_URL` (optional, unset or empty means
+/// `DEFAULT_BASE_URL`).
+pub(crate) fn read_env() -> Result<(String, String), EnvVarError> {
+    let var = |name| std::env::var(name).map_err(|source| EnvVarError { name, source });
+    let api_key = var("OPENAI_API_KEY")?;
+    let base_url = match var("OPENAI_BASE_URL") {
+        Ok(base_url) if !base_url.is_empty() => base_url,
+        Ok(_)
+        | Err(EnvVarError {
+            source: std::env::VarError::NotPresent,
+            ..
+        }) => DEFAULT_BASE_URL.to_string(),
+        Err(e) => return Err(e),
+    };
+    Ok((api_key, base_url))
 }
 pub(crate) fn join_url(base_url: &str, path: &str) -> String {
     format!("{}/{path}", base_url.trim_end_matches('/'))
@@ -67,7 +83,7 @@ pub(crate) fn deserialize_value<'a, T: Deserialize<'a>>(
 /// use open_client::openai::ask::OpenAI;
 /// let deepseek = OpenAI::new("API_KEY", "deepseek-chat", None)
 ///     .set_base_url("https://api.deepseek.com");
-/// let ollama = OpenAI::new("", "llama3.2", None)
+/// let ollama = OpenAI::with_no_api_key("llama3.2", None)
 ///     .set_base_url("http://localhost:11434/v1");
 /// ```
 /// Use `new_with_client()` with a client having default headers, if the server needs other headers.
@@ -110,7 +126,7 @@ impl OpenAI {
     /// Creates a new `OpenAI` client for OpenAI API. Use `set_base_url()` for any other API.
     ///
     /// # Arguments
-    /// * `api_key` - Your API key. Empty key sends no `Authorization` header.
+    /// * `api_key` - Your API key. Use `with_no_api_key()` for servers without one.
     /// * `model` - The model to use (e.g., "gpt-5-mini", "deepseek-chat").
     /// * `sys_prompt` - Optional system instructions, sent as the first message with `system` role.
     pub fn new(
@@ -119,6 +135,28 @@ impl OpenAI {
         sys_prompt: Option<SystemInstruction>,
     ) -> Self {
         Self::new_with_client(api_key, model, sys_prompt, Client::default())
+    }
+    /// Creates a new `OpenAI` client configured by environment variables, like the official
+    /// OpenAI SDKs:
+    /// * `OPENAI_API_KEY` - Your API key. Required.
+    /// * `OPENAI_BASE_URL` - Base URL of any OpenAI compatible API. Default is `DEFAULT_BASE_URL`.
+    ///
+    /// # Errors
+    /// If `OPENAI_API_KEY` is not set, or any of them isn't valid unicode.
+    pub fn from_env(
+        model: impl Into<String>,
+        sys_prompt: Option<SystemInstruction>,
+    ) -> Result<Self, EnvVarError> {
+        let (api_key, base_url) = read_env()?;
+        Ok(Self::new(api_key, model, sys_prompt).set_base_url(base_url))
+    }
+    /// Creates a new `OpenAI` client sending no `Authorization` header, for servers without API
+    /// keys, e.g. local servers like Ollama, vLLM or LM Studio. Set their URL with `set_base_url()`.
+    pub fn with_no_api_key(
+        model: impl Into<String>,
+        sys_prompt: Option<SystemInstruction>,
+    ) -> Self {
+        Self::new("", model, sys_prompt)
     }
     /// Creates a new `OpenAI` client with a custom API reqwest::Client.
     ///
@@ -166,7 +204,7 @@ impl OpenAI {
     ///
     /// See [OpenAI docs](https://platform.openai.com/docs/api-reference/chat/create) for parameters.
     pub fn set_generation_config(&mut self) -> &mut Value {
-        if let None = self.generation_config {
+        if self.generation_config.is_none() {
             self.generation_config = Some(json!({}));
         }
         self.generation_config.as_mut().unwrap()
@@ -253,16 +291,16 @@ impl OpenAI {
     }
 
     fn request(&self, history: &[&Chat], stream: bool) -> RequestBuilder {
-        let body = OpenAIRequestBody::new(
-            &self.model,
-            self.sys_prompt.as_ref(),
-            history,
-            self.tools.as_deref(),
-            self.tool_choice.as_ref(),
-            self.generation_config.as_ref(),
+        let body = OpenAIRequestBody {
+            model: &self.model,
+            sys_prompt: self.sys_prompt.as_ref(),
+            messages: history,
+            tools: self.tools.as_deref(),
+            tool_choice: self.tool_choice.as_ref(),
+            generation_config: self.generation_config.as_ref(),
             stream,
-            self.send_reasoning,
-        );
+            send_reasoning: self.send_reasoning,
+        };
         let request = self
             .client
             .post(join_url(&self.base_url, "chat/completions"))
@@ -291,19 +329,35 @@ impl OpenAI {
         session.update(&reply);
         Ok(reply)
     }
+    /// Like `ask_as_stream()`, but each item is what `data_extractor` returns. It is called with
+    /// the session, already updated with the chunk, and the chunk.
+    ///
     /// # Warning
-    /// You must read the response stream to get reply stored context in `session`.
-    /// `data_extractor` is used to extract data that you get as a stream of futures.
+    /// You must exhaust the response stream to ensure the `session` history is correctly updated.
+    ///
+    /// # Errors
+    /// The session is returned along with the error, as it was moved into this function.
+    ///
     /// # Example
-    ///```ignore
-    ///use futures::StreamExt
-    ///let mut response_stream = ai.ask_as_stream_with_extractor(session,
-    ///     |session, _response| session.get_last_chat().unwrap().get_text_no_think("\n"))
-    ///    .await.unwrap(); // Use _response.get_chat().get_text_no_think("") to just get the text received in every chunk
-    ///while let Some(response) = response_stream.next().await {
-    ///    println!("{}", response);
-    ///}
-    ///```
+    /// ```no_run
+    /// use open_client::futures::StreamExt;
+    /// # async fn run(ai: open_client::openai::ask::OpenAI, session: open_client::openai::types::sessions::Session) {
+    /// // Each item is the whole reply received so far.
+    /// let mut response_stream = ai
+    ///     .ask_as_stream_with_extractor(session, |session, _chunk| {
+    ///         session.get_last_chat().unwrap().get_text_no_think("")
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// while let Some(reply) = response_stream.next().await {
+    ///     println!("{}", reply.unwrap());
+    /// }
+    /// # }
+    /// ```
+    #[allow(
+        clippy::result_large_err,
+        reason = "the session is handed back on error, as it is moved into the stream"
+    )]
     pub async fn ask_as_stream_with_extractor<F, StreamType, H: OverflowHandler>(
         &self,
         session: Session<H>,
@@ -345,7 +399,7 @@ impl OpenAI {
     ///
     /// # Example
     /// ```no_run
-    /// use futures::StreamExt;
+    /// use open_client::futures::StreamExt;
     /// # async fn run(ai: open_client::openai::ask::OpenAI, session: open_client::openai::types::sessions::Session) {
     /// let mut response_stream = ai.ask_as_stream(session).await.unwrap();
     ///
@@ -356,6 +410,10 @@ impl OpenAI {
     /// }
     /// # }
     /// ```
+    #[allow(
+        clippy::result_large_err,
+        reason = "the session is handed back on error, as it is moved into the stream"
+    )]
     pub async fn ask_as_stream<H: OverflowHandler>(
         &self,
         session: Session<H>,

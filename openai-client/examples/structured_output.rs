@@ -1,42 +1,63 @@
+//! A reply in your own type. `#[openai_schema]` generates the JSON schema of a type, and JSON mode
+//! makes the model follow it.
 use open_client::openai::ask::OpenAI;
 use open_client::openai::types::sessions::Session;
 use open_client::openai::utils::{OpenAISchema, openai_schema};
 use serde::Deserialize;
-use std::env;
 
-/// Define your desired response structure.
-/// Use the `#[openai_schema]` macro to automatically generate the JSON schema.
-#[derive(Debug, Deserialize)]
 #[openai_schema]
-#[allow(dead_code)]
-struct MovieReview {
-    /// The title of the movie.
-    title: String,
-    /// A score from 1 to 10.
-    rating: u8,
-    /// A list of main actors.
-    cast: Vec<String>,
-    /// A short summary of the plot.
-    summary: String,
-    /// Sequel of the movie, if any.
-    sequel: Option<String>,
+#[derive(Debug, Deserialize)]
+enum Difficulty {
+    Easy,
+    Medium,
+    Hard,
+}
+
+#[openai_schema]
+#[derive(Deserialize)]
+struct Ingredient {
+    name: String,
+    /// With unit, e.g. "200 g"
+    quantity: String,
+}
+
+#[openai_schema]
+#[derive(Deserialize)]
+/// A cooking recipe
+struct Recipe {
+    name: String,
+    /// Total time in minutes
+    minutes: u32,
+    difficulty: Difficulty,
+    ingredients: Vec<Ingredient>,
+    steps: Vec<String>,
+    /// A wine to pair with, if any
+    wine: Option<String>,
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let ai = OpenAI::from_env("gpt-5-mini", None)?.set_json_mode(Recipe::openai_schema());
+    // One-off requests don't need the reply in history.
     let mut session = Session::new(2).set_remember_reply(false);
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
 
-    // Enable JSON mode by passing the generated schema
-    let ai = OpenAI::new(api_key, "gpt-5-mini", None).set_json_mode(MovieReview::openai_schema());
+    let response = ai
+        .ask(session.ask("A quick vegetarian pasta for two"))
+        .await?;
+    let recipe: Recipe = response.get_json()?;
 
-    let prompt = "Give me a review for the movie Interstellar.";
-    println!("User: {}", prompt);
-
-    let response = ai.ask(session.ask(prompt)).await.unwrap();
-    let review: MovieReview = response
-        .get_json()
-        .expect("Model responded with wrong structure");
-
-    println!("Structured output:\n{review:#?}");
+    println!(
+        "{} ({} minutes, {:?})",
+        recipe.name, recipe.minutes, recipe.difficulty
+    );
+    for ingredient in recipe.ingredients {
+        println!("- {} {}", ingredient.quantity, ingredient.name);
+    }
+    for (i, step) in recipe.steps.iter().enumerate() {
+        println!("{}. {step}", i + 1);
+    }
+    if let Some(wine) = recipe.wine {
+        println!("Pairs with {wine}");
+    }
+    Ok(())
 }

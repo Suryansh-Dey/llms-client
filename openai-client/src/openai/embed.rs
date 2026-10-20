@@ -1,5 +1,5 @@
-use super::ask::{DEFAULT_BASE_URL, authorize, deserialize_value, join_url, read_json};
-use super::error::OpenAIResponseError;
+use super::ask::{DEFAULT_BASE_URL, authorize, deserialize_value, join_url, read_env, read_json};
+use super::error::{EnvVarError, OpenAIResponseError};
 use super::types::embedding::*;
 use derive_getters::{Dissolve, Getters};
 use reqwest::Client;
@@ -43,10 +43,26 @@ impl OpenAIEmbedding {
     /// Creates a new `OpenAIEmbedding` client for OpenAI API. Use `set_base_url()` for any other API.
     ///
     /// # Arguments
-    /// * `api_key` - Your API key. Empty key sends no `Authorization` header.
+    /// * `api_key` - Your API key. Use `with_no_api_key()` for servers without one.
     /// * `model` - The embedding model to use (e.g., `"text-embedding-3-small"`).
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
         Self::new_with_client(api_key, model, Client::default())
+    }
+    /// Creates a new `OpenAIEmbedding` client configured by environment variables, like the
+    /// official OpenAI SDKs:
+    /// * `OPENAI_API_KEY` - Your API key. Required.
+    /// * `OPENAI_BASE_URL` - Base URL of any OpenAI compatible API. Default is `DEFAULT_BASE_URL`.
+    ///
+    /// # Errors
+    /// If `OPENAI_API_KEY` is not set, or any of them isn't valid unicode.
+    pub fn from_env(model: impl Into<String>) -> Result<Self, EnvVarError> {
+        let (api_key, base_url) = read_env()?;
+        Ok(Self::new(api_key, model).set_base_url(base_url))
+    }
+    /// Creates a new `OpenAIEmbedding` client sending no `Authorization` header, for servers
+    /// without API keys, e.g. local servers. Set their URL with `set_base_url()`.
+    pub fn with_no_api_key(model: impl Into<String>) -> Self {
+        Self::new("", model)
     }
     /// Creates a new `OpenAIEmbedding` client with a custom `reqwest::Client`.
     ///
