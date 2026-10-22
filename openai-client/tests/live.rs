@@ -79,8 +79,7 @@ async fn structured_output() {
     }
     let ai = ai(Some("Classify the given words"))
         .response_format(ResponseFormat::json_schema(Sentiments::openai_schema()));
-    let mut session = Session::new(2);
-    session.set_remember_reply(false);
+    let mut session = Session::new(2).with_remember_reply(false);
     let completion = ai.ask(session.ask("Joy, Fear, Hope, Anger")).await.unwrap();
     let sentiments: Sentiments = completion.json().unwrap();
     assert!(sentiments.positive.contains(&"Joy".to_string()));

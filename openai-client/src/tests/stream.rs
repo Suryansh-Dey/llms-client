@@ -111,6 +111,8 @@ async fn reply_so_far_and_reply_on_drop() {
 #[tokio::test]
 async fn remember_reply_false_forgets_prompt() {
     let mut session = session();
+    // The whole prompt, even of many messages
+    session.ask("there");
     session.set_remember_reply(false);
     read(chat_stream(
         &mut session,

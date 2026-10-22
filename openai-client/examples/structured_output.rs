@@ -40,8 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ai = AI::from_env("gpt-5-mini", None)?
         .response_format(ResponseFormat::json_schema(Recipe::openai_schema()));
     // One-off requests don't need the reply in history.
-    let mut session = Session::new(2);
-    session.set_remember_reply(false);
+    let mut session = Session::new(2).with_remember_reply(false);
 
     let completion = ai
         .ask(session.ask("A quick vegetarian pasta for two"))

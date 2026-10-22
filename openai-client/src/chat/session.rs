@@ -66,7 +66,7 @@ fn forget_oldest(history: &mut VecDeque<Message>) -> Option<Message> {
 pub struct HistoryTrimmer<'a> {
     history: &'a mut VecDeque<Message>,
     limit: usize,
-    message_count: usize,
+    message_number: usize,
 }
 impl HistoryTrimmer<'_> {
     pub fn history(&self) -> &VecDeque<Message> {
@@ -81,9 +81,9 @@ impl HistoryTrimmer<'_> {
     pub fn limit(&self) -> usize {
         self.limit
     }
-    /// Count of messages added since the session was created, including forgotten ones.
-    pub fn message_count(&self) -> usize {
-        self.message_count
+    /// Number of the last message, see `Session::message_number()`.
+    pub fn message_number(&self) -> usize {
+        self.message_number
     }
     /// Removes the oldest message, and the tool calls and results right after it, as history
     /// can't start with them.
@@ -107,7 +107,7 @@ impl HistoryTrimmer<'_> {
 pub struct Session<H = SlidingWindow> {
     history: VecDeque<Message>,
     limit: usize,
-    message_count: usize,
+    message_number: usize,
     remember_reply: bool,
     overflow_handler: H,
 }
@@ -121,10 +121,16 @@ impl Session {
         Self {
             history: VecDeque::new(),
             limit,
-            message_count: 0,
+            message_number: 0,
             remember_reply: true,
             overflow_handler: SlidingWindow,
         }
+    }
+}
+/// Same as `Session::new(0)`, which keeps only the latest message.
+impl Default for Session {
+    fn default() -> Self {
+        Self::new(0)
     }
 }
 impl<H> Session<H> {
@@ -137,6 +143,39 @@ impl<H> Session<H> {
     pub fn last(&self) -> Option<&Message> {
         self.history.back()
     }
+    /// # Warning
+    /// Edits the API rejects are possible, e.g. removing a tool call which has a result.
+    pub fn last_mut(&mut self) -> Option<&mut Message> {
+        self.history.back_mut()
+    }
+    /// `n`th last message.
+    ///
+    /// # Example
+    /// - `session.previous(1)` returns the last message
+    /// - `session.previous(2)` returns the second last message
+    pub fn previous(&self, n: usize) -> Option<&Message> {
+        self.history.get(self.history.len().checked_sub(n)?)
+    }
+    /// `n`th last message, like `previous()`.
+    ///
+    /// # Warning
+    /// Edits the API rejects are possible, e.g. removing a tool call which has a result.
+    pub fn previous_mut(&mut self, n: usize) -> Option<&mut Message> {
+        let index = self.history.len().checked_sub(n)?;
+        self.history.get_mut(index)
+    }
+    /// Message by its number, counting from 1 every message added since the session was created.
+    /// E.g. `by_number(3)` is the third message. `None` if it was forgotten, or isn't added yet.
+    pub fn by_number(&self, number: usize) -> Option<&Message> {
+        self.previous((self.message_number + 1).checked_sub(number)?)
+    }
+    /// Message by its number, like `by_number()`.
+    ///
+    /// # Warning
+    /// Edits the API rejects are possible, e.g. removing a tool call which has a result.
+    pub fn by_number_mut(&mut self, number: usize) -> Option<&mut Message> {
+        self.previous_mut((self.message_number + 1).checked_sub(number)?)
+    }
     pub fn len(&self) -> usize {
         self.history.len()
     }
@@ -146,9 +185,11 @@ impl<H> Session<H> {
     pub fn limit(&self) -> usize {
         self.limit
     }
-    /// Count of messages added since the session was created, including forgotten ones.
-    pub fn message_count(&self) -> usize {
-        self.message_count
+    /// Number of the last message, see `by_number()`. Unlike `len()`, messages forgotten from the
+    /// beginning still count, while ones removed from the end (`pop()`, `forget_last_turn()`)
+    /// don't.
+    pub fn message_number(&self) -> usize {
+        self.message_number
     }
     /// Removes the oldest message, and the tool calls and results right after it, as history
     /// can't start with them.
@@ -159,7 +200,28 @@ impl<H> Session<H> {
     }
     /// Removes the last message.
     pub fn pop(&mut self) -> Option<Message> {
-        self.history.pop_back()
+        let message = self.history.pop_back()?;
+        self.message_number = self.message_number.saturating_sub(1);
+        Some(message)
+    }
+    /// Removes the last turn: the last prompt (consecutive user messages) and everything after
+    /// it, e.g. the reply, or tool calls and their results. Removes the whole history if no
+    /// prompt is left in it.
+    ///
+    /// Returns the removed messages, oldest first.
+    pub fn forget_last_turn(&mut self) -> Vec<Message> {
+        let is_prompt = |message: &Message| matches!(message, Message::User(_));
+        let start = match self.history.iter().rposition(is_prompt) {
+            Some(last_prompt) => self
+                .history
+                .range(..last_prompt)
+                .rposition(|message| !is_prompt(message))
+                .map_or(0, |reply| reply + 1),
+            None => 0,
+        };
+        let removed = self.history.split_off(start);
+        self.message_number = self.message_number.saturating_sub(removed.len());
+        removed.into()
     }
     pub fn remember_reply(&self) -> bool {
         self.remember_reply
@@ -168,6 +230,11 @@ impl<H> Session<H> {
     /// one-off requests, e.g. structured output. Default is true.
     pub fn set_remember_reply(&mut self, remember_reply: bool) {
         self.remember_reply = remember_reply;
+    }
+    /// Builder form of `set_remember_reply()`, e.g. `Session::new(2).with_remember_reply(false)`.
+    pub fn with_remember_reply(mut self, remember_reply: bool) -> Self {
+        self.remember_reply = remember_reply;
+        self
     }
     pub fn overflow_handler(&self) -> &H {
         &self.overflow_handler
@@ -181,7 +248,7 @@ impl<H> Session<H> {
         Session {
             history: self.history,
             limit: self.limit,
-            message_count: self.message_count,
+            message_number: self.message_number,
             remember_reply: self.remember_reply,
             overflow_handler,
         }
@@ -191,7 +258,7 @@ impl<H> Session<H> {
         let session = Session {
             history: self.history,
             limit: self.limit,
-            message_count: self.message_count,
+            message_number: self.message_number,
             remember_reply: self.remember_reply,
             overflow_handler: SlidingWindow,
         };
@@ -271,22 +338,23 @@ impl<H: OverflowHandler> Session<H> {
         };
         self.push(ToolMessage::new(call_id, content))
     }
-    /// Adds a reply of the API, as `remember_reply` says.
+    /// Adds a reply of the API, as `remember_reply` says. If not remembered, its prompt is removed
+    /// too, i.e. the user messages at the end.
     #[cfg(feature = "reqwest")]
     pub(crate) fn add_reply(&mut self, reply: AssistantMessage) {
         if self.remember_reply {
             self.reply(reply);
         } else if let Some(Message::User(_)) = self.history.back() {
-            self.history.pop_back();
+            self.forget_last_turn();
         }
     }
     fn add(&mut self, message: Message) {
         self.history.push_back(message);
-        self.message_count += 1;
+        self.message_number += 1;
         let mut history = HistoryTrimmer {
             history: &mut self.history,
             limit: self.limit,
-            message_count: self.message_count,
+            message_number: self.message_number,
         };
         let run_default = self.overflow_handler.handle(&mut history);
         while run_default && self.history.len() > self.limit && self.forget_oldest().is_some() {}

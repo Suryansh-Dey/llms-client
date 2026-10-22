@@ -39,7 +39,7 @@ fn every_message_is_kept() {
     session.ask("Hello").ask("world");
     session.reply("Hi");
     assert_eq!(roles(&session), ["user", "user", "assistant"]);
-    assert_eq!(session.message_count(), 3);
+    assert_eq!(session.message_number(), 3);
     assert_eq!(session.last().unwrap().text(), "Hi");
     assert_eq!(session.pop().unwrap().text(), "Hi");
     assert_eq!(session.len(), 2);
@@ -126,7 +126,7 @@ fn sliding_window_forgets_calls_with_their_results() {
     session.reply("Sunny");
     session.ask("Thanks");
     assert_eq!(roles(&session), ["assistant", "user"]);
-    assert_eq!(session.message_count(), 5);
+    assert_eq!(session.message_number(), 5);
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn serde_round_trip() {
     let restored: Session = serde_json::from_value(saved).unwrap();
     assert_eq!(roles(&restored), ["user", "assistant", "tool"]);
     assert_eq!(pending_ids(&restored), ["call_london"]);
-    assert_eq!(restored.message_count(), 3);
+    assert_eq!(restored.message_number(), 3);
     assert_eq!(restored.history(), session.history());
 }
 
@@ -241,4 +241,91 @@ fn assistant_message_helpers() {
     let reply = AssistantMessage::from("```json\n{\"a\": 1}\n```");
     assert_eq!(reply.json::<serde_json::Value>().unwrap(), json!({"a": 1}));
     assert_eq!(AssistantMessage::default().text(), "");
+}
+
+#[test]
+fn messages_by_position_and_number() {
+    let mut session = Session::new(2);
+    session.ask("first question");
+    session.reply("first answer");
+    session.ask("second question");
+    assert_eq!(session.previous(1).unwrap().text(), "second question");
+    assert_eq!(session.previous(2).unwrap().text(), "first answer");
+    assert!(session.previous(3).is_none(), "out of the window");
+    assert!(session.previous(0).is_none());
+
+    assert!(session.by_number(1).is_none(), "out of the window");
+    assert_eq!(session.by_number(2).unwrap().text(), "first answer");
+    assert_eq!(session.by_number(3).unwrap().text(), "second question");
+    assert!(session.by_number(4).is_none());
+    assert!(session.by_number(0).is_none());
+
+    // Numbers stay right after removing from the end
+    session.pop();
+    session.ask("third question");
+    assert_eq!(session.message_number(), 3);
+    assert_eq!(session.by_number(3).unwrap().text(), "third question");
+}
+
+#[test]
+fn messages_can_be_edited() {
+    let mut session = Session::new(10);
+    session.ask("Hi").reply("Hello");
+    if let Some(Message::Assistant(reply)) = session.last_mut() {
+        reply.content = Some("Hey".into());
+    }
+    if let Some(Message::User(prompt)) = session.previous_mut(2) {
+        prompt.content = "Hi there".into();
+    }
+    assert_eq!(session.by_number(1).unwrap().text(), "Hi there");
+    if let Some(Message::Assistant(reply)) = session.by_number_mut(2) {
+        reply.content.as_mut().unwrap().push('!');
+    }
+    assert_eq!(session.last().unwrap().text(), "Hey!");
+}
+
+#[test]
+fn forget_last_turn() {
+    // A prompt of many messages, and its tool calling loop
+    let mut session = Session::new(10);
+    session.ask("Hi").reply("Hello");
+    session.ask("Weather in Paris?").ask("And London?");
+    session.reply(vec![
+        ToolCall::new("call_paris", "get_weather", json!({"city": "Paris"})),
+        ToolCall::new("call_london", "get_weather", json!({"city": "London"})),
+    ]);
+    session.add_tool_result("call_paris", "Sunny").unwrap();
+    session.add_tool_result("call_london", "Rainy").unwrap();
+    session.reply("Sunny in Paris, rainy in London");
+
+    let removed = session.forget_last_turn();
+    assert_eq!(removed.len(), 6);
+    assert_eq!(removed[0].text(), "Weather in Paris?");
+    assert_eq!(roles(&session), ["user", "assistant"]);
+    assert_eq!(session.message_number(), 2);
+
+    // A prompt without reply yet
+    session.ask("Bye");
+    assert_eq!(session.forget_last_turn().len(), 1);
+    assert_eq!(roles(&session), ["user", "assistant"]);
+
+    // With no prompt left, the whole history is the last turn
+    let mut session = Session::new(1);
+    session.ask("Hi").reply("Hello");
+    assert_eq!(roles(&session), ["assistant"]);
+    assert_eq!(session.forget_last_turn().len(), 1);
+    assert!(session.is_empty());
+    assert!(session.forget_last_turn().is_empty());
+}
+
+#[test]
+fn defaults() {
+    let mut session = Session::default();
+    assert_eq!(session.limit(), 0);
+    assert!(session.remember_reply());
+    session.ask("Hi").ask("there");
+    assert_eq!(session.len(), 1, "only the latest message is kept");
+
+    let session = Session::new(2).with_remember_reply(false);
+    assert!(!session.remember_reply());
 }
