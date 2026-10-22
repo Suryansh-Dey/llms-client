@@ -203,10 +203,9 @@ fn client_configuration() {
     use crate::DEFAULT_BASE_URL;
     use crate::chat::{AI, ReasoningEffort, ResponseFormat};
     let schema = json!({"type": "object"});
-    let ai = AI::new("key", "model", None);
+    let mut ai = AI::new("key", "model", None);
     assert_eq!(ai.get_base_url(), DEFAULT_BASE_URL);
-    let ai = ai
-        .base_url("http://localhost:11434/v1/")
+    ai.base_url("http://localhost:11434/v1/")
         .response_format(ResponseFormat::json_schema(schema.clone()))
         .reasoning_effort(ReasoningEffort::XHigh)
         .temperature(0.5)
@@ -242,8 +241,7 @@ fn client_configuration() {
     assert_eq!(ai.get_tool_choice(), Some(&ToolChoice::Required));
 
     // `null` removes a parameter
-    let mut ai = ai
-        .param("temperature", None::<f64>)
+    ai.param("temperature", None::<f64>)
         .tools([])
         .tool_choice(None);
     assert!(!ai.get_params().contains_key("temperature"));

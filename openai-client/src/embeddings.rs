@@ -112,7 +112,8 @@ mod client {
     /// ```no_run
     /// use open_client::embeddings::Embedder;
     /// # async fn run() -> Result<(), open_client::Error> {
-    /// let embedder = Embedder::new("API_KEY", "text-embedding-3-small").dimensions(256);
+    /// let mut embedder = Embedder::new("API_KEY", "text-embedding-3-small");
+    /// embedder.dimensions(256);
     /// let response = embedder.embed("Hello, world!").await?;
     /// println!("{} dimensions", response.embedding().len());
     /// # Ok(())
@@ -157,7 +158,9 @@ mod client {
         /// If `OPENAI_API_KEY` is not set, or any of them isn't valid unicode.
         pub fn from_env(model: impl Into<String>) -> Result<Self, EnvVarError> {
             let (api_key, base_url) = read_env()?;
-            Ok(Self::new(api_key, model).base_url(base_url))
+            let mut embedder = Self::new(api_key, model);
+            embedder.base_url(base_url);
+            Ok(embedder)
         }
         /// A client sending no `Authorization` header, for servers without API keys, e.g. local
         /// servers. Set their URL with `base_url()`.
@@ -181,15 +184,15 @@ mod client {
         }
 
         /// Base URL of any OpenAI compatible API. Requests are sent to `{base_url}/embeddings`.
-        pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
+        pub fn base_url(&mut self, base_url: impl Into<String>) -> &mut Self {
             self.base_url = base_url.into().trim_end_matches('/').to_string();
             self
         }
-        pub fn api_key(mut self, api_key: impl Into<String>) -> Self {
+        pub fn api_key(&mut self, api_key: impl Into<String>) -> &mut Self {
             self.api_key = api_key.into();
             self
         }
-        pub fn model(mut self, model: impl Into<String>) -> Self {
+        pub fn model(&mut self, model: impl Into<String>) -> &mut Self {
             self.model = model.into();
             self
         }
@@ -198,7 +201,7 @@ mod client {
         ///
         /// # Panics
         /// If `value` can't be serialized to JSON, e.g. a map with non-string keys.
-        pub fn param(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
+        pub fn param(&mut self, key: impl Into<String>, value: impl Serialize) -> &mut Self {
             let key = key.into();
             let value = serde_json::to_value(value)
                 .unwrap_or_else(|e| panic!("parameter `{key}` can't be serialized to JSON: {e}"));
@@ -216,7 +219,7 @@ mod client {
         }
         /// Number of dimensions of the embeddings. Only supported by some models, e.g.
         /// `text-embedding-3` and later.
-        pub fn dimensions(self, dimensions: u32) -> Self {
+        pub fn dimensions(&mut self, dimensions: u32) -> &mut Self {
             self.param("dimensions", dimensions)
         }
 

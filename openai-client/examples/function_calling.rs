@@ -35,8 +35,8 @@ fn convert_usd(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ai = AI::from_env("gpt-5-mini", None)?
-        .tool(Tool::Function(get_price::openai_schema()))
+    let mut ai = AI::from_env("gpt-5-mini", None)?;
+    ai.tool(Tool::Function(get_price::openai_schema()))
         .tool(Tool::Function(convert_usd::openai_schema()));
     let mut session = Session::new(SlidingWindow::new(20));
 

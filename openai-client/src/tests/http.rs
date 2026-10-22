@@ -100,9 +100,8 @@ async fn ask_sends_request_to_base_url() {
     )
     .await;
     // Trailing slash is ignored
-    let ai = AI::new("secret", "mock-model", Some("Be brief".into()))
-        .base_url(format!("{base_url}/"))
-        .temperature(0.5);
+    let mut ai = AI::new("secret", "mock-model", Some("Be brief".into()));
+    ai.base_url(format!("{base_url}/")).temperature(0.5);
     let mut session = Session::new(SlidingWindow::new(6));
     let completion = ai.ask(session.ask("Hi")).await.unwrap();
 
@@ -137,14 +136,16 @@ async fn no_api_key_sends_no_authorization() {
         completion(json!({"role": "assistant", "content": "ok"})),
     )
     .await;
-    let ai = AI::with_no_api_key("local-model", None).base_url(base_url);
+    let mut ai = AI::with_no_api_key("local-model", None);
+    ai.base_url(base_url);
     ai.ask(Session::default().ask("Hi")).await.unwrap();
     assert_eq!(request.await.unwrap().header("authorization"), None);
 }
 
 #[tokio::test]
 async fn nothing_to_respond() {
-    let ai = AI::new("key", "mock-model", None).base_url("http://127.0.0.1:1");
+    let mut ai = AI::new("key", "mock-model", None);
+    ai.base_url("http://127.0.0.1:1");
     let mut session = Session::default();
     session.ask("Hi").reply("Hello");
     assert!(matches!(
@@ -161,7 +162,8 @@ async fn nothing_to_respond() {
 async fn error_status_is_parsed() {
     let body = json!({"error": {"message": "Incorrect API key", "type": "invalid_request_error", "param": null, "code": "invalid_api_key"}});
     let (base_url, _) = serve(401, "application/json", body.to_string()).await;
-    let ai = AI::new("wrong", "mock-model", None).base_url(base_url);
+    let mut ai = AI::new("wrong", "mock-model", None);
+    ai.base_url(base_url);
     let mut session = Session::default();
     match ai.ask(session.ask("Hi")).await {
         Err(Error::Api { status, error }) => {
@@ -180,7 +182,8 @@ async fn error_status_is_parsed() {
 async fn error_object_with_ok_status() {
     let body = json!({"error": {"message": "Rate limit exceeded", "code": 429}});
     let (base_url, _) = serve(200, "application/json", body.to_string()).await;
-    let ai = AI::new("key", "mock-model", None).base_url(base_url);
+    let mut ai = AI::new("key", "mock-model", None);
+    ai.base_url(base_url);
     match ai.ask(Session::default().ask("Hi")).await {
         Err(Error::Api { status, error }) => {
             assert_eq!(status.unwrap(), 200);
@@ -193,7 +196,8 @@ async fn error_object_with_ok_status() {
 #[tokio::test]
 async fn invalid_response_contains_body() {
     let (base_url, _) = serve(200, "text/html", "<html>Not an API</html>").await;
-    let ai = AI::new("key", "mock-model", None).base_url(base_url);
+    let mut ai = AI::new("key", "mock-model", None);
+    ai.base_url(base_url);
     match ai.ask(Session::default().ask("Hi")).await {
         Err(Error::InvalidResponse(e)) => assert!(e.contains("Not an API")),
         other => panic!("Expected InvalidResponse, got {other:?}"),
@@ -205,9 +209,8 @@ async fn stream() {
     let chunk = json!({"choices": [{"index": 0, "delta": {"content": "Hello"}}]});
     let body = format!("data: {chunk}\n\ndata: [DONE]\n\n");
     let (base_url, request) = serve(200, "text/event-stream", body).await;
-    let ai = AI::new("key", "mock-model", None)
-        .base_url(base_url)
-        .include_usage(true);
+    let mut ai = AI::new("key", "mock-model", None);
+    ai.base_url(base_url).include_usage(true);
     let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi");
 
@@ -235,7 +238,8 @@ async fn stream_status_not_ok() {
         r#"{"error": "model 'x' not found"}"#,
     )
     .await;
-    let ai = AI::new("key", "x", None).base_url(base_url);
+    let mut ai = AI::new("key", "x", None);
+    ai.base_url(base_url);
     let mut session = Session::new(SlidingWindow::new(10));
     match ai.stream(session.ask("Hi")).await {
         Err(Error::Api { error, .. }) => assert_eq!(error.message, "model 'x' not found"),
@@ -257,7 +261,8 @@ async fn embeddings() {
         "usage": {"prompt_tokens": 2, "total_tokens": 2}
     });
     let (base_url, request) = serve(200, "application/json", body.to_string()).await;
-    let embedder = Embedder::new("key", "mock-embedding")
+    let mut embedder = Embedder::new("key", "mock-embedding");
+    embedder
         .base_url(base_url)
         .dimensions(2)
         .param("model", "ignored");
@@ -277,7 +282,8 @@ async fn embeddings() {
 async fn embeddings_count_must_match_inputs() {
     let body = json!({"data": [{"index": 0, "embedding": [0.1]}]});
     let (base_url, _) = serve(200, "application/json", body.to_string()).await;
-    let embedder = Embedder::new("key", "mock-embedding").base_url(base_url);
+    let mut embedder = Embedder::new("key", "mock-embedding");
+    embedder.base_url(base_url);
     match embedder.embed(vec!["a", "b"]).await {
         Err(Error::InvalidResponse(e)) => assert_eq!(e, "Expected 2 embeddings, received 1"),
         other => panic!("Expected InvalidResponse, got {other:?}"),

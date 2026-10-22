@@ -9,9 +9,9 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let embedder = Embedder::from_env("text-embedding-3-small")?
-        // Optional: smaller embeddings, supported by text-embedding-3 and later.
-        .dimensions(256);
+    let mut embedder = Embedder::from_env("text-embedding-3-small")?;
+    // Optional: smaller embeddings, supported by text-embedding-3 and later.
+    embedder.dimensions(256);
 
     let documents = [
         "Rust guarantees memory safety without a garbage collector.",

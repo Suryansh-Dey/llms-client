@@ -27,13 +27,13 @@ use open_client::chat::session::{Session, SlidingWindow};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut session = Session::new(SlidingWindow::new(10)); // Keep last 10 messages
-    let ai = AI::new(
+    let mut ai = AI::new(
         std::env::var("DEEPSEEK_API_KEY")?,
         "deepseek-chat",
         None, // Optional system prompt
-    )
-    .base_url("https://api.deepseek.com") // Skip for OpenAI
-    .temperature(0.7);
+    );
+    ai.base_url("https://api.deepseek.com") // Skip for OpenAI
+        .temperature(0.7);
 
     let completion = ai.ask(session.ask("Hello!")).await?;
     println!("AI: {}", completion.text());

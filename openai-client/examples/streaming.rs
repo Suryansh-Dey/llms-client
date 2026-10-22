@@ -7,7 +7,8 @@ use std::io::{Write, stdout};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Optional: token usage is sent too. OpenAI sends it in the last chunk, others in every chunk.
-    let ai = AI::from_env("gpt-5-mini", None)?.include_usage(true);
+    let mut ai = AI::from_env("gpt-5-mini", None)?;
+    ai.include_usage(true);
     let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Write a short poem about the borrow checker.");
 

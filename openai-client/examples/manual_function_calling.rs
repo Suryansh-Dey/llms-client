@@ -24,8 +24,8 @@ async fn take_screenshot() -> std::io::Result<ImageUrl> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ai = AI::from_env("gpt-5-mini", None)?
-        .tool(Tool::Function(book_table::openai_schema()))
+    let mut ai = AI::from_env("gpt-5-mini", None)?;
+    ai.tool(Tool::Function(book_table::openai_schema()))
         .tool(Tool::Function(take_screenshot::openai_schema()));
     let mut session = Session::new(SlidingWindow::new(20));
 

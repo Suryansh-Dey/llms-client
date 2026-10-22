@@ -77,8 +77,8 @@ async fn structured_output() {
         positive: Vec<String>,
         negative: Vec<String>,
     }
-    let ai = ai(Some("Classify the given words"))
-        .response_format(ResponseFormat::json_schema(Sentiments::openai_schema()));
+    let mut ai = ai(Some("Classify the given words"));
+    ai.response_format(ResponseFormat::json_schema(Sentiments::openai_schema()));
     let mut session = Session::default().with_remember_reply(false);
     let completion = ai.ask(session.ask("Joy, Fear, Hope, Anger")).await.unwrap();
     let sentiments: Sentiments = completion.json().unwrap();
@@ -90,7 +90,8 @@ async fn structured_output() {
 #[tokio::test]
 #[ignore = "needs OPENAI_API_KEY"]
 async fn streamed_text() {
-    let ai = ai(None).include_usage(true);
+    let mut ai = ai(None);
+    ai.include_usage(true);
     let mut session = Session::new(SlidingWindow::new(10));
     let mut stream = ai
         .stream(session.ask("Count from 1 to 20, separated by spaces."))
@@ -120,7 +121,8 @@ async fn streamed_parallel_calls() {
     fn get_weather(city: String) -> String {
         city
     }
-    let ai = ai(None).tool(Tool::Function(get_weather::openai_schema()));
+    let mut ai = ai(None);
+    ai.tool(Tool::Function(get_weather::openai_schema()));
     let mut session = Session::new(SlidingWindow::new(10));
     session.ask("What is the weather in Paris and in London? Call the function for both.");
     let mut stream = ai.stream(&mut session).await.unwrap();
@@ -159,7 +161,8 @@ fn secret_number() -> u32 {
 #[tokio::test]
 #[ignore = "needs OPENAI_API_KEY"]
 async fn function_calling_loop() {
-    let ai = ai(None).tool(Tool::Function(secret_number::openai_schema()));
+    let mut ai = ai(None);
+    ai.tool(Tool::Function(secret_number::openai_schema()));
     let mut session = Session::new(SlidingWindow::new(10));
     let mut completion = ai
         .ask(session.ask("What is the secret number plus one?"))
@@ -218,7 +221,8 @@ async fn image_after_tool_result() {
     #[allow(dead_code)]
     fn take_screenshot() {}
 
-    let ai = ai(None).tool(Tool::Function(take_screenshot::openai_schema()));
+    let mut ai = ai(None);
+    ai.tool(Tool::Function(take_screenshot::openai_schema()));
     let mut session = Session::new(SlidingWindow::new(10));
     ai.ask(session.ask("Take a screenshot. What kind of chart is on my screen?"))
         .await
@@ -238,7 +242,8 @@ async fn image_after_tool_result() {
 #[tokio::test]
 #[ignore = "needs OPENAI_API_KEY"]
 async fn reasoning_effort() {
-    let ai = ai(None).reasoning_effort(ReasoningEffort::Low);
+    let mut ai = ai(None);
+    ai.reasoning_effort(ReasoningEffort::Low);
     let mut session = Session::default();
     let completion = ai
         .ask(session.ask("How many letters r are in strawberry? Answer with a digit."))
@@ -250,7 +255,8 @@ async fn reasoning_effort() {
 #[tokio::test]
 #[ignore = "needs OPENAI_API_KEY"]
 async fn wrong_api_key() {
-    let ai = ai(None).api_key("wrong_api_key");
+    let mut ai = ai(None);
+    ai.api_key("wrong_api_key");
     match ai.ask(Session::default().ask("Hi")).await {
         Err(Error::Api { status, error }) => {
             assert!(status.unwrap().is_client_error());
@@ -264,7 +270,8 @@ async fn wrong_api_key() {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn embeddings() {
     let model = std::env::var("OPENAI_EMBEDDING_MODEL").unwrap_or("text-embedding-3-small".into());
-    let embedder = Embedder::from_env(model).unwrap().dimensions(256);
+    let mut embedder = Embedder::from_env(model).unwrap();
+    embedder.dimensions(256);
     let response = embedder
         .embed(vec![
             "I love programming in Rust",

@@ -37,8 +37,8 @@ struct Recipe {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ai = AI::from_env("gpt-5-mini", None)?
-        .response_format(ResponseFormat::json_schema(Recipe::openai_schema()));
+    let mut ai = AI::from_env("gpt-5-mini", None)?;
+    ai.response_format(ResponseFormat::json_schema(Recipe::openai_schema()));
     // One-off requests don't need the reply in history.
     let mut session = Session::default().with_remember_reply(false);
 
