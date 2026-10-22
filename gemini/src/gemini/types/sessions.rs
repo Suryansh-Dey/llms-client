@@ -373,6 +373,7 @@ impl<H: OverflowHandler> Session<H> {
         if let Some(chat) = self.history.back()
             && let Role::User = chat.role()
         {
+            self.chat_no -= 1;
             return (last, self.history.pop_back());
         }
         (last, None)
