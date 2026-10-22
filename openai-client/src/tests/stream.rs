@@ -1,35 +1,34 @@
-//! `ResponseStream` fed with in-memory chunks, so events can be split at exact byte positions.
-use crate::openai::error::OpenAIResponseStreamError;
-use crate::openai::types::request::Role;
-use crate::openai::types::response::{OpenAIResponse, OpenAIResponseStream, ResponseStream};
-use crate::openai::types::sessions::Session;
+//! `ChatStream` fed with in-memory chunks, so events can be split at exact byte positions.
+use crate::Error;
+use crate::chat::message::{AssistantMessage, Message};
+use crate::chat::session::Session;
+use crate::chat::{ChatCompletionChunk, ChatStream};
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
-fn response_stream(chunks: Vec<Vec<u8>>) -> OpenAIResponseStream {
+fn session() -> Session {
     let mut session = Session::new(10);
     session.ask("Hi");
-    let chunks = futures::stream::iter(chunks.into_iter().map(|chunk| Ok(Bytes::from(chunk))));
-    ResponseStream::new(
-        Box::new(chunks),
-        session,
-        (|_, response| response) as fn(&Session, OpenAIResponse) -> OpenAIResponse,
-    )
+    session
 }
-
-/// Reads the whole stream. Returns the items and the session.
-async fn read(
-    mut stream: OpenAIResponseStream,
-) -> (
-    Vec<Result<OpenAIResponse, OpenAIResponseStreamError>>,
-    Session,
-) {
+fn chat_stream(session: &mut Session, chunks: Vec<Vec<u8>>) -> ChatStream<'_> {
+    let chunks = futures::stream::iter(chunks.into_iter().map(|chunk| Ok(Bytes::from(chunk))));
+    ChatStream::new(Box::new(chunks), session)
+}
+/// Reads the whole stream.
+async fn read(mut stream: ChatStream<'_>) -> Vec<Result<ChatCompletionChunk, Error>> {
     let mut items = Vec::new();
     while let Some(item) = stream.next().await {
         items.push(item);
     }
-    (items, stream.get_session_owned())
+    items
+}
+fn reply(session: &Session) -> &AssistantMessage {
+    match session.last() {
+        Some(Message::Assistant(reply)) => reply,
+        other => panic!("Expected an assistant message, got {other:?}"),
+    }
 }
 
 fn event(delta: Value) -> String {
@@ -62,19 +61,14 @@ async fn events_split_at_any_byte() {
     splits.push(body.iter().map(|byte| vec![*byte]).collect());
 
     for chunks in splits {
-        let (items, session) = read(response_stream(chunks)).await;
-        let items: Vec<OpenAIResponse> = items.into_iter().map(Result::unwrap).collect();
-        let texts: Vec<String> = items
-            .iter()
-            .map(|item| item.get_chat().get_text_no_think(""))
-            .collect();
+        let mut session = session();
+        let items = read(chat_stream(&mut session, chunks)).await;
+        let items: Vec<ChatCompletionChunk> = items.into_iter().map(Result::unwrap).collect();
+        let texts: Vec<&str> = items.iter().map(ChatCompletionChunk::text).collect();
         assert_eq!(texts, ["Hé", "llo", ""]);
-        assert_eq!(items[2].usage, Some(json!({"total_tokens": 3})));
-        assert_eq!(session.get_history_length(), 2);
-        assert_eq!(
-            session.get_last_chat().unwrap().get_text_no_think(""),
-            "Héllo"
-        );
+        assert_eq!(items[2].usage.as_ref().unwrap().total_tokens, 3);
+        assert_eq!(session.len(), 2);
+        assert_eq!(reply(&session).text(), "Héllo");
     }
 }
 
@@ -84,17 +78,56 @@ async fn last_event_without_blank_line_or_done() {
         "data: {}",
         json!({"choices": [{"index": 0, "delta": {"content": "Hi"}}]})
     );
-    let (items, session) = read(response_stream(vec![body.into_bytes()])).await;
+    let mut session = session();
+    let items = read(chat_stream(&mut session, vec![body.into_bytes()])).await;
     assert_eq!(items.len(), 1);
-    assert_eq!(session.get_last_chat().unwrap().get_text_no_think(""), "Hi");
+    assert_eq!(reply(&session).text(), "Hi");
+}
+
+#[tokio::test]
+async fn reply_so_far_and_reply_on_drop() {
+    let body = [
+        event(json!({"content": "Hel"})),
+        event(json!({"content": "lo"})),
+    ]
+    .concat();
+    let mut session = session();
+    let mut stream = chat_stream(&mut session, vec![body.into_bytes()]);
+    assert_eq!(stream.message().text(), "");
+    stream.next().await.unwrap().unwrap();
+    assert_eq!(stream.message().text(), "Hel");
+    // Not added until the stream ends or is dropped
+    assert_eq!(stream.session().len(), 1);
+    drop(stream);
+    assert_eq!(session.len(), 2);
+    assert_eq!(reply(&session).text(), "Hel");
+
+    // Nothing is added if nothing was received
+    let mut session = self::session();
+    drop(chat_stream(&mut session, vec![]));
+    assert_eq!(session.len(), 1);
+}
+
+#[tokio::test]
+async fn remember_reply_false_forgets_prompt() {
+    let mut session = session();
+    session.set_remember_reply(false);
+    read(chat_stream(
+        &mut session,
+        vec![event(json!({"content": "Hi"})).into_bytes()],
+    ))
+    .await;
+    assert!(session.is_empty());
 }
 
 fn calls(session: &Session) -> Vec<(String, String, Value)> {
-    session
-        .get_last_chat()
-        .unwrap()
-        .get_function_calls()
-        .map(|call| (call.id().clone(), call.name().clone(), call.args().unwrap()))
+    reply(session)
+        .tool_calls
+        .iter()
+        .map(|call| {
+            let args = call.args().unwrap();
+            (call.id.clone(), call.function.name.clone(), args)
+        })
         .collect()
 }
 
@@ -116,7 +149,8 @@ async fn parallel_calls_are_merged_by_index() {
         "data: [DONE]\n\n".to_string(),
     ]
     .concat();
-    let (items, mut session) = read(response_stream(vec![body.into_bytes()])).await;
+    let mut session = session();
+    let items = read(chat_stream(&mut session, vec![body.into_bytes()])).await;
     assert!(items.iter().all(Result::is_ok));
     assert_eq!(
         calls(&session),
@@ -133,11 +167,12 @@ async fn parallel_calls_are_merged_by_index() {
             )
         ]
     );
+    assert_eq!(reply(&session).content, None);
     // Complete calls can be answered
-    session.add_function_response("call_b", "Rainy").unwrap();
-    session.add_function_response("call_a", "Sunny").unwrap();
-    assert!(session.get_pending_function_calls().is_empty());
-    assert_eq!(*session.get_last_chat().unwrap().role(), Role::Tool);
+    session.add_tool_result("call_b", "Rainy").unwrap();
+    session.add_tool_result("call_a", "Sunny").unwrap();
+    assert!(session.pending_tool_calls().is_empty());
+    assert!(matches!(session.last(), Some(Message::Tool(_))));
 }
 
 #[tokio::test]
@@ -152,14 +187,29 @@ async fn calls_without_index_are_complete() {
         event(json!({"tool_calls": [{"function": {"name": "g", "arguments": "{}"}}]})),
     ]
     .concat();
-    let (_, session) = read(response_stream(vec![body.into_bytes()])).await;
+    let mut session = session();
+    read(chat_stream(&mut session, vec![body.into_bytes()])).await;
     let calls = calls(&session);
     assert_eq!(calls.len(), 4);
     assert_eq!(calls[0], ("a".into(), "f".into(), json!({"x": 1})));
     assert_eq!(calls[1], ("b".into(), "f".into(), json!({"x": 2})));
-    // Ids are generated for calls without one, as responses refer to calls by id
+    // Ids are generated for calls without one, as results refer to calls by id
     assert!(!calls[2].0.is_empty());
     assert_ne!(calls[2].0, calls[3].0);
+}
+
+#[tokio::test]
+async fn reasoning_is_merged() {
+    let body = [
+        event(json!({"reasoning_content": "Let me "})),
+        event(json!({"reasoning": "think"})),
+        event(json!({"content": "Done"})),
+    ]
+    .concat();
+    let mut session = session();
+    read(chat_stream(&mut session, vec![body.into_bytes()])).await;
+    assert_eq!(reply(&session).reasoning.as_deref(), Some("Let me think"));
+    assert_eq!(reply(&session).text(), "Done");
 }
 
 #[tokio::test]
@@ -173,22 +223,24 @@ async fn error_event_and_invalid_event() {
         "data: {not json\n\n".to_string(),
     ]
     .concat();
-    let (items, session) = read(response_stream(vec![body.into_bytes()])).await;
+    let mut session = session();
+    let items = read(chat_stream(&mut session, vec![body.into_bytes()])).await;
     assert_eq!(items.len(), 3);
     assert!(items[0].is_ok());
     match &items[1] {
-        Err(OpenAIResponseStreamError::ApiError(e)) => {
-            assert_eq!(e.message, "Provider overloaded");
-            assert_eq!(e.code, Some(json!(502)));
+        Err(Error::Api {
+            status: None,
+            error,
+        }) => {
+            assert_eq!(error.message, "Provider overloaded");
+            assert_eq!(error.code, Some(json!(502)));
         }
-        other => panic!("Expected ApiError, got {other:?}"),
+        other => panic!("Expected Api error, got {other:?}"),
     }
     match &items[2] {
-        Err(OpenAIResponseStreamError::InvalidResponseFormat(e)) => {
-            assert!(e.contains("{not json"))
-        }
-        other => panic!("Expected InvalidResponseFormat, got {other:?}"),
+        Err(Error::InvalidResponse(e)) => assert!(e.contains("{not json")),
+        other => panic!("Expected InvalidResponse, got {other:?}"),
     }
     // What was received before the error is kept
-    assert_eq!(session.get_last_chat().unwrap().get_text_no_think(""), "Hi");
+    assert_eq!(reply(&session).text(), "Hi");
 }

@@ -2,46 +2,46 @@
 
 A fast, flexible, and feature-rich Rust library for **any OpenAI compatible API**: OpenAI, DeepSeek, Ollama, vLLM, OpenRouter, Groq, LM Studio, Gemini and more. Featuring macros for automatic JSON schema generation and function calling.
 
-Sibling of [gemini-client-api](https://crates.io/crates/gemini-client-api) with the same design. Moving from it? See [migration.md](migration.md).
+Types follow the [Chat Completions](https://platform.openai.com/docs/api-reference/chat) specification and are sent as you build them, so what you see in the OpenAI docs is what you write.
 
 ## Features
 
-- **Any OpenAI compatible endpoint**: `set_base_url()` and you're done. Text-only messages are sent as plain strings, and responses and errors are parsed leniently, so servers that only partially follow the spec still work.
+- **Any OpenAI compatible endpoint**: `base_url()` and you're done. Responses and errors are parsed leniently, so servers that only partially follow the spec still work.
 - **Automatic Context Management**: Simple `Session` struct to handle conversation history, with custom `OverflowHandler`s (e.g. token budget).
 - **Procedural Macros**:
     - `#[openai_schema]`: Generate strict mode compatible JSON schemas directly from your Rust structs and enums.
     - `#[openai_function]`: Turn Rust functions into tools with minimal boilerplate.
-    - `execute_function_calls!`: Seamlessly dispatch and handle multiple (parallel) function calls.
-- **Multimodal Support**: Images, audio and files (e.g. PDF), from local files, URLs or base64.
-- **Multimodal function responses**: Functions can return images too, e.g. a screenshot.
-- **Streaming**: Function call arguments streamed in pieces are assembled for you.
-- **Reasoning**: `reasoning_effort` and thoughts from `reasoning_content` / `reasoning` (DeepSeek, Qwen, vLLM, Ollama, OpenRouter..).
-- **Embeddings**: Generate dense vector embeddings using the `OpenAIEmbedding` client.
+    - `execute_function_calls!`: Seamlessly dispatch and handle multiple (parallel) tool calls.
+- **Multimodal Support**: Images, audio and files (e.g. PDF), from local files, URLs or bytes.
+- **Streaming**: Tool call arguments streamed in pieces are assembled for you.
+- **Reasoning**: `reasoning_effort()`, and reasoning from `reasoning_content` / `reasoning` (DeepSeek, Qwen, vLLM, Ollama, OpenRouter..).
+- **Embeddings**: Dense vector embeddings with `Embedder`.
 - **Framework Agnostic**: Modular design that works anywhere, including Actix, Axum, and WASM environments.
 
 ### Basic Chat Example
 
 ```rust
-use open_client::openai::ask::OpenAI;
-use open_client::openai::types::sessions::Session;
+use open_client::chat::AI;
+use open_client::chat::session::Session;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut session = Session::new(10); // Keep last 10 messages
-    let ai = OpenAI::new(
+    let ai = AI::new(
         std::env::var("DEEPSEEK_API_KEY")?,
         "deepseek-chat",
-        None, // Optional system instruction
+        None, // Optional system prompt
     )
-    .set_base_url("https://api.deepseek.com"); // Skip for OpenAI
+    .base_url("https://api.deepseek.com") // Skip for OpenAI
+    .temperature(0.7);
 
-    let response = ai.ask(session.ask("Hello!")).await?;
-    println!("AI: {}", response.get_chat().get_text_no_think("\n"));
+    let completion = ai.ask(session.ask("Hello!")).await?;
+    println!("AI: {}", completion.text());
     Ok(())
 }
 ```
 
-`OpenAI::from_env(model, sys_prompt)` reads `OPENAI_API_KEY` and `OPENAI_BASE_URL` instead, like the official OpenAI SDKs. Local servers without API keys use `OpenAI::with_no_api_key(model, sys_prompt)`.
+`AI::from_env(model, system_prompt)` reads `OPENAI_API_KEY` and `OPENAI_BASE_URL` instead, like the official OpenAI SDKs. Local servers without API keys use `AI::with_no_api_key(model, system_prompt)`.
 
 | Provider | Base URL |
 |---|---|
@@ -52,26 +52,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | Groq | `https://api.groq.com/openai/v1` |
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` |
 
-Provider specific parameters can be set with `ai.set_generation_config()["param"] = value`, which goes to the top level of the request body. Servers needing extra headers can be used with `OpenAI::new_with_client()` and a `reqwest::Client` having default headers.
+Common parameters have their own methods, e.g. `temperature()`, `max_completion_tokens()` or `response_format()`. Anything else, including provider specific and nested parameters, is set with `param(key, value)`, e.g. `.param("provider", json!({"sort": "price"}))`. Servers needing extra headers can be used with `AI::with_client()` and a `reqwest::Client` having default headers.
 
-`reqwest`, `mime`, `serde_json` and `futures` are re-exported (`open_client::reqwest`...), so you don't need them as dependencies. Add `serde` to derive `Deserialize` for structured output.
+## Modules
+
+- `open_client::chat`: the `AI` client, its parameters (`Tool`, `ToolChoice`, `ResponseFormat`, `ReasoningEffort`) and responses (`ChatCompletion`, and `ChatCompletionChunk` of a `ChatStream`).
+    - `chat::message`: `Message` and its parts: `UserMessage` with `ImageUrl`, `InputAudio` and `File` parts, `AssistantMessage` with `ToolCall`s, and `ToolMessage`.
+    - `chat::session`: `Session`, and `OverflowHandler`s that keep it in check.
+- `open_client::embeddings`: the `Embedder` client.
+- `open_client`: `Error`, the macros, and the `OpenAISchema` trait.
+
+`reqwest`, `mime`, `serde`, `serde_json` and `futures` are re-exported (`open_client::reqwest`...), so you don't need them as dependencies. Add `serde` to derive `Deserialize` for structured output.
+
+## Multimodal
+
+```rust
+use open_client::chat::message::{ContentPart, File, ImageUrl};
+use open_client::mime;
+
+session.ask(vec![
+    ContentPart::from("Summarise the chart and the report."),
+    ImageUrl::from_path("chart.png", mime::IMAGE_PNG).await?.into(),
+    File::from_path("report.pdf", mime::APPLICATION_PDF).await?.into(),
+]);
+```
+
+Each part is sent as its own type, so what works depends on the server:
+
+| | Images | PDFs | Audio |
+|---|---|---|---|
+| OpenAI | `ImageUrl` | `File` | `InputAudio` (audio models) |
+| Gemini | `ImageUrl` | `ImageUrl` (rejects `File`) | `InputAudio` |
+
+Tool results are text, as per the specification. To show the model an image a tool produced, e.g. a screenshot, send it in a user message after the results.
 
 ## Examples
 
-Examples use `OpenAI::from_env()`. Set `OPENAI_API_KEY`, and `OPENAI_BASE_URL` (and the model in the example) for APIs other than OpenAI.
+Examples use `AI::from_env()`. Set `OPENAI_API_KEY`, and `OPENAI_BASE_URL` (and the model in the example) for APIs other than OpenAI.
 
 - [**Basic Chat**](examples/basic_chat.rs): A conversation, with follow-up questions relying on the history.
 - [**Providers**](examples/providers.rs): DeepSeek, Gemini, OpenRouter (extra headers and parameters) and local Ollama.
 - [**Streaming**](examples/streaming.rs): Printing the reply while it is generated.
 - [**Function Calling**](examples/function_calling.rs): Rust functions as tools with `#[openai_function]` and `execute_function_calls!`.
-- [**Manual Function Calling**](examples/manual_function_calling.rs): Checking calls before acting, and responding with an image.
+- [**Manual Function Calling**](examples/manual_function_calling.rs): Checking calls before acting, and showing the model a screenshot.
 - [**Structured Output**](examples/structured_output.rs): A reply in your own type using `#[openai_schema]`.
-- [**Multimodal**](examples/multimodal.rs): Local files, image URLs, and text interleaved with images.
-- [**Thinking**](examples/thinking.rs): Thoughts of reasoning models in a tool calling loop (DeepSeek).
+- [**Multimodal**](examples/multimodal.rs): Local images, image URLs, PDFs and audio.
+- [**Thinking**](examples/thinking.rs): Reasoning of thinking models in a tool calling loop (DeepSeek).
 - [**Context Management**](examples/context_management.rs): A token budget `OverflowHandler` calibrated with `usage`.
 - [**Embeddings**](examples/embedding.rs): Semantic search.
 
-For WASM environments, disable default features:
+For WASM environments, disable default features. Messages, `Session` and the macros work without the clients:
 
 ```toml
 [dependencies]

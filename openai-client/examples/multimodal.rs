@@ -1,39 +1,60 @@
-//! Images and files in prompts.
+//! Images, PDFs and audio in prompts. Each is a content part of its own type, sent as it is, so
+//! what a server accepts depends on the server:
+//! - OpenAI reads images as `ImageUrl` and PDFs as `File`.
+//! - Gemini reads images and PDFs as `ImageUrl`, and rejects `File`.
+//!
+//! Pass a WAV file to also ask about audio: `cargo run --example multimodal -- speech.wav`
+use open_client::chat::AI;
+use open_client::chat::message::{
+    AudioFormat, ContentPart, File, ImageDetail, ImageUrl, InputAudio,
+};
+use open_client::chat::session::Session;
 use open_client::mime;
-use open_client::openai::ask::OpenAI;
-use open_client::openai::types::request::{ImageDetail, ImageUrl, InlineData};
-use open_client::openai::types::sessions::Session;
 
 const CHART: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png");
 const LOGO: &str = "https://www.rust-lang.org/logos/rust-logo-512x512.png";
+const PDF: &str = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ai = OpenAI::from_env("gpt-5-mini", Some("Answer in one sentence.".into()))?;
+    let ai = AI::from_env("gpt-5-mini", Some("Answer in one sentence.".into()))?;
     let mut session = Session::new(10);
 
-    // A local file, sent as base64. Besides images, audio (e.g. `audio/wav`) and other files
-    // (e.g. `application/pdf`) can be sent, if the model supports them.
-    let chart = InlineData::from_path(CHART, mime::IMAGE_PNG).await?;
-    session.ask("What kind of chart is this?").ask(chart);
-    let response = ai.ask(&mut session).await?;
-    println!("AI: {}", response.get_chat().get_text_no_think(""));
+    // A local image, sent as a base64 `data:` URL.
+    let chart = ImageUrl::from_path(CHART, mime::IMAGE_PNG).await?;
+    session.ask(vec![
+        ContentPart::from("What kind of chart is this?"),
+        chart.into(),
+    ]);
+    let completion = ai.ask(&mut session).await?;
+    println!("AI: {}", completion.text());
 
-    // An image URL, fetched by the API server. Use `InlineData::from_url()` to download it
+    // An image URL, fetched by the API server. Use `ImageUrl::download()` to download it
     // yourself, for servers that can't fetch URLs.
-    let logo = ImageUrl::new(LOGO.into(), Some(ImageDetail::Low));
-    session.ask("Whose logo is this?").ask(logo);
-    let response = ai.ask(&mut session).await?;
-    println!("AI: {}", response.get_chat().get_text_no_think(""));
+    let logo = ImageUrl::new(LOGO).with_detail(ImageDetail::Low);
+    session.ask(vec![ContentPart::from("Whose logo is this?"), logo.into()]);
+    let completion = ai.ask(&mut session).await?;
+    println!("AI: {}", completion.text());
 
-    // Text and images interleaved, in the order the model should see them
-    let parts = vec![
-        "Which of these is a scatter plot, the first".into(),
-        ImageUrl::new(LOGO.into(), Some(ImageDetail::Low)).into(),
-        "or the second?".into(),
-        InlineData::from_path(CHART, mime::IMAGE_PNG).await?.into(),
-    ];
-    let response = ai.ask(session.ask_parts(parts)).await?;
-    println!("AI: {}", response.get_chat().get_text_no_think(""));
+    // A PDF, downloaded and sent as base64.
+    let pdf: ContentPart = if ai
+        .get_base_url()
+        .contains("generativelanguage.googleapis.com")
+    {
+        ImageUrl::download(PDF).await?.into()
+    } else {
+        File::download(PDF).await?.into()
+    };
+    session.ask(vec![ContentPart::from("What does this PDF say?"), pdf]);
+    let completion = ai.ask(&mut session).await?;
+    println!("AI: {}", completion.text());
+
+    // Audio, for models that hear, e.g. Gemini or `gpt-4o-audio-preview`.
+    if let Some(path) = std::env::args().nth(1) {
+        let audio = InputAudio::from_path(path, AudioFormat::Wav).await?;
+        session.ask(vec![ContentPart::from("What is said here?"), audio.into()]);
+        let completion = ai.ask(&mut session).await?;
+        println!("AI: {}", completion.text());
+    }
     Ok(())
 }

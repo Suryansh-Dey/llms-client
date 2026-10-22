@@ -32,5 +32,5 @@ For example, since Actix supports stream of `Result<Bytes, Error>` for response 
 ```bash
 cargo add open-client
 ```
-Same as above, for **any OpenAI compatible API**: OpenAI, DeepSeek, Ollama, vLLM, OpenRouter, Groq, Gemini... Just `set_base_url(url)`.
-See [openai-client](openai-client/README.md), and [migration.md](openai-client/migration.md) for differences from the Gemini client.
+For **any OpenAI compatible API**: OpenAI, DeepSeek, Ollama, vLLM, OpenRouter, Groq, Gemini... Just `base_url(url)`.
+Its types follow the OpenAI Chat Completions specification. See [openai-client](openai-client/README.md).

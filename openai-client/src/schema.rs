@@ -1,3 +1,4 @@
+//! JSON schemas of Rust types, for tools and structured output.
 use serde_json::{Value, json};
 
 /// Trait for types that can generate an OpenAI compatible JSON schema.

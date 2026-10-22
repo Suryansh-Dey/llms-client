@@ -1,9 +1,7 @@
-use crate::openai::{
-    ask::OpenAI,
-    embed::OpenAIEmbedding,
-    error::{ApiError, OpenAIResponseError},
-    types::sessions::Session,
-};
+use crate::chat::AI;
+use crate::chat::session::Session;
+use crate::embeddings::Embedder;
+use crate::{ApiError, Error};
 use serde_json::json;
 
 /// Stand-in for a real key. No error or `Debug` output may ever contain it.
@@ -44,6 +42,25 @@ fn api_error_formats() {
     );
 }
 
+#[test]
+fn error_display() {
+    let error = Error::Api {
+        status: Some(reqwest::StatusCode::UNAUTHORIZED),
+        error: ApiError::from_body(
+            r#"{"error": {"message": "Bad key", "type": "invalid_request_error"}}"#,
+        ),
+    };
+    assert_eq!(
+        error.to_string(),
+        "API error (401 Unauthorized, invalid_request_error): Bad key"
+    );
+    let error = Error::Api {
+        status: None,
+        error: ApiError::from_body("Overloaded"),
+    };
+    assert_eq!(error.to_string(), "API error: Overloaded");
+}
+
 #[tokio::test]
 async fn api_key_is_not_in_error() {
     // The request never reaches the API, so `reqwest` reports the request URL itself
@@ -52,12 +69,12 @@ async fn api_key_is_not_in_error() {
         .build()
         .unwrap();
     let mut session = Session::new(6);
-    let error = OpenAI::new_with_client(SECRET, "gpt-5-mini", None, client)
-        .set_base_url(format!("https://127.0.0.1:1/{SECRET}"))
+    let error = AI::with_client(SECRET, "gpt-5-mini", None, client)
+        .base_url(format!("https://127.0.0.1:1/{SECRET}"))
         .ask(session.ask("Hi"))
         .await
         .expect_err("a 1ns timeout should fail");
-    assert!(matches!(error, OpenAIResponseError::ReqwestError(_)));
+    assert!(matches!(error, Error::Http(_)));
     assert!(!format!("{error}").contains(SECRET));
     assert!(!format!("{error:?}").contains(SECRET));
 }
@@ -75,18 +92,18 @@ async fn reqwest_error_url_is_stripped() {
         "reqwest is expected to print the request URL"
     );
 
-    let error = OpenAIResponseError::from(error);
+    let error = Error::from(error);
     assert!(!format!("{error}").contains(SECRET));
     assert!(!format!("{error:?}").contains(SECRET));
 }
 
 #[test]
 fn api_key_is_not_in_debug_output() {
-    let ai = OpenAI::new(SECRET, "gpt-5-mini", None);
+    let ai = AI::new(SECRET, "gpt-5-mini", None);
     assert!(!format!("{ai:?}").contains(SECRET));
     assert!(format!("{ai:?}").contains("gpt-5-mini"));
 
-    let embedding = OpenAIEmbedding::new(SECRET, "text-embedding-3-small");
-    assert!(!format!("{embedding:?}").contains(SECRET));
-    assert!(format!("{embedding:?}").contains("text-embedding-3-small"));
+    let embedder = Embedder::new(SECRET, "text-embedding-3-small");
+    assert!(!format!("{embedder:?}").contains(SECRET));
+    assert!(format!("{embedder:?}").contains("text-embedding-3-small"));
 }

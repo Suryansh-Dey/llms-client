@@ -1,3 +1,4 @@
+#[cfg(feature = "reqwest")]
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -19,12 +20,14 @@ pub struct ApiError {
     pub code: Option<Value>,
 }
 impl ApiError {
+    #[cfg(feature = "reqwest")]
     pub(crate) fn from_body(body: &str) -> Self {
         match serde_json::from_str::<Value>(body) {
             Ok(value) => Self::from_value(&value),
             Err(_) => Self::from_message(body.trim()),
         }
     }
+    #[cfg(feature = "reqwest")]
     pub(crate) fn from_value(value: &Value) -> Self {
         let value = match value {
             Value::Array(values) if !values.is_empty() => &values[0],
@@ -50,6 +53,7 @@ impl ApiError {
             code: error.get("code").filter(|code| !code.is_null()).cloned(),
         }
     }
+    #[cfg(feature = "reqwest")]
     fn from_message(message: &str) -> Self {
         Self {
             message: message.to_string(),
@@ -60,48 +64,45 @@ impl ApiError {
     }
 }
 
+/// Error of a request to the API.
+#[cfg(feature = "reqwest")]
 #[derive(thiserror::Error, Debug)]
-#[error("API Error: {status}{}\nMessage: {error}", error.r#type.as_ref().map(|t| format!(", {t}")).unwrap_or_default())]
-pub struct OpenAIError {
-    pub status: StatusCode,
-    pub error: ApiError,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum OpenAIResponseError {
+pub enum Error {
+    /// The request couldn't be sent or its response read, e.g. no connection or a timeout.
     #[error(transparent)]
-    ReqwestError(reqwest::Error),
-    #[error("Response status not Ok.\n{0}")]
-    StatusNotOk(OpenAIError),
-    #[error("Invalid Response Format received. {0}")]
-    ///Response is not as per OpenAI specification. Contains the error and response body.
-    InvalidResponseFormat(String),
-    #[error("Cannot Respond if last Chat has Role::Assistant")]
-    ///Cannot Respond if last Chat has Role::Assistant
+    Http(reqwest::Error),
+    /// Error sent by the API. `status` is `None` for an error event in the middle of a stream.
+    #[error("API error{}: {error}", api_error_context(status, error))]
+    Api {
+        status: Option<StatusCode>,
+        error: ApiError,
+    },
+    /// The response isn't as per the OpenAI specification. Has the reason and the response.
+    #[error("Invalid response: {0}")]
+    InvalidResponse(String),
+    /// The last message of the session is from the assistant, so there is nothing to respond to.
+    #[error("Nothing to respond to, as the last message is from the assistant")]
     NothingToRespond,
 }
-/// Strips the URL from the error, as `reqwest::Error` prints the request URL when displayed.
-impl From<reqwest::Error> for OpenAIResponseError {
+/// Strips the URL, as `reqwest::Error` prints the request URL, which may hold secrets.
+#[cfg(feature = "reqwest")]
+impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
-        Self::ReqwestError(error.without_url())
+        Self::Http(error.without_url())
     }
 }
-
-#[derive(thiserror::Error, Debug)]
-pub enum OpenAIResponseStreamError {
-    #[error(transparent)]
-    ReqwestError(reqwest::Error),
-    #[error("Invalid Response Format received. {0}")]
-    ///Invalid Response Format received. Contains the error and response string
-    InvalidResponseFormat(String),
-    #[error("Error event received in stream: {0}")]
-    ///Error sent by the API in the middle of the stream.
-    ApiError(ApiError),
-}
-/// Strips the URL from the error, as `reqwest::Error` prints the request URL when displayed.
-impl From<reqwest::Error> for OpenAIResponseStreamError {
-    fn from(error: reqwest::Error) -> Self {
-        Self::ReqwestError(error.without_url())
+/// ` (401 Unauthorized, invalid_request_error)`, or the parts of it that are known.
+#[cfg(feature = "reqwest")]
+fn api_error_context(status: &Option<StatusCode>, error: &ApiError) -> String {
+    let context: Vec<String> = status
+        .map(|status| status.to_string())
+        .into_iter()
+        .chain(error.r#type.clone())
+        .collect();
+    if context.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", context.join(", "))
     }
 }
 

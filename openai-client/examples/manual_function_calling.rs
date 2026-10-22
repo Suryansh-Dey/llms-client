@@ -1,10 +1,12 @@
-//! Handling function calls yourself, e.g. to check them before acting, or to respond with an
-//! image. Each response refers to its call by id.
-use open_client::mime;
-use open_client::openai::ask::OpenAI;
-use open_client::openai::types::request::{FunctionCall, InlineData, MultimodalResponse, Tool};
-use open_client::openai::types::sessions::Session;
-use open_client::openai::utils::{OpenAISchema, openai_function};
+//! Handling tool calls yourself, e.g. to check them before acting. Each result refers to its call
+//! by id.
+//!
+//! Tool results are text, as per the OpenAI specification. To show the model an image, e.g. a
+//! screenshot, send it in a user message after the results.
+use open_client::chat::message::{ContentPart, ImageUrl, ToolCall};
+use open_client::chat::session::Session;
+use open_client::chat::{AI, Tool};
+use open_client::{OpenAISchema, mime, openai_function};
 
 #[openai_function]
 /// Books a table at a restaurant.
@@ -14,32 +16,32 @@ fn book_table(restaurant: String, people: u32) -> String {
 
 #[openai_function]
 /// Takes a screenshot of the user's screen.
-async fn take_screenshot() -> std::io::Result<InlineData> {
+async fn take_screenshot() -> std::io::Result<ImageUrl> {
     // A real app would capture the screen.
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png");
-    InlineData::from_path(path, mime::IMAGE_PNG).await
+    ImageUrl::from_path(path, mime::IMAGE_PNG).await
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ai = OpenAI::from_env("gpt-5-mini", None)?
-        .set_tool(Tool::Function(book_table::openai_schema()))
-        .set_tool(Tool::Function(take_screenshot::openai_schema()));
+    let ai = AI::from_env("gpt-5-mini", None)?
+        .tool(Tool::Function(book_table::openai_schema()))
+        .tool(Tool::Function(take_screenshot::openai_schema()));
     let mut session = Session::new(20);
 
     let prompt = "Book a table for 20 at Bella Napoli, and tell me what is on my screen.";
     println!("User: {prompt}");
-    let mut response = ai.ask(session.ask(prompt)).await?;
+    let mut completion = ai.ask(session.ask(prompt)).await?;
 
-    while !session.get_pending_function_calls().is_empty() {
-        let calls: Vec<FunctionCall> = session
-            .get_pending_function_calls()
-            .into_iter()
-            .cloned()
-            .collect();
+    while !session.pending_tool_calls().is_empty() {
+        let calls: Vec<ToolCall> = session.pending_tool_calls().into_iter().cloned().collect();
+        let mut screenshots = Vec::new();
         for call in calls {
-            println!("Model calls {}({})", call.name(), call.arguments());
-            match call.name().as_str() {
+            println!(
+                "Model calls {}({})",
+                call.function.name, call.function.arguments
+            );
+            match call.function.name.as_str() {
                 "book_table" => {
                     let (restaurant, people) = book_table::parse_arguments(&call.args()?)?;
                     // Check the call before acting on it
@@ -48,22 +50,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         book_table(restaurant, people)
                     };
-                    session.add_function_response(call.id(), result)?;
+                    session.add_tool_result(call.id, result)?;
                 }
                 "take_screenshot" => {
-                    // Responses can have images, audio or files too
-                    let screenshot = take_screenshot().await?;
-                    let response =
-                        MultimodalResponse::new(vec!["Screenshot".into(), screenshot.into()]);
-                    session.add_function_response(call.id(), response)?;
+                    screenshots.push(take_screenshot().await?.into());
+                    session.add_tool_result(call.id, "Screenshot is in the next message")?;
                 }
                 name => {
-                    session.add_function_response(call.id(), format!("No function {name}"))?;
+                    session.add_tool_result(call.id, format!("No function {name}"))?;
                 }
             }
         }
-        response = ai.ask(&mut session).await?;
+        if !screenshots.is_empty() {
+            let mut content = vec![ContentPart::from("Screenshot taken by `take_screenshot`:")];
+            content.extend(screenshots);
+            session.ask(content);
+        }
+        completion = ai.ask(&mut session).await?;
     }
-    println!("AI: {}", response.get_chat().get_text_no_think(""));
+    println!("AI: {}", completion.text());
     Ok(())
 }

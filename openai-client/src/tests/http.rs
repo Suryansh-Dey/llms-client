@@ -1,10 +1,11 @@
 //! Tests against a local HTTP server, checking what is sent and how replies are handled.
 //! Parsing of streamed events is tested in `stream.rs`.
-use crate::openai::ask::OpenAI;
-use crate::openai::embed::OpenAIEmbedding;
-use crate::openai::error::OpenAIResponseError;
-use crate::openai::types::request::{InlineData, InlineDataError, Role};
-use crate::openai::types::sessions::Session;
+use crate::Error;
+use crate::chat::AI;
+use crate::chat::message::{AudioFormat, File, ImageUrl, InputAudio, Message};
+use crate::chat::session::Session;
+use crate::embeddings::Embedder;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::StreamExt;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -99,17 +100,18 @@ async fn ask_sends_request_to_base_url() {
     )
     .await;
     // Trailing slash is ignored
-    let mut ai = OpenAI::new("secret", "mock-model", Some("Be brief".into()))
-        .set_base_url(format!("{base_url}/"));
-    ai.set_generation_config()["temperature"] = 0.5.into();
+    let ai = AI::new("secret", "mock-model", Some("Be brief".into()))
+        .base_url(format!("{base_url}/"))
+        .temperature(0.5);
     let mut session = Session::new(6);
-    let response = ai.ask(session.ask("Hi")).await.unwrap();
+    let completion = ai.ask(session.ask("Hi")).await.unwrap();
 
-    assert_eq!(response.get_chat().get_text_no_think(""), "Hello!");
-    assert_eq!(response.model.as_deref(), Some("mock-model"));
-    assert_eq!(response.extra["citations"][0], "https://example.com");
-    assert_eq!(session.get_history_length(), 2);
-    assert_eq!(*session.get_last_chat().unwrap().role(), Role::Assistant);
+    assert_eq!(completion.text(), "Hello!");
+    assert_eq!(completion.model.as_deref(), Some("mock-model"));
+    assert_eq!(completion.usage.unwrap().total_tokens, 2);
+    assert_eq!(completion.extra["citations"][0], "https://example.com");
+    assert_eq!(session.len(), 2);
+    assert!(matches!(session.last(), Some(Message::Assistant(_))));
 
     let request = request.await.unwrap();
     assert_eq!(request.line, "POST /v1/chat/completions HTTP/1.1");
@@ -135,91 +137,111 @@ async fn no_api_key_sends_no_authorization() {
         completion(json!({"role": "assistant", "content": "ok"})),
     )
     .await;
-    let ai = OpenAI::with_no_api_key("local-model", None).set_base_url(base_url);
+    let ai = AI::with_no_api_key("local-model", None).base_url(base_url);
     ai.ask(Session::new(2).ask("Hi")).await.unwrap();
     assert_eq!(request.await.unwrap().header("authorization"), None);
+}
+
+#[tokio::test]
+async fn nothing_to_respond() {
+    let ai = AI::new("key", "mock-model", None).base_url("http://127.0.0.1:1");
+    let mut session = Session::new(2);
+    session.ask("Hi").reply("Hello");
+    assert!(matches!(
+        ai.ask(&mut session).await,
+        Err(Error::NothingToRespond)
+    ));
+    assert!(matches!(
+        ai.stream(&mut session).await,
+        Err(Error::NothingToRespond)
+    ));
 }
 
 #[tokio::test]
 async fn error_status_is_parsed() {
     let body = json!({"error": {"message": "Incorrect API key", "type": "invalid_request_error", "param": null, "code": "invalid_api_key"}});
     let (base_url, _) = serve(401, "application/json", body.to_string()).await;
-    let ai = OpenAI::new("wrong", "mock-model", None).set_base_url(base_url);
+    let ai = AI::new("wrong", "mock-model", None).base_url(base_url);
     let mut session = Session::new(2);
     match ai.ask(session.ask("Hi")).await {
-        Err(OpenAIResponseError::StatusNotOk(e)) => {
-            assert_eq!(e.status, 401);
-            assert_eq!(e.error.message, "Incorrect API key");
-            assert_eq!(e.error.r#type.as_deref(), Some("invalid_request_error"));
-            assert_eq!(e.error.code, Some(json!("invalid_api_key")));
+        Err(Error::Api { status, error }) => {
+            assert_eq!(status.unwrap(), 401);
+            assert_eq!(error.message, "Incorrect API key");
+            assert_eq!(error.r#type.as_deref(), Some("invalid_request_error"));
+            assert_eq!(error.code, Some(json!("invalid_api_key")));
         }
-        other => panic!("Expected StatusNotOk, got {other:?}"),
+        other => panic!("Expected Api error, got {other:?}"),
     }
     // The prompt stays, so it can be retried
-    assert_eq!(session.get_history_length(), 1);
+    assert_eq!(session.len(), 1);
 }
 
 #[tokio::test]
 async fn error_object_with_ok_status() {
     let body = json!({"error": {"message": "Rate limit exceeded", "code": 429}});
     let (base_url, _) = serve(200, "application/json", body.to_string()).await;
-    let ai = OpenAI::new("key", "mock-model", None).set_base_url(base_url);
+    let ai = AI::new("key", "mock-model", None).base_url(base_url);
     match ai.ask(Session::new(2).ask("Hi")).await {
-        Err(OpenAIResponseError::StatusNotOk(e)) => {
-            assert_eq!(e.status, 200);
-            assert_eq!(e.error.message, "Rate limit exceeded");
+        Err(Error::Api { status, error }) => {
+            assert_eq!(status.unwrap(), 200);
+            assert_eq!(error.message, "Rate limit exceeded");
         }
-        other => panic!("Expected StatusNotOk, got {other:?}"),
+        other => panic!("Expected Api error, got {other:?}"),
     }
 }
 
 #[tokio::test]
 async fn invalid_response_contains_body() {
     let (base_url, _) = serve(200, "text/html", "<html>Not an API</html>").await;
-    let ai = OpenAI::new("key", "mock-model", None).set_base_url(base_url);
+    let ai = AI::new("key", "mock-model", None).base_url(base_url);
     match ai.ask(Session::new(2).ask("Hi")).await {
-        Err(OpenAIResponseError::InvalidResponseFormat(e)) => assert!(e.contains("Not an API")),
-        other => panic!("Expected InvalidResponseFormat, got {other:?}"),
+        Err(Error::InvalidResponse(e)) => assert!(e.contains("Not an API")),
+        other => panic!("Expected InvalidResponse, got {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn ask_as_stream() {
+async fn stream() {
     let chunk = json!({"choices": [{"index": 0, "delta": {"content": "Hello"}}]});
     let body = format!("data: {chunk}\n\ndata: [DONE]\n\n");
     let (base_url, request) = serve(200, "text/event-stream", body).await;
-    let ai = OpenAI::new("key", "mock-model", None).set_base_url(base_url);
+    let ai = AI::new("key", "mock-model", None)
+        .base_url(base_url)
+        .include_usage(true);
     let mut session = Session::new(10);
     session.ask("Hi");
 
-    let mut stream = ai.ask_as_stream(session).await.unwrap();
+    let mut stream = ai.stream(&mut session).await.unwrap();
     let mut text = String::new();
-    while let Some(response) = stream.next().await {
-        text.push_str(&response.unwrap().get_chat().get_text_no_think(""));
+    while let Some(chunk) = stream.next().await {
+        text.push_str(chunk.unwrap().text());
     }
     assert_eq!(text, "Hello");
-    assert_eq!(stream.get_session().get_history_length(), 2);
-    assert_eq!(request.await.unwrap().body["stream"], true);
+    assert_eq!(stream.session().len(), 2);
+
+    let request = request.await.unwrap();
+    assert_eq!(request.body["stream"], true);
+    assert_eq!(
+        request.body["stream_options"],
+        json!({"include_usage": true})
+    );
 }
 
 #[tokio::test]
-async fn stream_status_not_ok_returns_session() {
+async fn stream_status_not_ok() {
     let (base_url, _) = serve(
         404,
         "application/json",
         r#"{"error": "model 'x' not found"}"#,
     )
     .await;
-    let ai = OpenAI::new("key", "x", None).set_base_url(base_url);
+    let ai = AI::new("key", "x", None).base_url(base_url);
     let mut session = Session::new(10);
-    session.ask("Hi");
-    match ai.ask_as_stream(session).await {
-        Err((session, OpenAIResponseError::StatusNotOk(e))) => {
-            assert_eq!(e.error.message, "model 'x' not found");
-            assert_eq!(session.get_history_length(), 1);
-        }
-        _ => panic!("Expected StatusNotOk"),
+    match ai.stream(session.ask("Hi")).await {
+        Err(Error::Api { error, .. }) => assert_eq!(error.message, "model 'x' not found"),
+        _ => panic!("Expected Api error"),
     }
+    assert_eq!(session.len(), 1);
 }
 
 #[tokio::test]
@@ -235,15 +257,13 @@ async fn embeddings() {
         "usage": {"prompt_tokens": 2, "total_tokens": 2}
     });
     let (base_url, request) = serve(200, "application/json", body.to_string()).await;
-    let embedder = OpenAIEmbedding::new("key", "mock-embedding")
-        .set_base_url(base_url)
-        .set_dimensions(2);
-    let response = embedder
-        .embed_texts(vec!["first".into(), "second".into()])
-        .await
-        .unwrap();
-    assert_eq!(response.embedding().values(), &[0.1, 0.2]);
-    assert_eq!(response.embeddings()[1].values(), &[0.3, 0.4]);
+    let embedder = Embedder::new("key", "mock-embedding")
+        .base_url(base_url)
+        .dimensions(2)
+        .param("model", "ignored");
+    let response = embedder.embed(vec!["first", "second"]).await.unwrap();
+    assert_eq!(response.embedding(), [0.1, 0.2]);
+    assert_eq!(response.data[1].embedding, [0.3, 0.4]);
 
     let request = request.await.unwrap();
     assert_eq!(request.line, "POST /v1/embeddings HTTP/1.1");
@@ -257,35 +277,48 @@ async fn embeddings() {
 async fn embeddings_count_must_match_inputs() {
     let body = json!({"data": [{"index": 0, "embedding": [0.1]}]});
     let (base_url, _) = serve(200, "application/json", body.to_string()).await;
-    let embedder = OpenAIEmbedding::new("key", "mock-embedding").set_base_url(base_url);
-    match embedder.embed_texts(vec!["a".into(), "b".into()]).await {
-        Err(OpenAIResponseError::InvalidResponseFormat(e)) => {
-            assert_eq!(e, "Expected 2 embeddings, received 1")
-        }
-        other => panic!("Expected InvalidResponseFormat, got {other:?}"),
+    let embedder = Embedder::new("key", "mock-embedding").base_url(base_url);
+    match embedder.embed(vec!["a", "b"]).await {
+        Err(Error::InvalidResponse(e)) => assert_eq!(e, "Expected 2 embeddings, received 1"),
+        other => panic!("Expected InvalidResponse, got {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn inline_data_from_url() {
-    use base64::{Engine, engine::general_purpose::STANDARD};
+async fn downloads() {
     let png = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png")).unwrap();
     let (base_url, request) = serve(200, "image/png", png.clone()).await;
-    let data = InlineData::from_url(&format!("{base_url}/lda.png"))
+    let image = ImageUrl::download(&format!("{base_url}/lda.png"))
         .await
         .unwrap();
     assert_eq!(request.await.unwrap().line, "GET /v1/lda.png HTTP/1.1");
-    assert_eq!(*data.mime_type(), mime::IMAGE_PNG);
-    assert_eq!(STANDARD.decode(data.data()).unwrap(), png);
+    let data = image.url.strip_prefix("data:image/png;base64,").unwrap();
+    assert_eq!(STANDARD.decode(data).unwrap(), png);
 
-    // The checker sees the headers before the body is downloaded
-    let (base_url, _) = serve(200, "text/html", "<html></html>").await;
-    let result = InlineData::from_url_with_check(&base_url, |headers| {
-        headers["content-type"]
-            .to_str()
-            .unwrap()
-            .starts_with("image/")
-    })
-    .await;
-    assert!(matches!(result, Err(InlineDataError::CheckerFalse)));
+    // The filename is taken from the URL, and parameters of the mime type are left out
+    let (base_url, _) = serve(200, "application/pdf; qs=0.001", "%PDF").await;
+    let file = File::download(&format!("{base_url}/docs/report.pdf?v=2"))
+        .await
+        .unwrap();
+    assert_eq!(file.filename.as_deref(), Some("report.pdf"));
+    assert_eq!(
+        file.file_data.as_deref(),
+        Some("data:application/pdf;base64,JVBERg==")
+    );
+
+    let (base_url, _) = serve(200, "audio/mpeg", "mp3").await;
+    let audio = InputAudio::download(&base_url).await.unwrap();
+    assert_eq!(audio.format, AudioFormat::Mp3);
+    // Only WAV and MP3 are allowed in `input_audio`
+    let (base_url, _) = serve(200, "audio/ogg", "ogg").await;
+    assert!(matches!(
+        InputAudio::download(&base_url).await,
+        Err(Error::InvalidResponse(_))
+    ));
+
+    let (base_url, _) = serve(404, "text/plain", "Not Found").await;
+    assert!(matches!(
+        ImageUrl::download(&base_url).await,
+        Err(Error::Api { .. })
+    ));
 }

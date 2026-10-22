@@ -1,8 +1,8 @@
-//! A reply in your own type. `#[openai_schema]` generates the JSON schema of a type, and JSON mode
-//! makes the model follow it.
-use open_client::openai::ask::OpenAI;
-use open_client::openai::types::sessions::Session;
-use open_client::openai::utils::{OpenAISchema, openai_schema};
+//! A reply in your own type. `#[openai_schema]` generates the JSON schema of a type, and
+//! `ResponseFormat::json_schema()` makes the model follow it.
+use open_client::chat::session::Session;
+use open_client::chat::{AI, ResponseFormat};
+use open_client::{OpenAISchema, openai_schema};
 use serde::Deserialize;
 
 #[openai_schema]
@@ -37,14 +37,16 @@ struct Recipe {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ai = OpenAI::from_env("gpt-5-mini", None)?.set_json_mode(Recipe::openai_schema());
+    let ai = AI::from_env("gpt-5-mini", None)?
+        .response_format(ResponseFormat::json_schema(Recipe::openai_schema()));
     // One-off requests don't need the reply in history.
-    let mut session = Session::new(2).set_remember_reply(false);
+    let mut session = Session::new(2);
+    session.set_remember_reply(false);
 
-    let response = ai
+    let completion = ai
         .ask(session.ask("A quick vegetarian pasta for two"))
         .await?;
-    let recipe: Recipe = response.get_json()?;
+    let recipe: Recipe = completion.json()?;
 
     println!(
         "{} ({} minutes, {:?})",

@@ -1,13 +1,9 @@
 //! `execute_function_calls!` and `execute_function_calls_with_callback!` on a session whose last
-//! reply has function calls, as the model would send them.
-use open_client::mime;
-use open_client::openai::types::request::{
-    Chat, FunctionCall, InlineData, MultimodalResponse, PartType, Role,
-};
-use open_client::openai::types::sessions::Session;
-use open_client::openai::utils::{
-    execute_function_calls, execute_function_calls_with_callback, openai_function,
-};
+//! reply has tool calls, as the model would send them.
+use open_client::chat::message::{Message, ToolCall};
+use open_client::chat::session::Session;
+use open_client::{execute_function_calls, execute_function_calls_with_callback, openai_function};
+use serde::Serialize;
 use serde_json::{Value, json};
 
 #[openai_function]
@@ -32,23 +28,20 @@ async fn take_photo() -> String {
 }
 
 /// A session whose last reply calls these functions.
-fn session_with_calls(calls: Vec<FunctionCall>) -> Session {
+fn session_with_calls(calls: Vec<ToolCall>) -> Session {
     let mut session = Session::new(10);
     session.ask("Help me");
-    session.reply_parts(calls.into_iter().map(Into::into).collect());
+    session.reply(calls);
     session
 }
 
-/// `(id, text)` of every function response in the last chat.
-fn responses(session: &Session) -> Vec<(String, String)> {
-    let chat = session.get_last_chat().unwrap();
-    assert_eq!(*chat.role(), Role::Tool);
-    chat.parts()
+/// `(call id, content)` of every tool message.
+fn results(session: &Session) -> Vec<(String, String)> {
+    session
+        .history()
         .iter()
-        .filter_map(|part| match part.data() {
-            PartType::FunctionResponse(r) => {
-                Some((r.id().clone(), Chat::extract_text_all(r.parts(), "")))
-            }
+        .filter_map(|message| match message {
+            Message::Tool(result) => Some((result.tool_call_id.clone(), result.content.clone())),
             _ => None,
         })
         .collect()
@@ -57,10 +50,10 @@ fn responses(session: &Session) -> Vec<(String, String)> {
 #[tokio::test]
 async fn executes_all_pending_calls() {
     let mut session = session_with_calls(vec![
-        FunctionCall::new("call_1", "to_fahrenheit", json!({"celsius": 100})),
-        FunctionCall::new("call_2", "stock", json!({"product": "apple"})),
+        ToolCall::new("call_1", "to_fahrenheit", json!({"celsius": 100})),
+        ToolCall::new("call_2", "stock", json!({"product": "apple"})),
         // Same function twice, e.g. in parallel calls
-        FunctionCall::new("call_3", "to_fahrenheit", json!({"celsius": 0})),
+        ToolCall::new("call_3", "to_fahrenheit", json!({"celsius": 0})),
     ]);
 
     // One result per listed function, the last one if it was called many times. Functions not
@@ -68,44 +61,46 @@ async fn executes_all_pending_calls() {
     let results = execute_function_calls!(session, stock, to_fahrenheit, take_photo);
     assert_eq!(results, [Some(Ok(json!(12))), Some(Ok(json!(32.0))), None]);
 
-    let mut responses = responses(&session);
-    responses.sort();
+    let mut results = self::results(&session);
+    results.sort();
     assert_eq!(
-        responses,
+        results,
         [
             ("call_1".into(), "212.0".into()),
             ("call_2".into(), "12".into()),
             ("call_3".into(), "32.0".into())
         ]
     );
-    assert!(session.get_pending_function_calls().is_empty());
+    assert!(session.pending_tool_calls().is_empty());
 }
 
 #[tokio::test]
 async fn errors_are_sent_to_the_model() {
     let mut session = session_with_calls(vec![
-        FunctionCall::new("call_1", "stock", json!({"product": "pear"})),
-        FunctionCall::new("call_2", "to_fahrenheit", json!({"celsius": "hot"})),
+        ToolCall::new("call_1", "stock", json!({"product": "pear"})),
+        ToolCall::new("call_2", "to_fahrenheit", json!({"celsius": "hot"})),
     ]);
     let results = execute_function_calls!(session, stock, to_fahrenheit);
     assert_eq!(results[0], Some(Err("Unknown product pear".into())));
     assert!(matches!(&results[1], Some(Err(e)) if e.starts_with("invalid type")));
 
-    let responses = responses(&session);
+    let results = self::results(&session);
     assert_eq!(
-        responses[0],
+        results[0],
         (
             "call_1".into(),
             r#"{"Error":"Unknown product pear"}"#.into()
         )
     );
-    assert!(responses[1].1.starts_with(r#"{"Error":"invalid type"#));
+    assert!(results[1].1.starts_with(r#"{"Error":"invalid type"#));
 }
 
 #[tokio::test]
 async fn invalid_json_arguments() {
-    let call = serde_json::from_value::<FunctionCall>(json!({
-        "id": "call_1", "name": "to_fahrenheit", "arguments": "{\"celsius\": 10"
+    let call = serde_json::from_value::<ToolCall>(json!({
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "to_fahrenheit", "arguments": "{\"celsius\": 10"}
     }))
     .unwrap();
     let mut session = session_with_calls(vec![call]);
@@ -116,14 +111,14 @@ async fn invalid_json_arguments() {
 #[tokio::test]
 async fn calls_answered_manually_are_skipped() {
     let mut session = session_with_calls(vec![
-        FunctionCall::new("call_1", "stock", json!({"product": "apple"})),
-        FunctionCall::new("call_2", "take_photo", json!({})),
+        ToolCall::new("call_1", "stock", json!({"product": "apple"})),
+        ToolCall::new("call_2", "take_photo", json!({})),
     ]);
-    session.add_function_response("call_1", 99).unwrap();
+    session.add_tool_result("call_1", 99).unwrap();
     let results = execute_function_calls!(session, stock, take_photo);
     assert_eq!(results[0], None);
     assert_eq!(
-        responses(&session),
+        self::results(&session),
         [
             ("call_1".into(), "99".into()),
             ("call_2".into(), "photo.png".into())
@@ -138,14 +133,14 @@ async fn nothing_to_execute() {
     session.reply("Hello! How can I help?");
     let results = execute_function_calls!(session, stock);
     assert_eq!(results, [None]);
-    assert_eq!(session.get_history_length(), 2);
+    assert_eq!(session.len(), 2);
 }
 
 #[tokio::test]
-async fn callback_shapes_the_response() {
+async fn callback_shapes_the_result() {
     let mut session = session_with_calls(vec![
-        FunctionCall::new("call_1", "stock", json!({"product": "pear"})),
-        FunctionCall::new("call_2", "to_fahrenheit", json!({"celsius": 20})),
+        ToolCall::new("call_1", "stock", json!({"product": "pear"})),
+        ToolCall::new("call_2", "to_fahrenheit", json!({"celsius": 20})),
     ]);
     let results = execute_function_calls_with_callback!(
         session,
@@ -158,10 +153,10 @@ async fn callback_shapes_the_response() {
     );
     // Results are the function outputs, not what the callback returned
     assert_eq!(results[1], Some(Ok(json!(68.0))));
-    let mut responses = responses(&session);
-    responses.sort();
+    let mut results = self::results(&session);
+    results.sort();
     assert_eq!(
-        responses,
+        results,
         [
             (
                 "call_1".into(),
@@ -173,30 +168,26 @@ async fn callback_shapes_the_response() {
 }
 
 #[tokio::test]
-async fn callback_can_respond_with_images() {
-    let mut session =
-        session_with_calls(vec![FunctionCall::new("call_1", "take_photo", json!({}))]);
+async fn callback_can_return_any_serialize() {
+    #[derive(Serialize)]
+    struct Photo {
+        file: String,
+        saved: bool,
+    }
+    let mut session = session_with_calls(vec![ToolCall::new("call_1", "take_photo", json!({}))]);
     execute_function_calls_with_callback!(
         session,
-        |_name, result: Result<Value, String>| {
-            let file = result.unwrap().as_str().unwrap().to_string();
-            MultimodalResponse::new(vec![
-                format!("Saved as {file}").into(),
-                InlineData::new(mime::IMAGE_PNG, "iVBORw0KGgo=".into()).into(),
-            ])
+        |_name, result: Result<Value, String>| Photo {
+            file: result.unwrap().as_str().unwrap().to_string(),
+            saved: true,
         },
         take_photo
     );
-    let chat = session.get_last_chat().unwrap();
-    let PartType::FunctionResponse(response) = chat.parts()[0].data() else {
-        panic!("Expected a function response");
-    };
     assert_eq!(
-        Chat::extract_text_all(response.parts(), ""),
-        "Saved as photo.png"
+        results(&session),
+        [(
+            "call_1".into(),
+            r#"{"file":"photo.png","saved":true}"#.into()
+        )]
     );
-    assert!(matches!(
-        response.parts()[1].data(),
-        PartType::InlineData(_)
-    ));
 }

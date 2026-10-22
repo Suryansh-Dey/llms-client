@@ -66,7 +66,7 @@ pub fn openai_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         pat_type.attrs.retain(|attr| !attr.path().is_ident("doc"));
 
         let schema = with_description(
-            quote! { <#param_type as ::open_client::openai::utils::OpenAISchema>::openai_schema() },
+            quote! { <#param_type as ::open_client::OpenAISchema>::openai_schema() },
             &param_desc,
         );
         properties.push(quote! { props.insert(#param_name_str.to_string(), #schema); });
@@ -131,7 +131,7 @@ pub fn openai_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #[allow(non_camel_case_types)]
         #vis struct #fn_name { }
 
-        impl ::open_client::openai::utils::OpenAISchema for #fn_name {
+        impl ::open_client::OpenAISchema for #fn_name {
             fn openai_schema() -> ::open_client::serde_json::Value {
                 use ::open_client::serde_json::{json, Map};
                 #props
@@ -168,10 +168,9 @@ pub fn openai_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Usage
 /// `execute_function_calls_with_callback!(session, callback, function1, function2, ...)`
 ///
-/// The `callback` should be a closure or function that takes `(String, Result<serde_json::Value, String>)`
-/// and returns anything accepted by `session.add_function_response()`, e.g. `serde_json::Value` or
-/// `MultimodalResponse`.
-/// (function_name, result) is passed to it
+/// The `callback` should be a closure or function that takes `(String, Result<serde_json::Value, String>)`,
+/// i.e. (function_name, result), and returns anything `Serialize`. It is sent as the tool result:
+/// strings as they are, everything else as JSON.
 ///
 /// # Returns
 /// A `Vec<Option<Result<serde_json::Value, String>>>` containing the results of each function call.
@@ -180,7 +179,7 @@ pub fn openai_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `None` if the function was not called.
 ///
 /// # Note
-/// The `session` is automatically updated with the `FunctionResponse`.
+/// The `session` is automatically updated with a tool message per call.
 /// The `callback` is invoked with the result of the function execution (whether `Ok` or `Err`)
 /// and its return value is used to update the session.
 #[proc_macro]
@@ -263,7 +262,7 @@ pub fn openai_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
 
                         let schema = with_description(
-                            quote! { <#field_type as ::open_client::openai::utils::OpenAISchema>::openai_schema() },
+                            quote! { <#field_type as ::open_client::OpenAISchema>::openai_schema() },
                             &field_desc,
                         );
                         properties
@@ -296,7 +295,7 @@ pub fn openai_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 &description,
             );
             quote! {
-                impl #impl_generics ::open_client::openai::utils::OpenAISchema for #name #ty_generics #where_clause {
+                impl #impl_generics ::open_client::OpenAISchema for #name #ty_generics #where_clause {
                     fn openai_schema() -> ::open_client::serde_json::Value {
                         use ::open_client::serde_json::{json, Map};
                         #props
@@ -329,7 +328,7 @@ pub fn openai_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 &description,
             );
             quote! {
-                impl #impl_generics ::open_client::openai::utils::OpenAISchema for #name #ty_generics #where_clause {
+                impl #impl_generics ::open_client::OpenAISchema for #name #ty_generics #where_clause {
                     fn openai_schema() -> ::open_client::serde_json::Value {
                         use ::open_client::serde_json::json;
                         #schema
@@ -429,9 +428,9 @@ fn has_reference(ty: &Type) -> bool {
 /// - `None` if the function was not called.
 ///
 /// # Note
-/// The `session` is automatically updated with the `FunctionResponse` for successful calls.
+/// The `session` is automatically updated with a tool message per call.
 /// If a function call fails, the error is converted to a JSON object `{"Error": error_message}`
-/// and sent to the session as the function response.
+/// and sent to the session as the tool result.
 /// Calls already responded (e.g. manually) are skipped.
 #[proc_macro]
 pub fn execute_function_calls(input: TokenStream) -> TokenStream {
@@ -478,7 +477,7 @@ fn generate_execute_logic(
         let name_str = path.segments.last().unwrap().ident.to_string();
         quote! {
             #name_str => {
-                let args = call.args();
+                let args = call.args::<::open_client::serde_json::Value>();
                 let fut: ::open_client::futures::future::BoxFuture<'static, (usize, String, String, Result<::open_client::serde_json::Value, String>)> = Box::pin(async move {
                     let result = match args {
                         Ok(args) => #path::execute(&args).await,
@@ -498,9 +497,9 @@ fn generate_execute_logic(
             let mut result_callback = #callback;
 
             let mut futures = Vec::new();
-            for call in #session.get_pending_function_calls() {
-                let call_id = call.id().clone();
-                match call.name().as_str() {
+            for call in #session.pending_tool_calls() {
+                let call_id = call.id.clone();
+                match call.function.name.as_str() {
                     #(#match_arms)*
                     _ => {}
                 }
@@ -511,9 +510,9 @@ fn generate_execute_logic(
                     // Invoke callback regardless of success or failure
                     let val_to_add = result_callback(name.clone(), res.clone());
 
-                    if let Err(e) = #session.add_function_response(&call_id, val_to_add) {
+                    if let Err(e) = #session.add_tool_result(&call_id, val_to_add) {
                         results_array[idx] = Some(Err(format!(
-                            "failed to add function response for `{}`: {}",
+                            "failed to add tool result of `{}`: {}",
                             name, e
                         )));
                         continue;
