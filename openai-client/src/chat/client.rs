@@ -315,7 +315,7 @@ impl AI {
     /// ```no_run
     /// use open_client::futures::StreamExt;
     /// # async fn run(ai: open_client::chat::AI) -> Result<(), open_client::Error> {
-    /// let mut session = open_client::chat::session::Session::new(10);
+    /// let mut session = open_client::chat::session::Session::default();
     /// let mut stream = ai.stream(session.ask("Hi")).await?;
     /// while let Some(chunk) = stream.next().await {
     ///     print!("{}", chunk?.text());

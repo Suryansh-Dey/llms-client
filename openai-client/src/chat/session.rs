@@ -14,28 +14,42 @@ pub enum SessionError {
     InvalidResult(serde_json::Error),
 }
 
-/// Strategy to keep the history in check, e.g. by estimated token count. Set it using
-/// `Session::with_overflow_handler()`.
+/// Strategy to keep the history in check, e.g. a `SlidingWindow` of messages, or a token budget.
+///
+/// To combine strategies, e.g. a token budget with a cap on messages, hold a `SlidingWindow` in
+/// your handler and call its `handle()` from yours.
 pub trait OverflowHandler {
     /// Called every time a message is added to the session. Forget messages from the beginning
-    /// using `history.forget_oldest()`.
-    ///
-    /// Returns true if the default handler (sliding window of `limit` messages) should also be run.
-    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool;
+    /// using `history.forget_oldest()`, which keeps the history valid.
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>);
 }
 /// Allows choosing the handler at runtime with `Session<Box<dyn OverflowHandler>>`.
 impl<H: OverflowHandler + ?Sized> OverflowHandler for Box<H> {
-    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool {
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) {
         (**self).handle(history)
     }
 }
 
-/// Default `OverflowHandler`. Only keeps the last `limit` messages. Serialized as `null`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SlidingWindow;
+/// Default `OverflowHandler`. Keeps the last `limit` messages of any role. More are forgotten at
+/// once if needed to keep the history valid, i.e. tool calls along with their results.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlidingWindow {
+    pub limit: usize,
+}
+impl SlidingWindow {
+    pub fn new(limit: usize) -> Self {
+        Self { limit }
+    }
+}
+/// A window of 2 messages, i.e. the last prompt and its reply.
+impl Default for SlidingWindow {
+    fn default() -> Self {
+        Self::new(2)
+    }
+}
 impl OverflowHandler for SlidingWindow {
-    fn handle(&mut self, _: &mut HistoryTrimmer<'_>) -> bool {
-        true
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) {
+        while history.len() > self.limit && history.forget_oldest().is_some() {}
     }
 }
 
@@ -65,7 +79,6 @@ fn forget_oldest(history: &mut VecDeque<Message>) -> Option<Message> {
 /// beginning, so a handler can't leave the session in a state the API rejects.
 pub struct HistoryTrimmer<'a> {
     history: &'a mut VecDeque<Message>,
-    limit: usize,
     message_number: usize,
 }
 impl HistoryTrimmer<'_> {
@@ -77,9 +90,6 @@ impl HistoryTrimmer<'_> {
     }
     pub fn is_empty(&self) -> bool {
         self.history.is_empty()
-    }
-    pub fn limit(&self) -> usize {
-        self.limit
     }
     /// Number of the last message, see `Session::message_number()`.
     pub fn message_number(&self) -> usize {
@@ -96,41 +106,37 @@ impl HistoryTrimmer<'_> {
 
 /// Conversation history, sent with each request. Replies are added to it.
 ///
-/// Only the last `limit` messages are kept, or what a custom `OverflowHandler` decides, e.g. by
-/// token count.
+/// Its `OverflowHandler` decides what is forgotten, e.g. a `SlidingWindow` of messages or a token
+/// budget.
 ///
 /// # Serde
-/// The overflow handler is serialized along with the history, so its state is restored too. The
-/// default `SlidingWindow` is serialized as `null`. A session must be deserialized with the same
-/// handler type it was serialized with.
+/// The overflow handler is serialized along with the history, so its state is restored too. A
+/// session must be deserialized with the same handler type it was serialized with.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session<H = SlidingWindow> {
     history: VecDeque<Message>,
-    limit: usize,
     message_number: usize,
     remember_reply: bool,
     overflow_handler: H,
 }
-impl Session {
-    /// A session keeping the last `limit` messages of any role. More are forgotten at once if
-    /// needed to keep the history valid, i.e. tool calls along with their results.
-    ///
-    /// # Example
-    /// `Session::new(2)` keeps only the last question and its reply.
-    pub fn new(limit: usize) -> Self {
-        Self {
-            history: VecDeque::new(),
-            limit,
-            message_number: 0,
-            remember_reply: true,
-            overflow_handler: SlidingWindow,
-        }
-    }
-}
-/// Same as `Session::new(0)`, which keeps only the latest message.
+/// A session keeping the last prompt and its reply, see `SlidingWindow::default()`.
 impl Default for Session {
     fn default() -> Self {
-        Self::new(0)
+        Self::new(SlidingWindow::default())
+    }
+}
+impl<H: OverflowHandler> Session<H> {
+    /// A session whose history is kept in check by `overflow_handler`.
+    ///
+    /// # Example
+    /// `Session::new(SlidingWindow::new(10))` keeps the last 10 messages.
+    pub fn new(overflow_handler: H) -> Self {
+        Self {
+            history: VecDeque::new(),
+            message_number: 0,
+            remember_reply: true,
+            overflow_handler,
+        }
     }
 }
 impl<H> Session<H> {
@@ -182,9 +188,6 @@ impl<H> Session<H> {
     pub fn is_empty(&self) -> bool {
         self.history.is_empty()
     }
-    pub fn limit(&self) -> usize {
-        self.limit
-    }
     /// Number of the last message, see `by_number()`. Unlike `len()`, messages forgotten from the
     /// beginning still count, while ones removed from the end (`pop()`, `forget_last_turn()`)
     /// don't.
@@ -231,7 +234,8 @@ impl<H> Session<H> {
     pub fn set_remember_reply(&mut self, remember_reply: bool) {
         self.remember_reply = remember_reply;
     }
-    /// Builder form of `set_remember_reply()`, e.g. `Session::new(2).with_remember_reply(false)`.
+    /// Builder form of `set_remember_reply()`, e.g.
+    /// `Session::default().with_remember_reply(false)`.
     pub fn with_remember_reply(mut self, remember_reply: bool) -> Self {
         self.remember_reply = remember_reply;
         self
@@ -242,27 +246,15 @@ impl<H> Session<H> {
     pub fn overflow_handler_mut(&mut self) -> &mut H {
         &mut self.overflow_handler
     }
-    /// Sets a custom `OverflowHandler`, replacing the current one. See `OverflowHandler::handle()`
-    /// for when it is called.
+    /// Replaces the `OverflowHandler`. It first runs when the next message is added, see
+    /// `OverflowHandler::handle()`.
     pub fn with_overflow_handler<T: OverflowHandler>(self, overflow_handler: T) -> Session<T> {
         Session {
             history: self.history,
-            limit: self.limit,
             message_number: self.message_number,
             remember_reply: self.remember_reply,
             overflow_handler,
         }
-    }
-    /// Takes out the overflow handler, leaving the session with the default `SlidingWindow`.
-    pub fn take_overflow_handler(self) -> (Session, H) {
-        let session = Session {
-            history: self.history,
-            limit: self.limit,
-            message_number: self.message_number,
-            remember_reply: self.remember_reply,
-            overflow_handler: SlidingWindow,
-        };
-        (session, self.overflow_handler)
     }
     /// Tool calls of the last assistant message which have no result yet.
     pub fn pending_tool_calls(&self) -> Vec<&ToolCall> {
@@ -287,7 +279,7 @@ impl<H: OverflowHandler> Session<H> {
     /// Adds a user message, e.g. `session.ask("Hi")`, or one with images:
     /// ```
     /// # use open_client::chat::{message::{ContentPart, ImageUrl}, session::Session};
-    /// # let mut session = Session::new(10);
+    /// # let mut session = Session::default();
     /// session.ask(vec![
     ///     ContentPart::from("What is in this image?"),
     ///     ImageUrl::new("https://example.com/photo.jpg").into(),
@@ -351,12 +343,9 @@ impl<H: OverflowHandler> Session<H> {
     fn add(&mut self, message: Message) {
         self.history.push_back(message);
         self.message_number += 1;
-        let mut history = HistoryTrimmer {
+        self.overflow_handler.handle(&mut HistoryTrimmer {
             history: &mut self.history,
-            limit: self.limit,
             message_number: self.message_number,
-        };
-        let run_default = self.overflow_handler.handle(&mut history);
-        while run_default && self.history.len() > self.limit && self.forget_oldest().is_some() {}
+        });
     }
 }

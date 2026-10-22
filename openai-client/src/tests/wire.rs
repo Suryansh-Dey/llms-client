@@ -1,5 +1,5 @@
 use crate::chat::message::{AssistantMessage, ToolCall};
-use crate::chat::session::Session;
+use crate::chat::session::{Session, SlidingWindow};
 use crate::chat::wire::ChatRequest;
 use crate::chat::{Tool, ToolChoice};
 use serde_json::{Map, Value, json};
@@ -34,7 +34,7 @@ fn calls(calls: &[(&str, &str, Value)]) -> AssistantMessage {
 
 #[test]
 fn messages_are_sent_one_by_one() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hello").ask("there");
     session.reply("Hi");
     assert_eq!(
@@ -49,7 +49,7 @@ fn messages_are_sent_one_by_one() {
 
 #[test]
 fn tool_calls_and_results() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Weather in London and Paris?");
     session.reply(AssistantMessage {
         content: Some("Let me check.".into()),
@@ -82,7 +82,7 @@ fn tool_calls_and_results() {
 
 #[test]
 fn assistant_content_is_null_only_with_tool_calls() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi");
     session.reply(calls(&[("call_1", "f", json!({}))]));
     session.add_tool_result("call_1", 1).unwrap();
@@ -95,7 +95,7 @@ fn assistant_content_is_null_only_with_tool_calls() {
 
 #[test]
 fn reasoning_is_sent_only_in_ongoing_tool_loop() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("1");
     session.reply(AssistantMessage {
         reasoning: Some("old thought".into()),
@@ -122,7 +122,7 @@ fn reasoning_is_sent_only_in_ongoing_tool_loop() {
 
 #[test]
 fn params_are_merged_without_reserved_keys() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi");
     let params = json!({
         "temperature": 0.2,
@@ -160,7 +160,7 @@ fn system_prompt_tools_and_tool_choice() {
         Tool::Function(json!({"name": "f", "parameters": {"type": "object"}})),
         Tool::Custom(json!({"type": "web_search"})),
     ];
-    let session = Session::new(1);
+    let session = Session::new(SlidingWindow::new(1));
     let params = Map::new();
     let choice = ToolChoice::Function("f".into());
     let body = ChatRequest {

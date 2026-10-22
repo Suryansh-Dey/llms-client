@@ -1,14 +1,14 @@
 //! `ChatStream` fed with in-memory chunks, so events can be split at exact byte positions.
 use crate::Error;
 use crate::chat::message::{AssistantMessage, Message};
-use crate::chat::session::Session;
+use crate::chat::session::{Session, SlidingWindow};
 use crate::chat::{ChatCompletionChunk, ChatStream};
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
 fn session() -> Session {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi");
     session
 }

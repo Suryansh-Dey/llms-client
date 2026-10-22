@@ -6,7 +6,7 @@
 //! `OPENAI_EMBEDDING_MODEL` to `text-embedding-3-small`.
 use futures::StreamExt;
 use open_client::chat::message::{ContentPart, File, ImageUrl};
-use open_client::chat::session::Session;
+use open_client::chat::session::{Session, SlidingWindow};
 use open_client::chat::{AI, ReasoningEffort, ResponseFormat, Tool};
 use open_client::embeddings::Embedder;
 use open_client::{
@@ -61,7 +61,7 @@ fn pdf(text: &str) -> Vec<u8> {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn conversation_keeps_history() {
     let ai = ai(Some("Answer in one short sentence."));
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     ai.ask(session.ask("My name is Ferris.")).await.unwrap();
     let completion = ai.ask(session.ask("What is my name?")).await.unwrap();
     assert!(completion.text().contains("Ferris"));
@@ -79,7 +79,7 @@ async fn structured_output() {
     }
     let ai = ai(Some("Classify the given words"))
         .response_format(ResponseFormat::json_schema(Sentiments::openai_schema()));
-    let mut session = Session::new(2).with_remember_reply(false);
+    let mut session = Session::default().with_remember_reply(false);
     let completion = ai.ask(session.ask("Joy, Fear, Hope, Anger")).await.unwrap();
     let sentiments: Sentiments = completion.json().unwrap();
     assert!(sentiments.positive.contains(&"Joy".to_string()));
@@ -91,7 +91,7 @@ async fn structured_output() {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn streamed_text() {
     let ai = ai(None).include_usage(true);
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     let mut stream = ai
         .stream(session.ask("Count from 1 to 20, separated by spaces."))
         .await
@@ -121,7 +121,7 @@ async fn streamed_parallel_calls() {
         city
     }
     let ai = ai(None).tool(Tool::Function(get_weather::openai_schema()));
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("What is the weather in Paris and in London? Call the function for both.");
     let mut stream = ai.stream(&mut session).await.unwrap();
     while let Some(chunk) = stream.next().await {
@@ -160,7 +160,7 @@ fn secret_number() -> u32 {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn function_calling_loop() {
     let ai = ai(None).tool(Tool::Function(secret_number::openai_schema()));
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     let mut completion = ai
         .ask(session.ask("What is the secret number plus one?"))
         .await
@@ -177,7 +177,7 @@ async fn function_calling_loop() {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn image_in_prompt() {
     let chart = ImageUrl::from_path(IMAGE, mime::IMAGE_PNG).await.unwrap();
-    let mut session = Session::new(2);
+    let mut session = Session::default();
     session.ask(vec![
         ContentPart::from("What kind of chart is this?"),
         chart.into(),
@@ -201,7 +201,7 @@ async fn pdf_in_prompt() {
     } else {
         File::from_bytes("secret.pdf", mime::APPLICATION_PDF, pdf).into()
     };
-    let mut session = Session::new(2);
+    let mut session = Session::default();
     session.ask(vec![
         ContentPart::from("What is the secret word in this PDF?"),
         pdf,
@@ -219,7 +219,7 @@ async fn image_after_tool_result() {
     fn take_screenshot() {}
 
     let ai = ai(None).tool(Tool::Function(take_screenshot::openai_schema()));
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     ai.ask(session.ask("Take a screenshot. What kind of chart is on my screen?"))
         .await
         .unwrap();
@@ -239,7 +239,7 @@ async fn image_after_tool_result() {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn reasoning_effort() {
     let ai = ai(None).reasoning_effort(ReasoningEffort::Low);
-    let mut session = Session::new(2);
+    let mut session = Session::default();
     let completion = ai
         .ask(session.ask("How many letters r are in strawberry? Answer with a digit."))
         .await
@@ -251,7 +251,7 @@ async fn reasoning_effort() {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn wrong_api_key() {
     let ai = ai(None).api_key("wrong_api_key");
-    match ai.ask(Session::new(2).ask("Hi")).await {
+    match ai.ask(Session::default().ask("Hi")).await {
         Err(Error::Api { status, error }) => {
             assert!(status.unwrap().is_client_error());
             assert!(!error.message.is_empty());

@@ -4,7 +4,7 @@
 //! Tool results are text, as per the OpenAI specification. To show the model an image, e.g. a
 //! screenshot, send it in a user message after the results.
 use open_client::chat::message::{ContentPart, ImageUrl, ToolCall};
-use open_client::chat::session::Session;
+use open_client::chat::session::{Session, SlidingWindow};
 use open_client::chat::{AI, Tool};
 use open_client::{OpenAISchema, mime, openai_function};
 
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ai = AI::from_env("gpt-5-mini", None)?
         .tool(Tool::Function(book_table::openai_schema()))
         .tool(Tool::Function(take_screenshot::openai_schema()));
-    let mut session = Session::new(20);
+    let mut session = Session::new(SlidingWindow::new(20));
 
     let prompt = "Book a table for 20 at Bella Napoli, and tell me what is on my screen.";
     println!("User: {prompt}");

@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     providers.push(AI::with_no_api_key("llama3.2", None).base_url("http://localhost:11434/v1"));
 
     for ai in providers {
-        let mut session = Session::new(2);
+        let mut session = Session::default();
         match ai.ask(session.ask("Say hi in 3 words.")).await {
             Ok(completion) => println!(
                 "{} at {}: {}",

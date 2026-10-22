@@ -1,7 +1,7 @@
 //! Rust functions as tools. `#[openai_function]` generates their schema from the signature and doc
 //! comments, and `execute_function_calls!` runs the calls the model makes, adding the results to
 //! the session. See `manual_function_calling.rs` to handle calls yourself.
-use open_client::chat::session::Session;
+use open_client::chat::session::{Session, SlidingWindow};
 use open_client::chat::{AI, Tool};
 use open_client::{OpenAISchema, execute_function_calls, openai_function};
 
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ai = AI::from_env("gpt-5-mini", None)?
         .tool(Tool::Function(get_price::openai_schema()))
         .tool(Tool::Function(convert_usd::openai_schema()));
-    let mut session = Session::new(20);
+    let mut session = Session::new(SlidingWindow::new(20));
 
     let prompt = "How much are 2 BTC and 10 ETH worth in euros?";
     println!("User: {prompt}");

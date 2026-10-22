@@ -3,7 +3,7 @@
 //! use `reasoning_effort()` there to control how long its models think.
 //!
 //! Run with `OPENAI_BASE_URL=https://api.deepseek.com` and a DeepSeek API key.
-use open_client::chat::session::Session;
+use open_client::chat::session::{Session, SlidingWindow};
 use open_client::chat::{AI, Tool};
 use open_client::{OpenAISchema, execute_function_calls, openai_function};
 
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // DeepSeek needs the reasoning sent back while it is calling tools. Off by default, as
         // other servers like OpenAI reject it.
         .send_reasoning(true);
-    let mut session = Session::new(20);
+    let mut session = Session::new(SlidingWindow::new(20));
 
     let prompt = "Which has more people, Tokyo or Delhi, and by how much?";
     println!("User: {prompt}\n");

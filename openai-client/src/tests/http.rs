@@ -3,7 +3,7 @@
 use crate::Error;
 use crate::chat::AI;
 use crate::chat::message::{AudioFormat, File, ImageUrl, InputAudio, Message};
-use crate::chat::session::Session;
+use crate::chat::session::{Session, SlidingWindow};
 use crate::embeddings::Embedder;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::StreamExt;
@@ -103,7 +103,7 @@ async fn ask_sends_request_to_base_url() {
     let ai = AI::new("secret", "mock-model", Some("Be brief".into()))
         .base_url(format!("{base_url}/"))
         .temperature(0.5);
-    let mut session = Session::new(6);
+    let mut session = Session::new(SlidingWindow::new(6));
     let completion = ai.ask(session.ask("Hi")).await.unwrap();
 
     assert_eq!(completion.text(), "Hello!");
@@ -138,14 +138,14 @@ async fn no_api_key_sends_no_authorization() {
     )
     .await;
     let ai = AI::with_no_api_key("local-model", None).base_url(base_url);
-    ai.ask(Session::new(2).ask("Hi")).await.unwrap();
+    ai.ask(Session::default().ask("Hi")).await.unwrap();
     assert_eq!(request.await.unwrap().header("authorization"), None);
 }
 
 #[tokio::test]
 async fn nothing_to_respond() {
     let ai = AI::new("key", "mock-model", None).base_url("http://127.0.0.1:1");
-    let mut session = Session::new(2);
+    let mut session = Session::default();
     session.ask("Hi").reply("Hello");
     assert!(matches!(
         ai.ask(&mut session).await,
@@ -162,7 +162,7 @@ async fn error_status_is_parsed() {
     let body = json!({"error": {"message": "Incorrect API key", "type": "invalid_request_error", "param": null, "code": "invalid_api_key"}});
     let (base_url, _) = serve(401, "application/json", body.to_string()).await;
     let ai = AI::new("wrong", "mock-model", None).base_url(base_url);
-    let mut session = Session::new(2);
+    let mut session = Session::default();
     match ai.ask(session.ask("Hi")).await {
         Err(Error::Api { status, error }) => {
             assert_eq!(status.unwrap(), 401);
@@ -181,7 +181,7 @@ async fn error_object_with_ok_status() {
     let body = json!({"error": {"message": "Rate limit exceeded", "code": 429}});
     let (base_url, _) = serve(200, "application/json", body.to_string()).await;
     let ai = AI::new("key", "mock-model", None).base_url(base_url);
-    match ai.ask(Session::new(2).ask("Hi")).await {
+    match ai.ask(Session::default().ask("Hi")).await {
         Err(Error::Api { status, error }) => {
             assert_eq!(status.unwrap(), 200);
             assert_eq!(error.message, "Rate limit exceeded");
@@ -194,7 +194,7 @@ async fn error_object_with_ok_status() {
 async fn invalid_response_contains_body() {
     let (base_url, _) = serve(200, "text/html", "<html>Not an API</html>").await;
     let ai = AI::new("key", "mock-model", None).base_url(base_url);
-    match ai.ask(Session::new(2).ask("Hi")).await {
+    match ai.ask(Session::default().ask("Hi")).await {
         Err(Error::InvalidResponse(e)) => assert!(e.contains("Not an API")),
         other => panic!("Expected InvalidResponse, got {other:?}"),
     }
@@ -208,7 +208,7 @@ async fn stream() {
     let ai = AI::new("key", "mock-model", None)
         .base_url(base_url)
         .include_usage(true);
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi");
 
     let mut stream = ai.stream(&mut session).await.unwrap();
@@ -236,7 +236,7 @@ async fn stream_status_not_ok() {
     )
     .await;
     let ai = AI::new("key", "x", None).base_url(base_url);
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     match ai.stream(session.ask("Hi")).await {
         Err(Error::Api { error, .. }) => assert_eq!(error.message, "model 'x' not found"),
         _ => panic!("Expected Api error"),

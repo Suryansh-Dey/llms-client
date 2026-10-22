@@ -1,7 +1,7 @@
 //! `execute_function_calls!` and `execute_function_calls_with_callback!` on a session whose last
 //! reply has tool calls, as the model would send them.
 use open_client::chat::message::{Message, ToolCall};
-use open_client::chat::session::Session;
+use open_client::chat::session::{Session, SlidingWindow};
 use open_client::{execute_function_calls, execute_function_calls_with_callback, openai_function};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -29,7 +29,7 @@ async fn take_photo() -> String {
 
 /// A session whose last reply calls these functions.
 fn session_with_calls(calls: Vec<ToolCall>) -> Session {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Help me");
     session.reply(calls);
     session
@@ -128,7 +128,7 @@ async fn calls_answered_manually_are_skipped() {
 
 #[tokio::test]
 async fn nothing_to_execute() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi");
     session.reply("Hello! How can I help?");
     let results = execute_function_calls!(session, stock);

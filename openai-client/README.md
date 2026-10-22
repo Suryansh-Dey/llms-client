@@ -7,7 +7,7 @@ Types follow the [Chat Completions](https://platform.openai.com/docs/api-referen
 ## Features
 
 - **Any OpenAI compatible endpoint**: `base_url()` and you're done. Responses and errors are parsed leniently, so servers that only partially follow the spec still work.
-- **Automatic Context Management**: Simple `Session` struct to handle conversation history, with custom `OverflowHandler`s (e.g. token budget).
+- **Automatic Context Management**: Simple `Session` struct to handle conversation history, kept in check by a `SlidingWindow` of messages or your own `OverflowHandler` (e.g. token budget).
 - **Procedural Macros**:
     - `#[openai_schema]`: Generate strict mode compatible JSON schemas directly from your Rust structs and enums.
     - `#[openai_function]`: Turn Rust functions into tools with minimal boilerplate.
@@ -22,11 +22,11 @@ Types follow the [Chat Completions](https://platform.openai.com/docs/api-referen
 
 ```rust
 use open_client::chat::AI;
-use open_client::chat::session::Session;
+use open_client::chat::session::{Session, SlidingWindow};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut session = Session::new(10); // Keep last 10 messages
+    let mut session = Session::new(SlidingWindow::new(10)); // Keep last 10 messages
     let ai = AI::new(
         std::env::var("DEEPSEEK_API_KEY")?,
         "deepseek-chat",

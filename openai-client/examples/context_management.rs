@@ -4,7 +4,7 @@
 //! the API reports in `usage`, and forgets the oldest messages when the history grows over budget.
 use open_client::chat::AI;
 use open_client::chat::message::Message;
-use open_client::chat::session::{HistoryTrimmer, OverflowHandler, Session};
+use open_client::chat::session::{HistoryTrimmer, OverflowHandler, Session, SlidingWindow};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -17,6 +17,8 @@ struct TokenBudget {
     max_tokens: usize,
     /// Starts at the common estimate of 4, then learnt from `usage`.
     characters_per_token: f64,
+    /// Also caps the count of messages.
+    window: SlidingWindow,
 }
 impl TokenBudget {
     fn tokens(&self, history: &VecDeque<Message>) -> usize {
@@ -24,14 +26,14 @@ impl TokenBudget {
     }
 }
 impl OverflowHandler for TokenBudget {
-    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool {
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) {
         // Might forget more than one message, e.g. tool calls along with their results.
         // Stops (returns None) instead of forgetting the latest message.
         while self.tokens(history.history()) > self.max_tokens && history.forget_oldest().is_some()
         {
         }
-        // Also run the default sliding window, so `limit` stays a cap on messages.
-        true
+        // Strategies combine by calling each other.
+        self.window.handle(history);
     }
 }
 
@@ -39,9 +41,10 @@ impl OverflowHandler for TokenBudget {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ai = AI::from_env("gpt-5-mini", Some("Answer in 2 sentences.".into()))?;
     let system_prompt_characters = ai.get_system_prompt().map_or(0, str::len);
-    let mut session = Session::new(50).with_overflow_handler(TokenBudget {
+    let mut session = Session::new(TokenBudget {
         max_tokens: 200,
         characters_per_token: 4.0,
+        window: SlidingWindow::new(50),
     });
 
     for prompt in [

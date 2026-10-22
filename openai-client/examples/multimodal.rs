@@ -8,7 +8,7 @@ use open_client::chat::AI;
 use open_client::chat::message::{
     AudioFormat, ContentPart, File, ImageDetail, ImageUrl, InputAudio,
 };
-use open_client::chat::session::Session;
+use open_client::chat::session::{Session, SlidingWindow};
 use open_client::mime;
 
 const CHART: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/lda.png");
@@ -18,7 +18,7 @@ const PDF: &str = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ai = AI::from_env("gpt-5-mini", Some("Answer in one sentence.".into()))?;
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
 
     // A local image, sent as a base64 `data:` URL.
     let chart = ImageUrl::from_path(CHART, mime::IMAGE_PNG).await?;

@@ -1,6 +1,8 @@
 //! `Session` history: messages, tool calls and results, overflow handling and serde.
 use open_client::chat::message::{AssistantMessage, Message, ToolCall, ToolMessage};
-use open_client::chat::session::{HistoryTrimmer, OverflowHandler, Session, SessionError};
+use open_client::chat::session::{
+    HistoryTrimmer, OverflowHandler, Session, SessionError, SlidingWindow,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -24,7 +26,7 @@ fn pending_ids(session: &Session) -> Vec<&str> {
 }
 /// Asks for the weather of two cities, and replies with a call for each.
 fn weather_calls() -> Session {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Weather in Paris and London?");
     session.reply(vec![
         ToolCall::new("call_paris", "get_weather", json!({"city": "Paris"})),
@@ -35,7 +37,7 @@ fn weather_calls() -> Session {
 
 #[test]
 fn every_message_is_kept() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hello").ask("world");
     session.reply("Hi");
     assert_eq!(roles(&session), ["user", "user", "assistant"]);
@@ -47,7 +49,7 @@ fn every_message_is_kept() {
 
 #[test]
 fn tool_results_are_matched_by_id() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     assert!(matches!(
         session.add_tool_result("call_paris", "Sunny"),
         Err(SessionError::NoPendingCall(id)) if id == "call_paris"
@@ -115,7 +117,7 @@ fn sliding_window_forgets_calls_with_their_results() {
     assert_eq!(roles(&session), ["assistant", "user"]);
 
     // With a limit, the same happens automatically
-    let mut session = Session::new(2);
+    let mut session = Session::new(SlidingWindow::new(2));
     session.ask("Weather in Paris?");
     session.reply(ToolCall::new(
         "call_paris",
@@ -131,7 +133,7 @@ fn sliding_window_forgets_calls_with_their_results() {
 
 #[test]
 fn latest_message_is_never_forgotten() {
-    let mut session = Session::new(0);
+    let mut session = Session::new(SlidingWindow::new(0));
     session.ask("Hi");
     assert_eq!(session.len(), 1);
     assert!(session.forget_oldest().is_none());
@@ -142,10 +144,11 @@ fn latest_message_is_never_forgotten() {
 struct CharBudget {
     max_chars: usize,
     forgotten: usize,
-    run_default: bool,
+    /// Also caps the count of messages, if set.
+    window: Option<SlidingWindow>,
 }
 impl OverflowHandler for CharBudget {
-    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) -> bool {
+    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) {
         let chars = |history: &HistoryTrimmer| {
             history
                 .history()
@@ -156,7 +159,9 @@ impl OverflowHandler for CharBudget {
         while chars(history) > self.max_chars && history.forget_oldest().is_some() {
             self.forgotten += 1;
         }
-        self.run_default
+        if let Some(window) = &mut self.window {
+            window.handle(history);
+        }
     }
 }
 
@@ -165,10 +170,10 @@ fn custom_overflow_handler() {
     let budget = CharBudget {
         max_chars: 10,
         forgotten: 0,
-        run_default: false,
+        window: None,
     };
-    // `limit` is ignored when the handler returns false
-    let mut session = Session::new(1).with_overflow_handler(budget.clone());
+    // Only the handler decides what is forgotten
+    let mut session = Session::new(budget.clone());
     session.ask("12345");
     session.reply("12345");
     assert_eq!(session.len(), 2);
@@ -176,9 +181,9 @@ fn custom_overflow_handler() {
     assert_eq!(session.len(), 2);
     assert_eq!(session.overflow_handler().forgotten, 1);
 
-    // Returning true also runs the default sliding window
-    let mut session = Session::new(1).with_overflow_handler(CharBudget {
-        run_default: true,
+    // Strategies combine by calling each other
+    let mut session = Session::new(CharBudget {
+        window: Some(SlidingWindow::new(1)),
         ..budget
     });
     session.ask("1");
@@ -186,21 +191,28 @@ fn custom_overflow_handler() {
     assert_eq!(session.len(), 1);
 
     // Handler state is saved along with the session
-    let mut session = Session::new(10).with_overflow_handler(CharBudget {
+    let mut session = Session::new(CharBudget {
         max_chars: 1,
         forgotten: 7,
-        run_default: false,
+        window: None,
     });
     session.ask("Hi");
     let saved = serde_json::to_string(&session).unwrap();
     let restored: Session<CharBudget> = serde_json::from_str(&saved).unwrap();
     assert_eq!(restored.overflow_handler().forgotten, 7);
     assert_eq!(restored.len(), 1);
+}
 
-    // Taking the handler out restores the default
-    let (session, handler) = restored.take_overflow_handler();
-    assert_eq!(handler.max_chars, 1);
-    assert_eq!(session.limit(), 10);
+#[test]
+fn replacing_overflow_handler() {
+    let mut session = Session::new(SlidingWindow::new(10));
+    session.ask("1").reply("2").ask("3");
+    // The history is kept, and the new handler runs once the next message is added
+    let mut session = session.with_overflow_handler(SlidingWindow::new(2));
+    assert_eq!(session.len(), 3);
+    session.reply("4");
+    assert_eq!(roles(&session), ["user", "assistant"]);
+    assert_eq!(session.message_number(), 4);
 }
 
 #[test]
@@ -208,9 +220,9 @@ fn handler_chosen_at_runtime() {
     let handler: Box<dyn OverflowHandler> = Box::new(CharBudget {
         max_chars: 3,
         forgotten: 0,
-        run_default: false,
+        window: None,
     });
-    let mut session = Session::new(10).with_overflow_handler(handler);
+    let mut session = Session::new(handler);
     session.ask("abc");
     session.reply("def");
     assert_eq!(session.len(), 1);
@@ -221,8 +233,7 @@ fn serde_round_trip() {
     let mut session = weather_calls();
     session.add_tool_result("call_paris", "Sunny").unwrap();
     let saved = serde_json::to_value(&session).unwrap();
-    // The default handler has no state
-    assert_eq!(saved["overflow_handler"], json!(null));
+    assert_eq!(saved["overflow_handler"], json!({"limit": 10}));
     // Messages are saved in the shape of the API
     assert_eq!(
         saved["history"][0],
@@ -245,7 +256,7 @@ fn assistant_message_helpers() {
 
 #[test]
 fn messages_by_position_and_number() {
-    let mut session = Session::new(2);
+    let mut session = Session::new(SlidingWindow::new(2));
     session.ask("first question");
     session.reply("first answer");
     session.ask("second question");
@@ -269,7 +280,7 @@ fn messages_by_position_and_number() {
 
 #[test]
 fn messages_can_be_edited() {
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi").reply("Hello");
     if let Some(Message::Assistant(reply)) = session.last_mut() {
         reply.content = Some("Hey".into());
@@ -287,7 +298,7 @@ fn messages_can_be_edited() {
 #[test]
 fn forget_last_turn() {
     // A prompt of many messages, and its tool calling loop
-    let mut session = Session::new(10);
+    let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi").reply("Hello");
     session.ask("Weather in Paris?").ask("And London?");
     session.reply(vec![
@@ -310,7 +321,7 @@ fn forget_last_turn() {
     assert_eq!(roles(&session), ["user", "assistant"]);
 
     // With no prompt left, the whole history is the last turn
-    let mut session = Session::new(1);
+    let mut session = Session::new(SlidingWindow::new(1));
     session.ask("Hi").reply("Hello");
     assert_eq!(roles(&session), ["assistant"]);
     assert_eq!(session.forget_last_turn().len(), 1);
@@ -321,11 +332,15 @@ fn forget_last_turn() {
 #[test]
 fn defaults() {
     let mut session = Session::default();
-    assert_eq!(session.limit(), 0);
+    assert_eq!(*session.overflow_handler(), SlidingWindow::new(2));
     assert!(session.remember_reply());
-    session.ask("Hi").ask("there");
-    assert_eq!(session.len(), 1, "only the latest message is kept");
+    session.ask("Hi").reply("Hello").ask("Bye");
+    assert_eq!(
+        roles(&session),
+        ["assistant", "user"],
+        "the last 2 are kept"
+    );
 
-    let session = Session::new(2).with_remember_reply(false);
+    let session = Session::default().with_remember_reply(false);
     assert!(!session.remember_reply());
 }
