@@ -216,19 +216,6 @@ fn replacing_overflow_handler() {
 }
 
 #[test]
-fn handler_chosen_at_runtime() {
-    let handler: Box<dyn OverflowHandler> = Box::new(CharBudget {
-        max_chars: 3,
-        forgotten: 0,
-        window: None,
-    });
-    let mut session = Session::new(handler);
-    session.ask("abc");
-    session.reply("def");
-    assert_eq!(session.len(), 1);
-}
-
-#[test]
 fn serde_round_trip() {
     let mut session = weather_calls();
     session.add_tool_result("call_paris", "Sunny").unwrap();
@@ -332,13 +319,13 @@ fn forget_last_turn() {
 #[test]
 fn defaults() {
     let mut session = Session::default();
-    assert_eq!(*session.overflow_handler(), SlidingWindow::new(2));
+    assert_eq!(*session.overflow_handler(), SlidingWindow::new(usize::MAX));
     assert!(session.remember_reply());
     session.ask("Hi").reply("Hello").ask("Bye");
     assert_eq!(
         roles(&session),
-        ["assistant", "user"],
-        "the last 2 are kept"
+        ["user", "assistant", "user"],
+        "all are kept"
     );
 
     let session = Session::default().with_remember_reply(false);

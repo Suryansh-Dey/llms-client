@@ -23,12 +23,6 @@ pub trait OverflowHandler {
     /// using `history.forget_oldest()`, which keeps the history valid.
     fn handle(&mut self, history: &mut HistoryTrimmer<'_>);
 }
-/// Allows choosing the handler at runtime with `Session<Box<dyn OverflowHandler>>`.
-impl<H: OverflowHandler + ?Sized> OverflowHandler for Box<H> {
-    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) {
-        (**self).handle(history)
-    }
-}
 
 /// Default `OverflowHandler`. Keeps the last `limit` messages of any role. More are forgotten at
 /// once if needed to keep the history valid, i.e. tool calls along with their results.
@@ -41,10 +35,10 @@ impl SlidingWindow {
         Self { limit }
     }
 }
-/// A window of 2 messages, i.e. the last prompt and its reply.
+/// No limit, every message is kept.
 impl Default for SlidingWindow {
     fn default() -> Self {
-        Self::new(2)
+        Self::new(usize::MAX)
     }
 }
 impl OverflowHandler for SlidingWindow {
@@ -119,7 +113,7 @@ pub struct Session<H = SlidingWindow> {
     remember_reply: bool,
     overflow_handler: H,
 }
-/// A session keeping the last prompt and its reply, see `SlidingWindow::default()`.
+/// A session keeping every message, see `SlidingWindow::default()`.
 impl Default for Session {
     fn default() -> Self {
         Self::new(SlidingWindow::default())
