@@ -246,7 +246,8 @@ async fn stream() {
         text.push_str(chunk.unwrap().text());
     }
     assert_eq!(text, "Hello");
-    assert_eq!(stream.session().unwrap().len(), 2);
+    drop(stream);
+    assert_eq!(session.len(), 2);
 
     let request = request.await.unwrap();
     assert_eq!(request.body["stream"], true);

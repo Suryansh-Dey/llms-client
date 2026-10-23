@@ -1,6 +1,6 @@
 [package]
 name = "open-client"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 repository = "https://github.com/Suryansh-Dey/llms-client"
 authors = ["Suryansh Dey <suryanshdey@gmail.com>"]
@@ -32,3 +32,48 @@ tokio = ["dep:tokio"]
 reqwest = ["dep:reqwest"]
 rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
+
+# Clients need `reqwest`, and reading files `tokio`.
+[[example]]
+name = "basic_chat"
+required-features = ["reqwest"]
+
+[[example]]
+name = "context_management"
+required-features = ["reqwest"]
+
+[[example]]
+name = "embedding"
+required-features = ["reqwest"]
+
+[[example]]
+name = "function_calling"
+required-features = ["reqwest"]
+
+[[example]]
+name = "manual_function_calling"
+required-features = ["reqwest", "tokio"]
+
+[[example]]
+name = "multimodal"
+required-features = ["reqwest", "tokio"]
+
+[[example]]
+name = "providers"
+required-features = ["reqwest"]
+
+[[example]]
+name = "streaming"
+required-features = ["reqwest"]
+
+[[example]]
+name = "structured_output"
+required-features = ["reqwest"]
+
+[[example]]
+name = "thinking"
+required-features = ["reqwest"]
+
+[[test]]
+name = "live"
+required-features = ["reqwest", "tokio"]

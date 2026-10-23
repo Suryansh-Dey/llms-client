@@ -109,6 +109,7 @@ async fn streamed_text() {
     assert!(usage.unwrap().completion_tokens > 0);
     drop(stream);
     assert_eq!(session.len(), 2);
+    assert_eq!(session.last().unwrap().text(), text);
 }
 
 #[tokio::test]

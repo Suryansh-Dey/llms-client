@@ -1,9 +1,9 @@
 #[cfg(feature = "reqwest")]
 use super::completion::{ChatCompletion, Choice};
 use super::completion::{FinishReason, Usage};
-use super::message::RawMessage;
 #[cfg(feature = "reqwest")]
 use super::message::{AssistantMessage, FunctionCall, ToolCall, generate_call_id};
+use super::message::{RawMessage, RawToolCall, with_value};
 #[cfg(feature = "reqwest")]
 use super::session::{OverflowHandler, Session, SlidingWindow};
 #[cfg(feature = "reqwest")]
@@ -14,6 +14,7 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
+use std::sync::LazyLock;
 #[cfg(feature = "reqwest")]
 use std::{
     pin::Pin,
@@ -33,6 +34,10 @@ pub struct Delta {
     pub reasoning: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tool_calls: Vec<ToolCallDelta>,
+    /// All other fields with a value, e.g. `extra_content` of Gemini, which comes in the last
+    /// delta. Merged into `AssistantMessage::extra`, keeping the first value of each.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 /// Parsed leniently, like `AssistantMessage`.
 impl<'de> Deserialize<'de> for Delta {
@@ -43,33 +48,49 @@ impl<'de> Deserialize<'de> for Delta {
             .tool_calls
             .unwrap_or_default()
             .into_iter()
-            .map(|call| ToolCallDelta {
-                index: call.index,
-                id: call.id,
-                function: FunctionCallDelta {
-                    arguments: call.function.arguments(),
-                    name: call.function.name,
-                },
-            })
+            .map(ToolCallDelta::from_raw)
             .collect();
         Ok(Self {
             content,
             refusal,
             reasoning,
             tool_calls,
+            extra: with_value(raw.extra),
         })
     }
 }
 /// Piece of a tool call. The first piece has `id` and `name`, and `arguments` arrive in pieces.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
 pub struct ToolCallDelta {
     /// Position of the call in the reply, shared by the pieces of a call.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub index: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[serde(default)]
     pub function: FunctionCallDelta,
+    /// All other fields with a value, e.g. `extra_content` of Gemini. Merged into
+    /// `ToolCall::extra`, keeping the first value of each.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+impl ToolCallDelta {
+    fn from_raw(call: RawToolCall) -> Self {
+        Self {
+            index: call.index,
+            id: call.id,
+            function: FunctionCallDelta {
+                arguments: call.function.arguments(),
+                name: call.function.name,
+            },
+            extra: with_value(call.extra),
+        }
+    }
+}
+/// Parsed leniently, like `ToolCall`.
+impl<'de> Deserialize<'de> for ToolCallDelta {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        RawToolCall::deserialize(deserializer).map(Self::from_raw)
+    }
 }
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct FunctionCallDelta {
@@ -109,18 +130,13 @@ pub struct ChatCompletionChunk {
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
-const EMPTY_DELTA: &Delta = &Delta {
-    content: None,
-    refusal: None,
-    reasoning: None,
-    tool_calls: Vec::new(),
-};
+static EMPTY_DELTA: LazyLock<Delta> = LazyLock::new(Delta::default);
 impl ChatCompletionChunk {
     /// Delta of the first choice. Empty if there is no choice.
     pub fn delta(&self) -> &Delta {
         self.choices
             .first()
-            .map_or(EMPTY_DELTA, |choice| &choice.delta)
+            .map_or(&EMPTY_DELTA, |choice| &choice.delta)
     }
     /// Newly received content, or `""` if there is none.
     pub fn text(&self) -> &str {
@@ -172,6 +188,12 @@ impl Reply {
             }
         }
         append(&mut self.message.content, &delta.content);
+        for (key, value) in &delta.extra {
+            self.message
+                .extra
+                .entry(key)
+                .or_insert_with(|| value.clone());
+        }
         append(&mut self.message.reasoning, &delta.reasoning);
         append(&mut self.message.refusal, &delta.refusal);
         for piece in &delta.tool_calls {
@@ -180,14 +202,17 @@ impl Reply {
                 .and_then(|index| self.indexes.iter().position(|i| *i == Some(index)));
             match position {
                 Some(position) => {
-                    let call = &mut self.message.tool_calls[position].function;
-                    if call.name.is_empty()
+                    let call = &mut self.message.tool_calls[position];
+                    if call.function.name.is_empty()
                         && let Some(name) = &piece.function.name
                     {
-                        call.name = name.clone();
+                        call.function.name = name.clone();
                     }
                     if let Some(arguments) = &piece.function.arguments {
-                        call.arguments.push_str(arguments);
+                        call.function.arguments.push_str(arguments);
+                    }
+                    for (key, value) in &piece.extra {
+                        call.extra.entry(key).or_insert_with(|| value.clone());
                     }
                 }
                 None => {
@@ -201,6 +226,7 @@ impl Reply {
                             name: piece.function.name.clone().unwrap_or_default(),
                             arguments: piece.function.arguments.clone().unwrap_or_default(),
                         },
+                        extra: piece.extra.clone(),
                     });
                     self.indexes.push(piece.index);
                 }
@@ -241,22 +267,22 @@ fn find_event_end(buffer: &[u8]) -> Option<(usize, usize)> {
     }
 }
 
-/// Adds the reply to the session with `Session::add_completion()`, then gives the session back.
+/// Adds the reply to the session with `Session::add_completion()`.
 #[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
-type Adding<'a, H> = futures::future::BoxFuture<'a, &'a mut Session<H>>;
+type Adding<'a> = futures::future::BoxFuture<'a, ()>;
 #[cfg(all(feature = "reqwest", target_arch = "wasm32"))]
-type Adding<'a, H> = futures::future::LocalBoxFuture<'a, &'a mut Session<H>>;
+type Adding<'a> = futures::future::LocalBoxFuture<'a, ()>;
 
 /// Streamed reply, returned by `AI::stream()`. Each item is a chunk with the newly received part
 /// of the reply, and `message()` has the reply received so far.
 ///
-/// When the stream ends, the reply is added to the session and its `OverflowHandler` runs, before
-/// the stream returns `None`. If the stream is dropped before that, the reply received so far is
-/// added without running the handler.
+/// When the stream ends, the whole reply is added to the session and its `OverflowHandler` runs,
+/// before the stream returns `None`. If the stream is dropped before that, the reply received so
+/// far is added without running the handler.
 #[cfg(feature = "reqwest")]
 pub struct ChatStream<'a, H: OverflowHandler = SlidingWindow> {
     bytes: ByteStream,
-    /// `None` while the reply is added.
+    /// `None` once the reply is being added.
     session: Option<&'a mut Session<H>>,
     buffer: Vec<u8>,
     /// Set after `[DONE]` or end of the response.
@@ -264,9 +290,9 @@ pub struct ChatStream<'a, H: OverflowHandler = SlidingWindow> {
     reply: Reply,
     /// Set once a chunk with a choice arrives, as only then there is a reply to add.
     received: bool,
-    /// The reply, once the stream ended. Shared with `adding`.
+    adding: Option<Adding<'a>>,
+    /// The whole reply, once the stream ended. Shared with `adding`.
     completion: Option<Arc<ChatCompletion>>,
-    adding: Option<Adding<'a, H>>,
 }
 #[cfg(feature = "reqwest")]
 impl<'a, H: OverflowHandler> ChatStream<'a, H> {
@@ -278,25 +304,20 @@ impl<'a, H: OverflowHandler> ChatStream<'a, H> {
             ended: false,
             reply: Reply::default(),
             received: false,
-            completion: None,
             adding: None,
+            completion: None,
         }
     }
-    /// Reply received so far, with tool calls assembled from their pieces.
+    /// Reply received so far, with tool calls assembled from their pieces. The whole reply once
+    /// the stream ended.
     pub fn message(&self) -> &AssistantMessage {
-        match &self.completion {
-            Some(completion) => completion.message(),
-            None => &self.reply.message,
-        }
-    }
-    /// The session, which has the reply once the stream ended. `None` while the reply is being
-    /// added, i.e. the `OverflowHandler` runs.
-    pub fn session(&self) -> Option<&Session<H>> {
-        self.session.as_deref()
+        self.completion
+            .as_ref()
+            .map_or(&self.reply.message, |completion| completion.message())
     }
     /// Starts adding the reply. False if there is nothing to add, or it was added.
     fn start_adding(&mut self) -> bool {
-        if !self.received || self.completion.is_some() {
+        if !self.received {
             return false;
         }
         let Some(session) = self.session.take() else {
@@ -306,7 +327,6 @@ impl<'a, H: OverflowHandler> ChatStream<'a, H> {
         self.completion = Some(Arc::clone(&completion));
         self.adding = Some(Box::pin(async move {
             session.add_completion(&completion).await;
-            session
         }));
         true
     }
@@ -356,7 +376,7 @@ impl<H: OverflowHandler> Stream for ChatStream<'_, H> {
         let this = self.get_mut();
         loop {
             if let Some(adding) = &mut this.adding {
-                this.session = Some(ready!(adding.as_mut().poll(cx)));
+                ready!(adding.as_mut().poll(cx));
                 this.adding = None;
                 return Poll::Ready(None);
             }
@@ -401,8 +421,8 @@ impl<H: OverflowHandler> Stream for ChatStream<'_, H> {
 #[cfg(feature = "reqwest")]
 impl<H: OverflowHandler> Drop for ChatStream<'_, H> {
     fn drop(&mut self) {
+        // The session is taken once the reply is being added.
         if self.received
-            && self.completion.is_none()
             && let Some(session) = &mut self.session
         {
             session.add_reply(std::mem::take(&mut self.reply.message));

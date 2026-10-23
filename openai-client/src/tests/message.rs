@@ -78,6 +78,7 @@ fn assistant_and_tool_messages() {
                     name: "time".into(),
                     arguments: String::new(),
                 },
+                extra: Default::default(),
             },
         ],
         ..Default::default()
@@ -102,6 +103,59 @@ fn assistant_and_tool_messages() {
         to_json(ToolMessage::new("call_1", "Rainy")),
         json!({"role": "tool", "tool_call_id": "call_1", "content": "Rainy"})
     );
+}
+
+#[test]
+fn assistant_extra_fields_are_kept() {
+    // Like Gemini 3, which signs text replies too
+    let extra_content = json!({"google": {"thought_signature": "c2ln"}});
+    // Like OpenAI, whose fields without a value aren't kept
+    let received = json!({
+        "role": "assistant",
+        "content": "Hi",
+        "refusal": null,
+        "audio": null,
+        "function_call": null,
+        "annotations": [],
+        "extra_content": extra_content
+    });
+    let reply: AssistantMessage = serde_json::from_value(received).unwrap();
+    assert_eq!(
+        reply.extra.len(),
+        1,
+        "`role` isn't kept, as it is always sent"
+    );
+    assert_eq!(reply.extra["extra_content"], extra_content);
+    // Saved along with the session
+    let saved = to_json(reply.clone());
+    assert_eq!(
+        saved,
+        json!({"role": "assistant", "content": "Hi", "extra_content": extra_content})
+    );
+    assert_eq!(
+        serde_json::from_value::<Message>(saved).unwrap(),
+        Message::Assistant(reply)
+    );
+}
+
+#[test]
+fn tool_call_extra_fields_are_sent_back() {
+    // Like Gemini 3, which requires its thought signature back
+    let extra_content = json!({"google": {"thought_signature": "c2ln"}});
+    let received = json!({
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "weather", "arguments": "{}"},
+        "extra_content": extra_content
+    });
+    let call: ToolCall = serde_json::from_value(received.clone()).unwrap();
+    assert_eq!(
+        call.extra.len(),
+        1,
+        "`type` isn't kept, as it is always sent"
+    );
+    assert_eq!(call.extra["extra_content"], extra_content);
+    assert_eq!(serde_json::to_value(&call).unwrap(), received);
 }
 
 #[test]

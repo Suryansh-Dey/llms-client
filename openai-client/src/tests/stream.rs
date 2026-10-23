@@ -101,8 +101,6 @@ async fn reply_so_far_and_reply_on_drop() {
     assert_eq!(stream.message().text(), "");
     stream.next().await.unwrap().unwrap();
     assert_eq!(stream.message().text(), "Hel");
-    // Not added until the stream ends or is dropped
-    assert_eq!(stream.session().unwrap().len(), 1);
     drop(stream);
     assert_eq!(session.len(), 2);
     assert_eq!(reply(&session).text(), "Hel");
@@ -148,14 +146,13 @@ async fn overflow_handler_runs_when_stream_ends() {
     for _ in 0..3 {
         stream.next().await.unwrap().unwrap();
     }
-    // The reply is added, and the session is with the handler while it waits
+    // The stream waits for the handler before it ends, and has the whole reply meanwhile
     assert!(futures::poll!(stream.next()).is_pending());
-    assert!(stream.session().is_none());
     assert_eq!(stream.message().text(), "Hello");
     assert!(stream.next().await.is_none());
-    assert_eq!(stream.session().unwrap().len(), 2);
     assert_eq!(stream.message().text(), "Hello");
     drop(stream);
+    assert_eq!(session.len(), 2);
 
     // It gets the response assembled from the chunks
     let responses = &session.overflow_handler().0;
@@ -222,10 +219,11 @@ async fn parallel_calls_are_merged_by_index() {
         event(json!({"tool_calls": [
             {"index": 1, "id": "call_b", "type": "function", "function": {"name": "get_weather", "arguments": "{\"city\":"}}
         ]})),
-        // Some servers repeat the id and name in every delta
+        // Some servers repeat the id and name in every delta. Other fields keep their first value.
         event(json!({"tool_calls": [
-            {"index": 0, "id": "call_a", "function": {"name": "get_weather", "arguments": "{\"city\": \"Paris\"}"}}
+            {"index": 0, "id": "call_a", "function": {"name": "get_weather", "arguments": "{\"city\": \"Paris\"}"}, "extra": 1}
         ]})),
+        event(json!({"tool_calls": [{"index": 0, "extra": 2}]})),
         event(json!({"tool_calls": [{"index": 1, "function": {"arguments": " \"London\"}"}}]})),
         "data: [DONE]\n\n".to_string(),
     ]
@@ -249,6 +247,11 @@ async fn parallel_calls_are_merged_by_index() {
         ]
     );
     assert_eq!(reply(&session).content, None);
+    assert_eq!(
+        reply(&session).tool_calls[0].extra,
+        json!({"extra": 1}).as_object().unwrap().clone()
+    );
+    assert!(reply(&session).tool_calls[1].extra.is_empty());
     // Complete calls can be answered
     session.add_tool_result("call_b", "Rainy").unwrap();
     session.add_tool_result("call_a", "Sunny").unwrap();
@@ -261,7 +264,7 @@ async fn calls_without_index_are_complete() {
     // Like Gemini, which sends each call whole, without `index`
     let body = [
         event(json!({"tool_calls": [
-            {"id": "a", "function": {"name": "f", "arguments": "{\"x\": 1}"}},
+            {"id": "a", "function": {"name": "f", "arguments": "{\"x\": 1}"}, "extra_content": {"google": {"thought_signature": "c2ln"}}},
             {"id": "b", "function": {"name": "f", "arguments": "{\"x\": 2}"}}
         ]})),
         event(json!({"tool_calls": [{"function": {"name": "g", "arguments": "{}"}}]})),
@@ -277,6 +280,31 @@ async fn calls_without_index_are_complete() {
     // Ids are generated for calls without one, as results refer to calls by id
     assert!(!calls[2].0.is_empty());
     assert_ne!(calls[2].0, calls[3].0);
+    // Other fields are kept, e.g. the thought signature Gemini requires back
+    let calls = &reply(&session).tool_calls;
+    assert_eq!(
+        calls[0].extra["extra_content"]["google"]["thought_signature"],
+        "c2ln"
+    );
+    assert!(calls[1].extra.is_empty());
+}
+
+#[tokio::test]
+async fn extra_fields_are_kept() {
+    // Like Gemini 3, which sends the signature of a text reply in the last delta, and the role in
+    // every delta
+    let signature = json!({"google": {"thought_signature": "c2ln"}});
+    let body = [
+        event(json!({"role": "assistant", "content": "Hi"})),
+        event(json!({"role": "assistant", "extra_content": signature, "audio": null})),
+        event(json!({"role": "assistant", "extra_content": {"google": {}}})),
+    ]
+    .concat();
+    let mut session = session();
+    read(chat_stream(&mut session, vec![body.into_bytes()])).await;
+    let extra = &reply(&session).extra;
+    assert_eq!(extra.len(), 1);
+    assert_eq!(extra["extra_content"], signature, "the first value is kept");
 }
 
 #[tokio::test]

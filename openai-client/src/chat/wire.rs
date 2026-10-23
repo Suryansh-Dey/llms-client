@@ -103,6 +103,8 @@ struct AssistantView<'a> {
     reasoning_content: Option<&'a str>,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     tool_calls: &'a [ToolCall],
+    #[serde(flatten)]
+    extra: &'a Map<String, Value>,
 }
 impl<'a> AssistantView<'a> {
     fn new(reply: &'a AssistantMessage, send_reasoning: bool) -> Self {
@@ -116,6 +118,7 @@ impl<'a> AssistantView<'a> {
             refusal: reply.refusal.as_deref(),
             reasoning_content: reply.reasoning.as_deref().filter(|_| send_reasoning),
             tool_calls: &reply.tool_calls,
+            extra: &reply.extra,
         }
     }
 }

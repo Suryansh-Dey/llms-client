@@ -310,9 +310,9 @@ impl AI {
         Ok(completion)
     }
     /// Sends the session and streams the reply. Each item has the newly received part of it, and
-    /// `ChatStream::message()` has the reply so far. When the stream ends, the reply is added to
-    /// the session and the session's `OverflowHandler` runs. If the stream is dropped before that,
-    /// the reply so far is added without running the handler.
+    /// `ChatStream::message()` has the reply so far. When the stream ends, the whole reply is added
+    /// to the session and the session's `OverflowHandler` runs. If the stream is dropped before
+    /// that, the reply so far is added without running the handler.
     ///
     /// # Errors
     /// `Error::NothingToRespond` if the last message of the session is from the assistant.

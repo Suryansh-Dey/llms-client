@@ -1,8 +1,19 @@
 //! Client for any OpenAI compatible API: OpenAI, DeepSeek, Ollama, vLLM, OpenRouter, Gemini..
 //!
-//! - [`chat`]: chat completions with [`chat::AI`], and conversation history with
-//!   [`chat::session::Session`].
-//! - [`embeddings`]: embeddings with [`embeddings::Embedder`].
+#![cfg_attr(
+    feature = "reqwest",
+    doc = "- [`chat`]: chat completions with [`chat::AI`], and conversation history with
+  [`chat::session::Session`].
+- [`embeddings`]: embeddings with [`embeddings::Embedder`]."
+)]
+#![cfg_attr(
+    not(feature = "reqwest"),
+    doc = "- [`chat`]: types of chat completions, and conversation history with
+  [`chat::session::Session`].
+- [`embeddings`]: types of embeddings.
+
+The clients, `chat::AI` and `embeddings::Embedder`, need the `reqwest` feature."
+)]
 //!
 //! Types follow the [Chat Completions](https://platform.openai.com/docs/api-reference/chat)
 //! specification, so they are sent as they are.

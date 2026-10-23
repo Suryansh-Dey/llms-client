@@ -6,7 +6,7 @@ Types follow the [Chat Completions](https://platform.openai.com/docs/api-referen
 
 ## Features
 
-- **Any OpenAI compatible endpoint**: `base_url()` and you're done. Responses and errors are parsed leniently, so servers that only partially follow the spec still work.
+- **Any OpenAI compatible endpoint**: `base_url()` and you're done. Responses and errors are parsed leniently, so servers that only partially follow the spec still work. Fields of replies outside the spec, like the thought signatures of Gemini 3, are kept and sent back.
 - **Automatic Context Management**: Simple `Session` struct to handle conversation history, kept in check after each reply by a `SlidingWindow` of messages or your own async `OverflowHandler`, e.g. a token budget using the `usage` of the response, or a summary of what is forgotten.
 - **Procedural Macros**:
     - `#[openai_schema]`: Generate strict mode compatible JSON schemas directly from your Rust structs and enums.

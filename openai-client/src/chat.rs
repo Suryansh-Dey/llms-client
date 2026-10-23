@@ -1,4 +1,13 @@
-//! Chat completions (`/chat/completions`): the [`AI`] client, its options, replies and streams.
+#![cfg_attr(
+    feature = "reqwest",
+    doc = "Chat completions (`/chat/completions`): the [`AI`] client, its options, replies and
+streams."
+)]
+#![cfg_attr(
+    not(feature = "reqwest"),
+    doc = "Chat completions (`/chat/completions`): options, replies and streamed chunks. The `AI`
+client needs the `reqwest` feature."
+)]
 //! Messages are in [`message`], and the conversation history in [`session`].
 #[cfg(feature = "reqwest")]
 mod client;

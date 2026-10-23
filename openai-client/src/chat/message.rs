@@ -1,9 +1,9 @@
 //! Messages of a conversation, as defined by the Chat Completions API. They are sent as they are.
 use base64::{Engine, engine::general_purpose::STANDARD};
 use mime::Mime;
-use serde::de::DeserializeOwned;
+use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A message of a conversation. The system prompt isn't one, as `AI` holds it.
@@ -309,6 +309,11 @@ pub struct AssistantMessage {
     pub reasoning: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tool_calls: Vec<ToolCall>,
+    /// All other fields, sent back as they are. E.g. `extra_content` of Gemini, with the
+    /// `thought_signature` it asks back. Fields without a value aren't kept, e.g. `audio: null`
+    /// or `annotations: []` of OpenAI, which rejects fields it doesn't know.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 impl AssistantMessage {
     pub fn new(content: impl Into<String>) -> Self {
@@ -357,6 +362,9 @@ pub(crate) fn generate_call_id() -> String {
 pub struct ToolCall {
     pub id: String,
     pub function: FunctionCall,
+    /// All other fields, sent back as they are. E.g. `extra_content` of Gemini, with the
+    /// `thought_signature` it requires back. Fields without a value aren't kept.
+    pub extra: Map<String, Value>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FunctionCall {
@@ -373,6 +381,7 @@ impl ToolCall {
                 name: name.into(),
                 arguments: arguments.to_string(),
             },
+            extra: Map::new(),
         }
     }
     /// Parses the arguments. Empty arguments are parsed as `{}`.
@@ -390,6 +399,8 @@ impl Serialize for ToolCall {
             id: &'a str,
             r#type: &'static str,
             function: FunctionCall,
+            #[serde(flatten)]
+            extra: &'a Map<String, Value>,
         }
         // Some servers reject empty arguments.
         let arguments = match self.function.arguments.trim() {
@@ -403,6 +414,7 @@ impl Serialize for ToolCall {
                 name: self.function.name.clone(),
                 arguments,
             },
+            extra: &self.extra,
         }
         .serialize(serializer)
     }
@@ -445,6 +457,25 @@ pub(crate) struct RawMessage {
     refusal: Option<String>,
     #[serde(default)]
     pub(crate) tool_calls: Option<Vec<RawToolCall>>,
+    /// Always `assistant`, and sent as such.
+    #[serde(default, rename = "role")]
+    _role: IgnoredAny,
+    #[serde(flatten)]
+    pub(crate) extra: Map<String, Value>,
+}
+/// Fields with a value, i.e. not `null` or empty. Others mean nothing, and are better not sent back,
+/// as some servers reject fields they don't know.
+pub(crate) fn with_value(fields: Map<String, Value>) -> Map<String, Value> {
+    fields
+        .into_iter()
+        .filter(|(_, value)| match value {
+            Value::Null => false,
+            Value::String(text) => !text.is_empty(),
+            Value::Array(values) => !values.is_empty(),
+            Value::Object(fields) => !fields.is_empty(),
+            Value::Bool(_) | Value::Number(_) => true,
+        })
+        .collect()
 }
 impl RawMessage {
     /// `(content, reasoning, refusal)`, each `None` if empty. Content may be a list of parts,
@@ -500,6 +531,7 @@ impl From<RawMessage> for AssistantMessage {
                 .into_iter()
                 .map(RawToolCall::into_tool_call)
                 .collect(),
+            extra: with_value(raw.extra),
         }
     }
 }
@@ -512,6 +544,11 @@ pub(crate) struct RawToolCall {
     pub(crate) id: Option<String>,
     #[serde(default)]
     pub(crate) function: RawFunction,
+    /// Always `function`, and sent as such.
+    #[serde(default, rename = "type")]
+    _type: IgnoredAny,
+    #[serde(flatten)]
+    pub(crate) extra: Map<String, Value>,
 }
 impl RawToolCall {
     /// A missing id is generated.
@@ -525,6 +562,7 @@ impl RawToolCall {
                 arguments: self.function.arguments().unwrap_or_default(),
                 name: self.function.name.unwrap_or_default(),
             },
+            extra: with_value(self.extra),
         }
     }
 }

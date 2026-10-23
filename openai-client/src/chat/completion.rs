@@ -2,6 +2,7 @@ use super::message::AssistantMessage;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::sync::LazyLock;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -63,18 +64,13 @@ pub struct ChatCompletion {
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
-const EMPTY_MESSAGE: &AssistantMessage = &AssistantMessage {
-    content: None,
-    refusal: None,
-    reasoning: None,
-    tool_calls: Vec::new(),
-};
+static EMPTY_MESSAGE: LazyLock<AssistantMessage> = LazyLock::new(AssistantMessage::default);
 impl ChatCompletion {
     /// Reply of the first choice. Empty if there is no choice.
     pub fn message(&self) -> &AssistantMessage {
         self.choices
             .first()
-            .map_or(EMPTY_MESSAGE, |choice| &choice.message)
+            .map_or(&EMPTY_MESSAGE, |choice| &choice.message)
     }
     /// Content of the reply, or `""` if there is none.
     pub fn text(&self) -> &str {

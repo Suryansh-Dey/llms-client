@@ -81,6 +81,22 @@ fn tool_calls_and_results() {
 }
 
 #[test]
+fn assistant_extra_fields_are_sent_back() {
+    let mut session = Session::new(SlidingWindow::new(10));
+    session.ask("Hi");
+    let extra_content = json!({"google": {"thought_signature": "c2ln"}});
+    let mut reply = AssistantMessage::new("Hello");
+    reply
+        .extra
+        .insert("extra_content".into(), extra_content.clone());
+    session.reply(reply);
+    assert_eq!(
+        messages(&session, false)[1],
+        json!({"role": "assistant", "content": "Hello", "extra_content": extra_content})
+    );
+}
+
+#[test]
 fn assistant_content_is_null_only_with_tool_calls() {
     let mut session = Session::new(SlidingWindow::new(10));
     session.ask("Hi");
