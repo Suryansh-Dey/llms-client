@@ -1,8 +1,8 @@
 //! `ChatStream` fed with in-memory chunks, so events can be split at exact byte positions.
 use crate::Error;
 use crate::chat::message::{AssistantMessage, Message};
-use crate::chat::session::{Session, SlidingWindow};
-use crate::chat::{ChatCompletionChunk, ChatStream};
+use crate::chat::session::{HistoryTrimmer, OverflowHandler, Session, SlidingWindow};
+use crate::chat::{ChatCompletion, ChatCompletionChunk, ChatStream, FinishReason};
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::{Value, json};
@@ -12,19 +12,24 @@ fn session() -> Session {
     session.ask("Hi");
     session
 }
-fn chat_stream(session: &mut Session, chunks: Vec<Vec<u8>>) -> ChatStream<'_> {
+fn chat_stream<H: OverflowHandler>(
+    session: &mut Session<H>,
+    chunks: Vec<Vec<u8>>,
+) -> ChatStream<'_, H> {
     let chunks = futures::stream::iter(chunks.into_iter().map(|chunk| Ok(Bytes::from(chunk))));
     ChatStream::new(Box::new(chunks), session)
 }
 /// Reads the whole stream.
-async fn read(mut stream: ChatStream<'_>) -> Vec<Result<ChatCompletionChunk, Error>> {
+async fn read<H: OverflowHandler>(
+    mut stream: ChatStream<'_, H>,
+) -> Vec<Result<ChatCompletionChunk, Error>> {
     let mut items = Vec::new();
     while let Some(item) = stream.next().await {
         items.push(item);
     }
     items
 }
-fn reply(session: &Session) -> &AssistantMessage {
+fn reply<H>(session: &Session<H>) -> &AssistantMessage {
     match session.last() {
         Some(Message::Assistant(reply)) => reply,
         other => panic!("Expected an assistant message, got {other:?}"),
@@ -97,7 +102,7 @@ async fn reply_so_far_and_reply_on_drop() {
     stream.next().await.unwrap().unwrap();
     assert_eq!(stream.message().text(), "Hel");
     // Not added until the stream ends or is dropped
-    assert_eq!(stream.session().len(), 1);
+    assert_eq!(stream.session().unwrap().len(), 1);
     drop(stream);
     assert_eq!(session.len(), 2);
     assert_eq!(reply(&session).text(), "Hel");
@@ -108,17 +113,91 @@ async fn reply_so_far_and_reply_on_drop() {
     assert_eq!(session.len(), 1);
 }
 
+/// Keeps the responses it is called with, after waiting like a request would.
+#[derive(Default)]
+struct Recorder(Vec<ChatCompletion>);
+impl OverflowHandler for Recorder {
+    async fn handle(&mut self, _: &mut HistoryTrimmer<'_>, response: &ChatCompletion) {
+        tokio::task::yield_now().await;
+        self.0.push(response.clone());
+    }
+}
+
+#[tokio::test]
+async fn overflow_handler_runs_when_stream_ends() {
+    let chunk = |choices: Value, usage: Value| {
+        let chunk = json!({"id": "chatcmpl-1", "model": "m", "choices": choices, "usage": usage});
+        format!("data: {chunk}\n\n")
+    };
+    let body = [
+        chunk(
+            json!([{"index": 0, "delta": {"content": "Hel"}}]),
+            Value::Null,
+        ),
+        chunk(
+            json!([{"index": 0, "delta": {"content": "lo"}, "finish_reason": "stop"}]),
+            Value::Null,
+        ),
+        chunk(json!([]), json!({"total_tokens": 7})),
+        "data: [DONE]\n\n".into(),
+    ]
+    .concat();
+    let mut session = Session::new(Recorder::default());
+    session.ask("Hi");
+    let mut stream = chat_stream(&mut session, vec![body.into_bytes()]);
+    for _ in 0..3 {
+        stream.next().await.unwrap().unwrap();
+    }
+    // The reply is added, and the session is with the handler while it waits
+    assert!(futures::poll!(stream.next()).is_pending());
+    assert!(stream.session().is_none());
+    assert_eq!(stream.message().text(), "Hello");
+    assert!(stream.next().await.is_none());
+    assert_eq!(stream.session().unwrap().len(), 2);
+    assert_eq!(stream.message().text(), "Hello");
+    drop(stream);
+
+    // It gets the response assembled from the chunks
+    let responses = &session.overflow_handler().0;
+    assert_eq!(responses.len(), 1);
+    let response = &responses[0];
+    assert_eq!(response.id.as_deref(), Some("chatcmpl-1"));
+    assert_eq!(response.model.as_deref(), Some("m"));
+    assert_eq!(response.text(), "Hello");
+    assert_eq!(response.finish_reason(), Some(&FinishReason::Stop));
+    assert_eq!(response.usage.as_ref().unwrap().total_tokens, 7);
+
+    // Not if the stream is dropped before it ends, or while the handler waits
+    for polls in [1, 2] {
+        session.ask("Again");
+        let mut stream = chat_stream(
+            &mut session,
+            vec![event(json!({"content": "Hi"})).into_bytes()],
+        );
+        for _ in 0..polls {
+            let _ = futures::poll!(stream.next());
+        }
+        drop(stream);
+        assert_eq!(reply(&session).text(), "Hi");
+    }
+    assert_eq!(session.len(), 6);
+    assert_eq!(session.overflow_handler().0.len(), 1);
+}
+
 #[tokio::test]
 async fn remember_reply_false_forgets_prompt() {
     let mut session = session();
     // The whole prompt, even of many messages
     session.ask("there");
     session.set_remember_reply(false);
-    read(chat_stream(
+    let mut stream = chat_stream(
         &mut session,
         vec![event(json!({"content": "Hi"})).into_bytes()],
-    ))
-    .await;
+    );
+    while stream.next().await.is_some() {}
+    // Only the stream has the reply
+    assert_eq!(stream.message().text(), "Hi");
+    drop(stream);
     assert!(session.is_empty());
 }
 

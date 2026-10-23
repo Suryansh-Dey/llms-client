@@ -1,4 +1,5 @@
 //! Conversation history sent with each request, kept in check by an [`OverflowHandler`].
+use super::completion::ChatCompletion;
 use super::message::{AssistantMessage, Message, ToolCall, ToolMessage, UserMessage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -14,14 +15,54 @@ pub enum SessionError {
     InvalidResult(serde_json::Error),
 }
 
-/// Strategy to keep the history in check, e.g. a `SlidingWindow` of messages, or a token budget.
+/// `Send`, except on wasm32 where futures of HTTP requests aren't. Required of
+/// `OverflowHandler`s and their futures, so requests and streams can be sent between threads.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait MaybeSend: Send {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + ?Sized> MaybeSend for T {}
+/// `Send`, except on wasm32 where futures of HTTP requests aren't. Required of
+/// `OverflowHandler`s and their futures, so requests and streams can be sent between threads.
+#[cfg(target_arch = "wasm32")]
+pub trait MaybeSend {}
+#[cfg(target_arch = "wasm32")]
+impl<T: ?Sized> MaybeSend for T {}
+
+/// Strategy to keep the history in check, e.g. a `SlidingWindow` of messages, a token budget
+/// using the `usage` of responses, or a summary of what is forgotten.
+///
+/// It is implemented with an `async fn`, e.g.
+/// ```
+/// # use open_client::chat::ChatCompletion;
+/// # use open_client::chat::session::{HistoryTrimmer, OverflowHandler};
+/// struct TokenBudget {
+///     max_tokens: u64,
+/// }
+/// impl OverflowHandler for TokenBudget {
+///     async fn handle(&mut self, history: &mut HistoryTrimmer<'_>, response: &ChatCompletion) {
+///         let tokens = response.usage.as_ref().map_or(0, |usage| usage.total_tokens);
+///         if tokens > self.max_tokens {
+///             // Keeps the last prompt and its reply
+///             while history.len() > 2 && history.forget_oldest().is_some() {}
+///         }
+///     }
+/// }
+/// ```
 ///
 /// To combine strategies, e.g. a token budget with a cap on messages, hold a `SlidingWindow` in
 /// your handler and call its `handle()` from yours.
-pub trait OverflowHandler {
-    /// Called every time a message is added to the session. Forget messages from the beginning
-    /// using `history.forget_oldest()`, which keeps the history valid.
-    fn handle(&mut self, history: &mut HistoryTrimmer<'_>);
+pub trait OverflowHandler: MaybeSend {
+    /// Called after each reply is added to the session, with the response it came in, see
+    /// `Session::add_completion()`. Forget messages from the beginning using
+    /// `history.forget_oldest()`, which keeps the history valid.
+    ///
+    /// If the request or stream is dropped while this awaits, e.g. a request for a summary, it
+    /// stops there. So change the history after the last `.await`.
+    fn handle(
+        &mut self,
+        history: &mut HistoryTrimmer<'_>,
+        response: &ChatCompletion,
+    ) -> impl Future<Output = ()> + MaybeSend;
 }
 
 /// Default `OverflowHandler`. Keeps the last `limit` messages of any role. More are forgotten at
@@ -42,7 +83,7 @@ impl Default for SlidingWindow {
     }
 }
 impl OverflowHandler for SlidingWindow {
-    fn handle(&mut self, history: &mut HistoryTrimmer<'_>) {
+    async fn handle(&mut self, history: &mut HistoryTrimmer<'_>, _: &ChatCompletion) {
         while history.len() > self.limit && history.forget_oldest().is_some() {}
     }
 }
@@ -69,8 +110,8 @@ fn forget_oldest(history: &mut VecDeque<Message>) -> Option<Message> {
     oldest
 }
 
-/// History as seen by `OverflowHandler::handle()`. It can be read but only shrunk from the
-/// beginning, so a handler can't leave the session in a state the API rejects.
+/// History as seen by `OverflowHandler::handle()`. It can be read and edited, but only shrunk
+/// from the beginning, so messages keep their numbers.
 pub struct HistoryTrimmer<'a> {
     history: &'a mut VecDeque<Message>,
     message_number: usize,
@@ -96,12 +137,20 @@ impl HistoryTrimmer<'_> {
     pub fn forget_oldest(&mut self) -> Option<Message> {
         forget_oldest(self.history)
     }
+    /// Message at `index`, counting from the oldest, e.g. to put a summary of the forgotten
+    /// messages into the prompt now first.
+    ///
+    /// # Warning
+    /// Edits the API rejects are possible, e.g. removing a tool call which has a result.
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Message> {
+        self.history.get_mut(index)
+    }
 }
 
 /// Conversation history, sent with each request. Replies are added to it.
 ///
-/// Its `OverflowHandler` decides what is forgotten, e.g. a `SlidingWindow` of messages or a token
-/// budget.
+/// After each reply, its `OverflowHandler` decides what is forgotten, e.g. a `SlidingWindow` of
+/// messages or a token budget.
 ///
 /// # Serde
 /// The overflow handler is serialized along with the history, so its state is restored too. A
@@ -240,7 +289,7 @@ impl<H> Session<H> {
     pub fn overflow_handler_mut(&mut self) -> &mut H {
         &mut self.overflow_handler
     }
-    /// Replaces the `OverflowHandler`. It first runs when the next message is added, see
+    /// Replaces the `OverflowHandler`. It first runs after the next reply, see
     /// `OverflowHandler::handle()`.
     pub fn with_overflow_handler<T: OverflowHandler>(self, overflow_handler: T) -> Session<T> {
         Session {
@@ -268,8 +317,6 @@ impl<H> Session<H> {
         }
         Vec::new()
     }
-}
-impl<H: OverflowHandler> Session<H> {
     /// Adds a user message, e.g. `session.ask("Hi")`, or one with images:
     /// ```
     /// # use open_client::chat::{message::{ContentPart, ImageUrl}, session::Session};
@@ -326,7 +373,6 @@ impl<H: OverflowHandler> Session<H> {
     }
     /// Adds a reply of the API, as `remember_reply` says. If not remembered, its prompt is removed
     /// too, i.e. the user messages at the end.
-    #[cfg(feature = "reqwest")]
     pub(crate) fn add_reply(&mut self, reply: AssistantMessage) {
         if self.remember_reply {
             self.reply(reply);
@@ -337,9 +383,19 @@ impl<H: OverflowHandler> Session<H> {
     fn add(&mut self, message: Message) {
         self.history.push_back(message);
         self.message_number += 1;
-        self.overflow_handler.handle(&mut HistoryTrimmer {
+    }
+}
+impl<H: OverflowHandler> Session<H> {
+    /// Adds the reply of `response` as `remember_reply` says, then runs the `OverflowHandler`.
+    ///
+    /// `AI::ask()` and `AI::stream()` call it, so it is only needed for responses received
+    /// another way.
+    pub async fn add_completion(&mut self, response: &ChatCompletion) {
+        self.add_reply(response.message().clone());
+        let mut history = HistoryTrimmer {
             history: &mut self.history,
             message_number: self.message_number,
-        });
+        };
+        self.overflow_handler.handle(&mut history, response).await;
     }
 }

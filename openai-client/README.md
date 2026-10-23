@@ -7,7 +7,7 @@ Types follow the [Chat Completions](https://platform.openai.com/docs/api-referen
 ## Features
 
 - **Any OpenAI compatible endpoint**: `base_url()` and you're done. Responses and errors are parsed leniently, so servers that only partially follow the spec still work.
-- **Automatic Context Management**: Simple `Session` struct to handle conversation history, kept in check by a `SlidingWindow` of messages or your own `OverflowHandler` (e.g. token budget).
+- **Automatic Context Management**: Simple `Session` struct to handle conversation history, kept in check after each reply by a `SlidingWindow` of messages or your own async `OverflowHandler`, e.g. a token budget using the `usage` of the response, or a summary of what is forgotten.
 - **Procedural Macros**:
     - `#[openai_schema]`: Generate strict mode compatible JSON schemas directly from your Rust structs and enums.
     - `#[openai_function]`: Turn Rust functions into tools with minimal boilerplate.
@@ -101,7 +101,7 @@ Examples use `AI::from_env()`. Set `OPENAI_API_KEY`, and `OPENAI_BASE_URL` (and 
 - [**Context Management**](examples/context_management.rs): A token budget `OverflowHandler` calibrated with `usage`.
 - [**Embeddings**](examples/embedding.rs): Semantic search.
 
-For WASM environments, disable default features. Messages, `Session` and the macros work without the clients:
+For WASM environments, disable default features. Messages, `Session` and the macros work without the clients. Pass responses received with your own HTTP client to `Session::add_completion()`, which adds the reply and runs the `OverflowHandler`:
 
 ```toml
 [dependencies]

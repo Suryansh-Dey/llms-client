@@ -294,7 +294,8 @@ impl AI {
         }
     }
 
-    /// Sends the session and waits for the whole reply, which is added to the session.
+    /// Sends the session and waits for the whole reply. It is added to the session, then the
+    /// session's `OverflowHandler` runs.
     ///
     /// # Errors
     /// `Error::NothingToRespond` if the last message of the session is from the assistant.
@@ -305,12 +306,13 @@ impl AI {
         Self::check_turn(session)?;
         let response = self.request(session.history(), false).send().await?;
         let completion: ChatCompletion = deserialize_value(&read_json(response).await?)?;
-        session.add_reply(completion.message().clone());
+        session.add_completion(&completion).await;
         Ok(completion)
     }
     /// Sends the session and streams the reply. Each item has the newly received part of it, and
-    /// `ChatStream::message()` has the reply so far. The reply is added to the session when the
-    /// stream ends or is dropped.
+    /// `ChatStream::message()` has the reply so far. When the stream ends, the reply is added to
+    /// the session and the session's `OverflowHandler` runs. If the stream is dropped before that,
+    /// the reply so far is added without running the handler.
     ///
     /// # Errors
     /// `Error::NothingToRespond` if the last message of the session is from the assistant.

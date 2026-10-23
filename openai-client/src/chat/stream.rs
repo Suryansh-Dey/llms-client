@@ -1,3 +1,5 @@
+#[cfg(feature = "reqwest")]
+use super::completion::{ChatCompletion, Choice};
 use super::completion::{FinishReason, Usage};
 use super::message::RawMessage;
 #[cfg(feature = "reqwest")]
@@ -15,7 +17,8 @@ use serde_json::{Map, Value};
 #[cfg(feature = "reqwest")]
 use std::{
     pin::Pin,
-    task::{Context, Poll},
+    sync::Arc,
+    task::{Context, Poll, ready},
 };
 
 /// Newly received part of a streamed reply.
@@ -128,18 +131,40 @@ impl ChatCompletionChunk {
     }
 }
 
-/// Reply assembled from deltas. Pieces of a tool call are matched by `index`, as the official
-/// OpenAI SDKs do: the first `id` and `name` are kept, as some servers repeat them, and `arguments`
-/// are appended. A call without `index` is complete, e.g. Gemini sends calls whole.
+/// Response assembled from chunks, its reply from deltas. Pieces of a tool call are matched by
+/// `index`, as the official OpenAI SDKs do: the first `id` and `name` are kept, as some servers
+/// repeat them, and `arguments` are appended. A call without `index` is complete, e.g. Gemini
+/// sends calls whole.
 #[cfg(feature = "reqwest")]
 #[derive(Default)]
 struct Reply {
+    id: Option<String>,
+    model: Option<String>,
     message: AssistantMessage,
+    finish_reason: Option<FinishReason>,
+    usage: Option<Usage>,
     /// `index` of each call in `message.tool_calls`.
     indexes: Vec<Option<u32>>,
 }
 #[cfg(feature = "reqwest")]
 impl Reply {
+    /// Takes the first id and model, the latest usage, and the first choice. Returns false if the
+    /// chunk has no first choice.
+    fn add_chunk(&mut self, chunk: &ChatCompletionChunk) -> bool {
+        self.id = self.id.take().or_else(|| chunk.id.clone());
+        self.model = self.model.take().or_else(|| chunk.model.clone());
+        if chunk.usage.is_some() {
+            self.usage.clone_from(&chunk.usage);
+        }
+        let Some(choice) = chunk.choices.iter().find(|choice| choice.index == 0) else {
+            return false;
+        };
+        self.apply(&choice.delta);
+        if choice.finish_reason.is_some() {
+            self.finish_reason.clone_from(&choice.finish_reason);
+        }
+        true
+    }
     fn apply(&mut self, delta: &Delta) {
         fn append(text: &mut Option<String>, delta: &Option<String>) {
             if let Some(delta) = delta {
@@ -182,6 +207,21 @@ impl Reply {
             }
         }
     }
+    /// The response, as if it wasn't streamed. Other fields of chunks are not kept.
+    fn into_completion(self) -> ChatCompletion {
+        ChatCompletion {
+            id: self.id,
+            model: self.model,
+            choices: vec![Choice {
+                index: 0,
+                message: self.message,
+                finish_reason: self.finish_reason,
+                logprobs: None,
+            }],
+            usage: self.usage,
+            extra: Map::new(),
+        }
+    }
 }
 
 #[cfg(feature = "reqwest")]
@@ -201,49 +241,74 @@ fn find_event_end(buffer: &[u8]) -> Option<(usize, usize)> {
     }
 }
 
+/// Adds the reply to the session with `Session::add_completion()`, then gives the session back.
+#[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
+type Adding<'a, H> = futures::future::BoxFuture<'a, &'a mut Session<H>>;
+#[cfg(all(feature = "reqwest", target_arch = "wasm32"))]
+type Adding<'a, H> = futures::future::LocalBoxFuture<'a, &'a mut Session<H>>;
+
 /// Streamed reply, returned by `AI::stream()`. Each item is a chunk with the newly received part
-/// of the reply.
+/// of the reply, and `message()` has the reply received so far.
 ///
-/// The whole reply is added to the session when the stream ends, or when it is dropped (with what
-/// was received so far). `message()` has the reply received so far.
+/// When the stream ends, the reply is added to the session and its `OverflowHandler` runs, before
+/// the stream returns `None`. If the stream is dropped before that, the reply received so far is
+/// added without running the handler.
 #[cfg(feature = "reqwest")]
 pub struct ChatStream<'a, H: OverflowHandler = SlidingWindow> {
     bytes: ByteStream,
-    session: &'a mut Session<H>,
+    /// `None` while the reply is added.
+    session: Option<&'a mut Session<H>>,
     buffer: Vec<u8>,
     /// Set after `[DONE]` or end of the response.
     ended: bool,
     reply: Reply,
     /// Set once a chunk with a choice arrives, as only then there is a reply to add.
     received: bool,
-    added: bool,
+    /// The reply, once the stream ended. Shared with `adding`.
+    completion: Option<Arc<ChatCompletion>>,
+    adding: Option<Adding<'a, H>>,
 }
 #[cfg(feature = "reqwest")]
 impl<'a, H: OverflowHandler> ChatStream<'a, H> {
     pub(crate) fn new(bytes: ByteStream, session: &'a mut Session<H>) -> Self {
         Self {
             bytes,
-            session,
+            session: Some(session),
             buffer: Vec::new(),
             ended: false,
             reply: Reply::default(),
             received: false,
-            added: false,
+            completion: None,
+            adding: None,
         }
     }
     /// Reply received so far, with tool calls assembled from their pieces.
     pub fn message(&self) -> &AssistantMessage {
-        &self.reply.message
-    }
-    /// The session, which has the reply once the stream ended.
-    pub fn session(&self) -> &Session<H> {
-        self.session
-    }
-    fn add_reply(&mut self) {
-        if self.received && !self.added {
-            self.added = true;
-            self.session.add_reply(self.reply.message.clone());
+        match &self.completion {
+            Some(completion) => completion.message(),
+            None => &self.reply.message,
         }
+    }
+    /// The session, which has the reply once the stream ended. `None` while the reply is being
+    /// added, i.e. the `OverflowHandler` runs.
+    pub fn session(&self) -> Option<&Session<H>> {
+        self.session.as_deref()
+    }
+    /// Starts adding the reply. False if there is nothing to add, or it was added.
+    fn start_adding(&mut self) -> bool {
+        if !self.received || self.completion.is_some() {
+            return false;
+        }
+        let Some(session) = self.session.take() else {
+            return false;
+        };
+        let completion = Arc::new(std::mem::take(&mut self.reply).into_completion());
+        self.completion = Some(Arc::clone(&completion));
+        self.adding = Some(Box::pin(async move {
+            session.add_completion(&completion).await;
+            session
+        }));
+        true
     }
     /// Parses the data of one event. `None` for an event without data, e.g. a comment.
     fn parse_event(&mut self, event: &[u8]) -> Option<Result<ChatCompletionChunk, Error>> {
@@ -279,10 +344,7 @@ impl<'a, H: OverflowHandler> ChatStream<'a, H> {
                 return Some(Err(Error::InvalidResponse(error)));
             }
         };
-        if let Some(choice) = chunk.choices.iter().find(|choice| choice.index == 0) {
-            self.reply.apply(&choice.delta);
-            self.received = true;
-        }
+        self.received |= self.reply.add_chunk(&chunk);
         Some(Ok(chunk))
     }
 }
@@ -293,6 +355,11 @@ impl<H: OverflowHandler> Stream for ChatStream<'_, H> {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         loop {
+            if let Some(adding) = &mut this.adding {
+                this.session = Some(ready!(adding.as_mut().poll(cx)));
+                this.adding = None;
+                return Poll::Ready(None);
+            }
             if let Some((end_of_event, delimiter_length)) = find_event_end(&this.buffer) {
                 let event: Vec<u8> = this
                     .buffer
@@ -312,7 +379,9 @@ impl<H: OverflowHandler> Stream for ChatStream<'_, H> {
             if this.ended {
                 if this.buffer.iter().all(u8::is_ascii_whitespace) {
                     this.buffer.clear();
-                    this.add_reply();
+                    if this.start_adding() {
+                        continue;
+                    }
                     return Poll::Ready(None);
                 }
                 // The last event may not be followed by a blank line.
@@ -332,6 +401,11 @@ impl<H: OverflowHandler> Stream for ChatStream<'_, H> {
 #[cfg(feature = "reqwest")]
 impl<H: OverflowHandler> Drop for ChatStream<'_, H> {
     fn drop(&mut self) {
-        self.add_reply();
+        if self.received
+            && self.completion.is_none()
+            && let Some(session) = &mut self.session
+        {
+            session.add_reply(std::mem::take(&mut self.reply.message));
+        }
     }
 }

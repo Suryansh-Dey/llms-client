@@ -3,7 +3,7 @@
 use crate::Error;
 use crate::chat::AI;
 use crate::chat::message::{AudioFormat, File, ImageUrl, InputAudio, Message};
-use crate::chat::session::{Session, SlidingWindow};
+use crate::chat::session::{OverflowHandler, Session, SlidingWindow};
 use crate::embeddings::Embedder;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures::StreamExt;
@@ -129,6 +129,32 @@ async fn ask_sends_request_to_base_url() {
 }
 
 #[tokio::test]
+async fn ask_runs_overflow_handler_after_reply() {
+    let (base_url, _) = serve(
+        200,
+        "application/json",
+        completion(json!({"role": "assistant", "content": "Hello!"})),
+    )
+    .await;
+    let mut ai = AI::new("key", "mock-model", None);
+    ai.base_url(base_url);
+    let mut session = Session::new(SlidingWindow::new(1));
+    session.ask("Hi");
+    ai.ask(&mut session).await.unwrap();
+    assert_eq!(session.len(), 1);
+    assert_eq!(session.last().unwrap().text(), "Hello!");
+}
+
+/// Requests and streams can be spawned whatever the handler, as it is `Send`.
+#[allow(dead_code)]
+async fn requests_and_streams_are_send<H: OverflowHandler>(ai: &AI, session: &mut Session<H>) {
+    fn is_send<T: Send>(_: &T) {}
+    is_send(&ai.ask(session));
+    is_send(&ai.stream(session));
+    is_send(&ai.stream(session).await.unwrap());
+}
+
+#[tokio::test]
 async fn no_api_key_sends_no_authorization() {
     let (base_url, request) = serve(
         200,
@@ -220,7 +246,7 @@ async fn stream() {
         text.push_str(chunk.unwrap().text());
     }
     assert_eq!(text, "Hello");
-    assert_eq!(stream.session().len(), 2);
+    assert_eq!(stream.session().unwrap().len(), 2);
 
     let request = request.await.unwrap();
     assert_eq!(request.body["stream"], true);
