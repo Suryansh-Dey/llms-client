@@ -13,6 +13,8 @@ use bytes::Bytes;
 #[cfg(feature = "reqwest")]
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Deserializer, Serialize};
+#[cfg(feature = "reqwest")]
+use serde_json::map::Entry;
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 #[cfg(feature = "reqwest")]
@@ -35,7 +37,8 @@ pub struct Delta {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tool_calls: Vec<ToolCallDelta>,
     /// All other fields with a value, e.g. `extra_content` of Gemini, which comes in the last
-    /// delta. Merged into `AssistantMessage::extra`, keeping the first value of each.
+    /// delta. Merged into `AssistantMessage::extra`: lists are appended, like `reasoning_details`
+    /// of OpenRouter, which comes in pieces, and other values keep the first.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -69,7 +72,7 @@ pub struct ToolCallDelta {
     pub id: Option<String>,
     pub function: FunctionCallDelta,
     /// All other fields with a value, e.g. `extra_content` of Gemini. Merged into
-    /// `ToolCall::extra`, keeping the first value of each.
+    /// `ToolCall::extra` like `Delta::extra`.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -187,13 +190,24 @@ impl Reply {
                 text.get_or_insert_default().push_str(delta);
             }
         }
-        append(&mut self.message.content, &delta.content);
-        for (key, value) in &delta.extra {
-            self.message
-                .extra
-                .entry(key)
-                .or_insert_with(|| value.clone());
+        /// Lists are appended, other values keep the first, as some servers repeat them.
+        fn merge(fields: &mut Map<String, Value>, delta: &Map<String, Value>) {
+            for (key, value) in delta {
+                match fields.entry(key) {
+                    Entry::Vacant(field) => {
+                        field.insert(value.clone());
+                    }
+                    Entry::Occupied(mut field) => {
+                        if let (Value::Array(items), Value::Array(more)) = (field.get_mut(), value)
+                        {
+                            items.extend_from_slice(more);
+                        }
+                    }
+                }
+            }
         }
+        append(&mut self.message.content, &delta.content);
+        merge(&mut self.message.extra, &delta.extra);
         append(&mut self.message.reasoning, &delta.reasoning);
         append(&mut self.message.refusal, &delta.refusal);
         for piece in &delta.tool_calls {
@@ -211,9 +225,7 @@ impl Reply {
                     if let Some(arguments) = &piece.function.arguments {
                         call.function.arguments.push_str(arguments);
                     }
-                    for (key, value) in &piece.extra {
-                        call.extra.entry(key).or_insert_with(|| value.clone());
-                    }
+                    merge(&mut call.extra, &piece.extra);
                 }
                 None => {
                     self.message.tool_calls.push(ToolCall {

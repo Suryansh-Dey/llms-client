@@ -308,6 +308,24 @@ async fn extra_fields_are_kept() {
 }
 
 #[tokio::test]
+async fn extra_lists_are_appended() {
+    // Like OpenRouter, which streams `reasoning_details` in pieces, to be concatenated in order
+    let piece = |text| json!([{"type": "reasoning.text", "text": text, "index": 0}]);
+    let body = [
+        event(json!({"reasoning": "Let me ", "reasoning_details": piece("Let me ")})),
+        event(json!({"reasoning": "think", "reasoning_details": piece("think")})),
+        event(json!({"content": "Done", "reasoning_details": []})),
+    ]
+    .concat();
+    let mut session = session();
+    read(chat_stream(&mut session, vec![body.into_bytes()])).await;
+    let details = &reply(&session).extra["reasoning_details"];
+    assert_eq!(details[0]["text"], "Let me ");
+    assert_eq!(details[1]["text"], "think");
+    assert_eq!(details.as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn reasoning_is_merged() {
     let body = [
         event(json!({"reasoning_content": "Let me "})),
