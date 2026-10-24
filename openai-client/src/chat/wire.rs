@@ -53,28 +53,16 @@ struct Messages<'a>(&'a ChatRequest<'a>);
 impl Serialize for Messages<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let request = self.0;
-        let last_prompt = request
-            .messages
-            .iter()
-            .rposition(|message| matches!(message, Message::User(_)));
         let system = request.system_prompt.map(|content| WireMessage::System {
             role: "system",
             content,
         });
-        let history = request
-            .messages
-            .iter()
-            .enumerate()
-            .map(|(i, message)| match message {
-                Message::Assistant(reply) => {
-                    // As DeepSeek requires, reasoning is only sent in the ongoing tool calling
-                    // loop.
-                    let send_reasoning =
-                        request.send_reasoning && last_prompt.is_none_or(|prompt| i > prompt);
-                    WireMessage::Assistant(AssistantView::new(reply, send_reasoning))
-                }
-                message => WireMessage::Other(message),
-            });
+        let history = request.messages.iter().map(|message| match message {
+            Message::Assistant(reply) => {
+                WireMessage::Assistant(AssistantView::new(reply, request.send_reasoning))
+            }
+            message => WireMessage::Other(message),
+        });
         serializer.collect_seq(system.into_iter().chain(history))
     }
 }
@@ -98,7 +86,7 @@ struct AssistantView<'a> {
     content: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     refusal: Option<&'a str>,
-    /// Not in the OpenAI specification, which is why servers like OpenAI reject it.
+    /// Not in the OpenAI specification. See `AI::send_reasoning()`.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_content: Option<&'a str>,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]

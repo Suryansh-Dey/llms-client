@@ -157,9 +157,10 @@ impl AI {
         self.tool_choice = tool_choice.into();
         self
     }
-    /// If true, reasoning of replies in the ongoing tool calling loop (after the last user
-    /// message) is sent back as `reasoning_content`. Required by DeepSeek in thinking mode with
-    /// tool calls. Default is false, as servers like OpenAI reject unknown fields.
+    /// If true, reasoning of every reply in the history is sent back as `reasoning_content`.
+    /// Required by DeepSeek after tool calls in thinking mode, and by models that keep their
+    /// reasoning across turns, like GLM with preserved thinking and Kimi. Default is false, as the
+    /// field isn't in the OpenAI specification.
     pub fn send_reasoning(&mut self, send_reasoning: bool) -> &mut Self {
         self.send_reasoning = send_reasoning;
         self

@@ -21,8 +21,8 @@ fn population(city: String) -> Result<f64, String> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ai = AI::from_env("deepseek-reasoner", None)?;
     ai.tool(Tool::Function(population::openai_schema()))
-        // DeepSeek needs the reasoning sent back while it is calling tools. Off by default, as
-        // other servers like OpenAI reject it.
+        // DeepSeek needs the reasoning sent back once it has called tools. Off by default, as it
+        // isn't in the OpenAI specification.
         .send_reasoning(true);
     let mut session = Session::new(SlidingWindow::new(20));
 

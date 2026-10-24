@@ -110,7 +110,7 @@ fn assistant_content_is_null_only_with_tool_calls() {
 }
 
 #[test]
-fn reasoning_is_sent_only_in_ongoing_tool_loop() {
+fn reasoning_of_every_turn_is_sent_back() {
     let mut session = Session::new(SlidingWindow::new(10));
     session.ask("1");
     session.reply(AssistantMessage {
@@ -132,7 +132,7 @@ fn reasoning_is_sent_only_in_ongoing_tool_loop() {
     assert_eq!(without[3]["refusal"], "I can't");
 
     let with = messages(&session, true);
-    assert!(with[1].get("reasoning_content").is_none());
+    assert_eq!(with[1]["reasoning_content"], "old thought");
     assert_eq!(with[3]["reasoning_content"], "new thought");
 }
 
