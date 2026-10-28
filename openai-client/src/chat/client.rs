@@ -97,7 +97,7 @@ impl AI {
         system_prompt: Option<String>,
         client: Client,
     ) -> Self {
-        Self {
+        let mut ai = Self {
             client,
             api_key: api_key.into(),
             base_url: DEFAULT_BASE_URL.to_string(),
@@ -107,7 +107,9 @@ impl AI {
             tool_choice: None,
             params: Map::new(),
             send_reasoning: false,
-        }
+        };
+        ai.include_usage(true);
+        ai
     }
 
     /// Base URL of any OpenAI compatible API. Requests are sent to `{base_url}/chat/completions`.
@@ -236,7 +238,8 @@ impl AI {
         self.param("response_format", response_format)
     }
     /// If true, the token usage of a streamed reply is sent as `ChatCompletionChunk::usage`. Sets
-    /// `stream_options`, which is only sent when streaming.
+    /// `stream_options`, which is only sent when streaming. Default is true, as `Compactor`, the
+    /// default `OverflowHandler`, needs it.
     pub fn include_usage(&mut self, include_usage: bool) -> &mut Self {
         let options = self
             .params
@@ -288,6 +291,22 @@ impl AI {
             .json(&body);
         authorize(request, &self.api_key)
     }
+    /// Asks for a reply to `messages` outside any session, e.g. `Compactor`'s summary of them.
+    /// Tool calls are turned off and `response_format` isn't sent, the rest of the request is the
+    /// same, so servers with prompt caching serve its start from cache.
+    pub(crate) async fn ask_without_tools(
+        &self,
+        messages: &VecDeque<Message>,
+    ) -> Result<ChatCompletion, Error> {
+        let mut ai = self.clone();
+        // Rejected without tools.
+        if !ai.tools.is_empty() {
+            ai.tool_choice = Some(ToolChoice::None);
+        }
+        ai.params.remove("response_format");
+        let response = ai.request(messages, false).send().await?;
+        deserialize_value(&read_json(response).await?)
+    }
     fn check_turn<H>(session: &Session<H>) -> Result<(), Error> {
         match session.last() {
             Some(Message::Assistant(_)) => Err(Error::NothingToRespond),
@@ -307,7 +326,7 @@ impl AI {
         Self::check_turn(session)?;
         let response = self.request(session.history(), false).send().await?;
         let completion: ChatCompletion = deserialize_value(&read_json(response).await?)?;
-        session.add_completion(&completion).await;
+        session.add_completion_from(self, &completion).await;
         Ok(completion)
     }
     /// Sends the session and streams the reply. Each item has the newly received part of it, and
@@ -331,7 +350,7 @@ impl AI {
     /// # }
     /// ```
     pub async fn stream<'a, H: OverflowHandler>(
-        &self,
+        &'a self,
         session: &'a mut Session<H>,
     ) -> Result<ChatStream<'a, H>, Error> {
         Self::check_turn(session)?;
@@ -339,6 +358,10 @@ impl AI {
         if !response.status().is_success() {
             return Err(error_from_response(response).await);
         }
-        Ok(ChatStream::new(Box::new(response.bytes_stream()), session))
+        Ok(ChatStream::new(
+            Box::new(response.bytes_stream()),
+            session,
+            self,
+        ))
     }
 }

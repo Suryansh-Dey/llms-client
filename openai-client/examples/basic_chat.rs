@@ -3,7 +3,7 @@
 //! Works with any OpenAI compatible API: set `OPENAI_API_KEY`, and `OPENAI_BASE_URL` for APIs
 //! other than OpenAI (then also change the model). See `providers.rs` to set them in code.
 use open_client::chat::AI;
-use open_client::chat::session::{Session, SlidingWindow};
+use open_client::chat::session::Session;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,8 +11,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "gpt-5-mini",
         Some("You are a travel guide. Answer in 2 sentences.".into()),
     )?;
-    // Keeps the last 10 messages, prompts and replies.
-    let mut session = Session::new(SlidingWindow::new(10));
+    // Has the model summarize the history once it grows past 64,000 tokens, see `Compactor`.
+    let mut session = Session::default();
 
     for prompt in [
         "Suggest one city in Japan to visit in autumn.",

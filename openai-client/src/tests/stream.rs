@@ -1,23 +1,25 @@
 //! `ChatStream` fed with in-memory chunks, so events can be split at exact byte positions.
 use crate::Error;
 use crate::chat::message::{AssistantMessage, Message};
-use crate::chat::session::{HistoryTrimmer, OverflowHandler, Session, SlidingWindow};
-use crate::chat::{ChatCompletion, ChatCompletionChunk, ChatStream, FinishReason};
+use crate::chat::session::{HistoryTrimmer, OverflowHandler, Session};
+use crate::chat::{AI, ChatCompletion, ChatCompletionChunk, ChatStream, FinishReason};
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
 fn session() -> Session {
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("Hi");
     session
 }
+/// Never sends a request, as the chunks are in memory.
+static AI_CLIENT: std::sync::LazyLock<AI> = std::sync::LazyLock::new(|| AI::new("", "", None));
 fn chat_stream<H: OverflowHandler>(
     session: &mut Session<H>,
     chunks: Vec<Vec<u8>>,
 ) -> ChatStream<'_, H> {
     let chunks = futures::stream::iter(chunks.into_iter().map(|chunk| Ok(Bytes::from(chunk))));
-    ChatStream::new(Box::new(chunks), session)
+    ChatStream::new(Box::new(chunks), session, &AI_CLIENT)
 }
 /// Reads the whole stream.
 async fn read<H: OverflowHandler>(

@@ -1,15 +1,15 @@
 //! Prints the reply while it is generated.
 use open_client::chat::AI;
-use open_client::chat::session::{Session, SlidingWindow};
+use open_client::chat::session::Session;
 use open_client::futures::StreamExt;
 use std::io::{Write, stdout};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Optional: token usage is sent too. OpenAI sends it in the last chunk, others in every chunk.
-    let mut ai = AI::from_env("gpt-5-mini", None)?;
-    ai.include_usage(true);
-    let mut session = Session::new(SlidingWindow::new(10));
+    // Token usage is sent too, see `AI::include_usage()`. OpenAI sends it in the last chunk,
+    // others in every chunk.
+    let ai = AI::from_env("gpt-5-mini", None)?;
+    let mut session = Session::default();
     session.ask("Write a short poem about the borrow checker.");
 
     // The stream borrows the session, and adds the reply to it once the stream ends.

@@ -7,7 +7,7 @@ Types follow the [Chat Completions](https://platform.openai.com/docs/api-referen
 ## Features
 
 - **Any OpenAI compatible endpoint**: `base_url()` and you're done. Responses and errors are parsed leniently, so servers that only partially follow the spec still work. Fields of replies outside the spec, like the thought signatures of Gemini 3, are kept and sent back.
-- **Automatic Context Management**: Simple `Session` struct to handle conversation history, kept in check after each reply by a `SlidingWindow` of messages or your own async `OverflowHandler`, e.g. a token budget using the `usage` of the response, or a summary of what is forgotten.
+- **Automatic Context Management**: Simple `Session` struct to handle conversation history. Once it grows past a token limit, the default `Compactor` has the model summarize all but the last turn, so the history only grows between summaries and prompt caching keeps working. Or keep it in check with your own async `OverflowHandler`, e.g. a token budget using the `usage` of the response.
 - **Procedural Macros**:
     - `#[openai_schema]`: Generate strict mode compatible JSON schemas directly from your Rust structs and enums.
     - `#[openai_function]`: Turn Rust functions into tools with minimal boilerplate.
@@ -22,11 +22,12 @@ Types follow the [Chat Completions](https://platform.openai.com/docs/api-referen
 
 ```rust
 use open_client::chat::AI;
-use open_client::chat::session::{Session, SlidingWindow};
+use open_client::chat::session::{Compactor, Session};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut session = Session::new(SlidingWindow::new(10)); // Keep last 10 messages
+    // Summarized above 64,000 tokens, half of the model's context window
+    let mut session = Session::new(Compactor::new(64_000));
     let mut ai = AI::new(
         std::env::var("DEEPSEEK_API_KEY")?,
         "deepseek-chat",
@@ -58,7 +59,7 @@ Common parameters have their own methods, e.g. `temperature()`, `max_completion_
 
 - `open_client::chat`: the `AI` client, its parameters (`Tool`, `ToolChoice`, `ResponseFormat`, `ReasoningEffort`) and responses (`ChatCompletion`, and `ChatCompletionChunk` of a `ChatStream`).
     - `chat::message`: `Message` and its parts: `UserMessage` with `ImageUrl`, `InputAudio` and `File` parts, `AssistantMessage` with `ToolCall`s, and `ToolMessage`.
-    - `chat::session`: `Session`, and `OverflowHandler`s that keep it in check.
+    - `chat::session`: `Session`, and `OverflowHandler`s that keep it in check, like the default `Compactor`.
 - `open_client::embeddings`: the `Embedder` client.
 - `open_client`: `Error`, the macros, and the `OpenAISchema` trait.
 
@@ -101,7 +102,7 @@ Examples use `AI::from_env()`. Set `OPENAI_API_KEY`, and `OPENAI_BASE_URL` (and 
 - [**Context Management**](examples/context_management.rs): A token budget `OverflowHandler` calibrated with `usage`.
 - [**Embeddings**](examples/embedding.rs): Semantic search.
 
-For WASM environments, disable default features. Messages, `Session` and the macros work without the clients. Pass responses received with your own HTTP client to `Session::add_completion()`, which adds the reply and runs the `OverflowHandler`:
+For WASM environments, disable default features. Messages, `Session` and the macros work without the clients. Pass responses received with your own HTTP client to `Session::add_completion()`, which adds the reply and runs the `OverflowHandler`. `Compactor` needs the `AI` client to ask for summaries, so use your own handler there:
 
 ```toml
 [dependencies]

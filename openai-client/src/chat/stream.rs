@@ -1,11 +1,13 @@
 #[cfg(feature = "reqwest")]
+use super::AI;
+#[cfg(feature = "reqwest")]
 use super::completion::{ChatCompletion, Choice};
 use super::completion::{FinishReason, Usage};
 #[cfg(feature = "reqwest")]
 use super::message::{AssistantMessage, FunctionCall, ToolCall, generate_call_id};
 use super::message::{RawMessage, RawToolCall, with_value};
 #[cfg(feature = "reqwest")]
-use super::session::{OverflowHandler, Session, SlidingWindow};
+use super::session::{Compactor, OverflowHandler, Session};
 #[cfg(feature = "reqwest")]
 use crate::{ApiError, Error};
 #[cfg(feature = "reqwest")]
@@ -292,10 +294,12 @@ type Adding<'a> = futures::future::LocalBoxFuture<'a, ()>;
 /// before the stream returns `None`. If the stream is dropped before that, the reply received so
 /// far is added without running the handler.
 #[cfg(feature = "reqwest")]
-pub struct ChatStream<'a, H: OverflowHandler = SlidingWindow> {
+pub struct ChatStream<'a, H: OverflowHandler = Compactor> {
     bytes: ByteStream,
     /// `None` once the reply is being added.
     session: Option<&'a mut Session<H>>,
+    /// Client the reply comes from, for the `OverflowHandler`.
+    ai: &'a AI,
     buffer: Vec<u8>,
     /// Set after `[DONE]` or end of the response.
     ended: bool,
@@ -308,10 +312,11 @@ pub struct ChatStream<'a, H: OverflowHandler = SlidingWindow> {
 }
 #[cfg(feature = "reqwest")]
 impl<'a, H: OverflowHandler> ChatStream<'a, H> {
-    pub(crate) fn new(bytes: ByteStream, session: &'a mut Session<H>) -> Self {
+    pub(crate) fn new(bytes: ByteStream, session: &'a mut Session<H>, ai: &'a AI) -> Self {
         Self {
             bytes,
             session: Some(session),
+            ai,
             buffer: Vec::new(),
             ended: false,
             reply: Reply::default(),
@@ -337,8 +342,9 @@ impl<'a, H: OverflowHandler> ChatStream<'a, H> {
         };
         let completion = Arc::new(std::mem::take(&mut self.reply).into_completion());
         self.completion = Some(Arc::clone(&completion));
+        let ai = self.ai;
         self.adding = Some(Box::pin(async move {
-            session.add_completion(&completion).await;
+            session.add_completion_from(ai, &completion).await;
         }));
         true
     }

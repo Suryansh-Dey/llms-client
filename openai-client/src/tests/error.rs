@@ -1,5 +1,5 @@
 use crate::chat::AI;
-use crate::chat::session::{Session, SlidingWindow};
+use crate::chat::session::Session;
 use crate::embeddings::Embedder;
 use crate::{ApiError, Error};
 use serde_json::json;
@@ -68,7 +68,7 @@ async fn api_key_is_not_in_error() {
         .timeout(std::time::Duration::from_nanos(1))
         .build()
         .unwrap();
-    let mut session = Session::new(SlidingWindow::new(6));
+    let mut session = Session::default();
     let error = AI::with_client(SECRET, "gpt-5-mini", None, client)
         .base_url(format!("https://127.0.0.1:1/{SECRET}"))
         .ask(session.ask("Hi"))

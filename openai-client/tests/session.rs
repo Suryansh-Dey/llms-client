@@ -1,7 +1,7 @@
 //! `Session` history: messages, tool calls and results, overflow handling and serde.
 use open_client::chat::message::{AssistantMessage, Message, ToolCall, ToolMessage};
 use open_client::chat::session::{
-    HistoryTrimmer, OverflowHandler, Session, SessionError, SlidingWindow,
+    Compactor, HistoryTrimmer, OverflowHandler, Session, SessionError,
 };
 use open_client::chat::{ChatCompletion, Choice, Usage};
 use serde::{Deserialize, Serialize};
@@ -43,9 +43,18 @@ fn response(reply: impl Into<AssistantMessage>, total_tokens: u64) -> ChatComple
         extra: Default::default(),
     }
 }
+/// Keeps the last `0` messages, forgetting more if needed to keep the history valid.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct Window(usize);
+impl OverflowHandler for Window {
+    async fn handle(&mut self, history: &mut HistoryTrimmer<'_>, _: &ChatCompletion) {
+        while history.len() > self.0 && history.forget_oldest().is_some() {}
+    }
+}
+
 /// Asks for the weather of two cities, and replies with a call for each.
 fn weather_calls() -> Session {
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("Weather in Paris and London?");
     session.reply(vec![
         ToolCall::new("call_paris", "get_weather", json!({"city": "Paris"})),
@@ -56,7 +65,7 @@ fn weather_calls() -> Session {
 
 #[test]
 fn every_message_is_kept() {
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("Hello").ask("world");
     session.reply("Hi");
     assert_eq!(roles(&session), ["user", "user", "assistant"]);
@@ -68,7 +77,7 @@ fn every_message_is_kept() {
 
 #[test]
 fn tool_results_are_matched_by_id() {
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     assert!(matches!(
         session.add_tool_result("call_paris", "Sunny"),
         Err(SessionError::NoPendingCall(id)) if id == "call_paris"
@@ -119,7 +128,7 @@ fn tool_results_are_matched_by_id() {
 }
 
 #[tokio::test]
-async fn sliding_window_forgets_calls_with_their_results() {
+async fn calls_are_forgotten_with_their_results() {
     let mut session = weather_calls();
     session.add_tool_result("call_paris", "Sunny").unwrap();
     session.add_tool_result("call_london", "Rainy").unwrap();
@@ -135,8 +144,8 @@ async fn sliding_window_forgets_calls_with_their_results() {
     );
     assert_eq!(roles(&session), ["assistant", "user"]);
 
-    // With a limit, the same happens after each reply
-    let mut session = Session::new(SlidingWindow::new(2));
+    // Also by a handler, after each reply
+    let mut session = Session::new(Window(2));
     session.ask("Weather in Paris?");
     let call = ToolCall::new("call_paris", "get_weather", json!({"city": "Paris"}));
     session.add_completion(&response(call, 0)).await;
@@ -151,7 +160,7 @@ async fn sliding_window_forgets_calls_with_their_results() {
 
 #[tokio::test]
 async fn latest_message_is_never_forgotten() {
-    let mut session = Session::new(SlidingWindow::new(0));
+    let mut session = Session::new(Window(0));
     session.ask("Hi");
     session.add_completion(&response("Hello", 0)).await;
     assert_eq!(roles(&session), ["assistant"]);
@@ -164,7 +173,7 @@ struct CharBudget {
     max_chars: usize,
     forgotten: usize,
     /// Also caps the count of messages, if set.
-    window: Option<SlidingWindow>,
+    window: Option<Window>,
 }
 impl OverflowHandler for CharBudget {
     async fn handle(&mut self, history: &mut HistoryTrimmer<'_>, response: &ChatCompletion) {
@@ -203,7 +212,7 @@ async fn custom_overflow_handler() {
 
     // Strategies combine by calling each other
     let mut session = Session::new(CharBudget {
-        window: Some(SlidingWindow::new(1)),
+        window: Some(Window(1)),
         ..budget
     });
     session.ask("1");
@@ -298,10 +307,10 @@ async fn handler_can_summarize_into_first_prompt() {
 
 #[tokio::test]
 async fn replacing_overflow_handler() {
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("1").reply("2").ask("3");
     // The history is kept, and the new handler runs after the next reply
-    let mut session = session.with_overflow_handler(SlidingWindow::new(2));
+    let mut session = session.with_overflow_handler(Window(2));
     assert_eq!(session.len(), 3);
     session.add_completion(&response("4", 0)).await;
     assert_eq!(roles(&session), ["user", "assistant"]);
@@ -313,7 +322,8 @@ fn serde_round_trip() {
     let mut session = weather_calls();
     session.add_tool_result("call_paris", "Sunny").unwrap();
     let saved = serde_json::to_value(&session).unwrap();
-    assert_eq!(saved["overflow_handler"], json!({"limit": 10}));
+    // The default prompt isn't saved, as it is in the code
+    assert_eq!(saved["overflow_handler"], json!({"limit": 64000}));
     // Messages are saved in the shape of the API
     assert_eq!(
         saved["history"][0],
@@ -325,6 +335,18 @@ fn serde_round_trip() {
     assert_eq!(pending_ids(&restored), ["call_london"]);
     assert_eq!(restored.message_number(), 3);
     assert_eq!(restored.history(), session.history());
+    assert_eq!(restored.overflow_handler(), &Compactor::default());
+
+    let compactor = Compactor {
+        prompt: "Summarize".into(),
+        ..Compactor::new(10)
+    };
+    let saved = serde_json::to_value(&compactor).unwrap();
+    assert_eq!(saved, json!({"limit": 10, "prompt": "Summarize"}));
+    assert_eq!(
+        serde_json::from_value::<Compactor>(saved).unwrap(),
+        compactor
+    );
 }
 
 #[test]
@@ -336,7 +358,7 @@ fn assistant_message_helpers() {
 
 #[test]
 fn messages_by_position_and_number() {
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("first question");
     session.reply("first answer");
     session.ask("second question");
@@ -361,7 +383,7 @@ fn messages_by_position_and_number() {
 
 #[test]
 fn messages_can_be_edited() {
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("Hi").reply("Hello");
     if let Some(Message::Assistant(reply)) = session.last_mut() {
         reply.content = Some("Hey".into());
@@ -379,7 +401,7 @@ fn messages_can_be_edited() {
 #[test]
 fn forget_last_turn() {
     // A prompt of many messages, and its tool calling loop
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("Hi").reply("Hello");
     session.ask("Weather in Paris?").ask("And London?");
     session.reply(vec![
@@ -402,7 +424,7 @@ fn forget_last_turn() {
     assert_eq!(roles(&session), ["user", "assistant"]);
 
     // With no prompt left, the whole history is the last turn
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("Hi").reply("Hello");
     session.forget_oldest();
     assert_eq!(roles(&session), ["assistant"]);
@@ -414,7 +436,8 @@ fn forget_last_turn() {
 #[test]
 fn defaults() {
     let mut session = Session::default();
-    assert_eq!(*session.overflow_handler(), SlidingWindow::new(usize::MAX));
+    assert_eq!(*session.overflow_handler(), Compactor::new(64_000));
+    assert!(!session.overflow_handler().prompt.is_empty());
     assert!(session.remember_reply());
     session.ask("Hi").reply("Hello").ask("Bye");
     assert_eq!(

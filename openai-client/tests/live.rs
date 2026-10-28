@@ -6,7 +6,7 @@
 //! `OPENAI_EMBEDDING_MODEL` to `text-embedding-3-small`.
 use futures::StreamExt;
 use open_client::chat::message::{ContentPart, File, ImageUrl};
-use open_client::chat::session::{Session, SlidingWindow};
+use open_client::chat::session::Session;
 use open_client::chat::{AI, ReasoningEffort, ResponseFormat, Tool};
 use open_client::embeddings::Embedder;
 use open_client::{
@@ -61,7 +61,7 @@ fn pdf(text: &str) -> Vec<u8> {
 #[ignore = "needs OPENAI_API_KEY"]
 async fn conversation_keeps_history() {
     let ai = ai(Some("Answer in one short sentence."));
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     ai.ask(session.ask("My name is Ferris.")).await.unwrap();
     let completion = ai.ask(session.ask("What is my name?")).await.unwrap();
     assert!(completion.text().contains("Ferris"));
@@ -92,7 +92,7 @@ async fn structured_output() {
 async fn streamed_text() {
     let mut ai = ai(None);
     ai.include_usage(true);
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     let mut stream = ai
         .stream(session.ask("Count from 1 to 20, separated by spaces."))
         .await
@@ -124,7 +124,7 @@ async fn streamed_parallel_calls() {
     }
     let mut ai = ai(None);
     ai.tool(Tool::Function(get_weather::openai_schema()));
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     session.ask("What is the weather in Paris and in London? Call the function for both.");
     let mut stream = ai.stream(&mut session).await.unwrap();
     while let Some(chunk) = stream.next().await {
@@ -164,7 +164,7 @@ fn secret_number() -> u32 {
 async fn function_calling_loop() {
     let mut ai = ai(None);
     ai.tool(Tool::Function(secret_number::openai_schema()));
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     let mut completion = ai
         .ask(session.ask("What is the secret number plus one?"))
         .await
@@ -224,7 +224,7 @@ async fn image_after_tool_result() {
 
     let mut ai = ai(None);
     ai.tool(Tool::Function(take_screenshot::openai_schema()));
-    let mut session = Session::new(SlidingWindow::new(10));
+    let mut session = Session::default();
     ai.ask(session.ask("Take a screenshot. What kind of chart is on my screen?"))
         .await
         .unwrap();

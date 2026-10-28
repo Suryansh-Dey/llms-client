@@ -1,9 +1,10 @@
-//! Keeping a long conversation within a token budget, with a custom `OverflowHandler`.
+//! Keeping a long conversation within a token budget, with a custom `OverflowHandler` instead of
+//! the default `Compactor`, which has the model summarize it.
 //!
 //! After each reply, the handler learns the tokens per character from the `usage` of the
 //! response, and forgets the oldest messages while the history is estimated over budget.
 use open_client::chat::message::Message;
-use open_client::chat::session::{HistoryTrimmer, OverflowHandler, Session, SlidingWindow};
+use open_client::chat::session::{HistoryTrimmer, OverflowHandler, Session};
 use open_client::chat::{AI, ChatCompletion};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -19,8 +20,6 @@ struct TokenBudget {
     tokens_per_character: f64,
     /// Estimated tokens of the history, after forgetting.
     tokens: u64,
-    /// Also caps the count of messages.
-    window: SlidingWindow,
 }
 impl OverflowHandler for TokenBudget {
     async fn handle(&mut self, history: &mut HistoryTrimmer<'_>, response: &ChatCompletion) {
@@ -40,8 +39,6 @@ impl OverflowHandler for TokenBudget {
         // Stops (returns None) instead of forgetting the latest message.
         while estimate(history) > self.max_tokens && history.forget_oldest().is_some() {}
         self.tokens = estimate(history);
-        // Strategies combine by calling each other.
-        self.window.handle(history, response).await;
     }
 }
 
@@ -52,7 +49,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_tokens: 200,
         tokens_per_character: 0.25,
         tokens: 0,
-        window: SlidingWindow::new(50),
     });
 
     for prompt in [

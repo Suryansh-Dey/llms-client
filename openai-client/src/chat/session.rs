@@ -1,6 +1,10 @@
 //! Conversation history sent with each request, kept in check by an [`OverflowHandler`].
+#[cfg(feature = "reqwest")]
+use super::AI;
 use super::completion::ChatCompletion;
 use super::message::{AssistantMessage, Message, ToolCall, ToolMessage, UserMessage};
+#[cfg(feature = "reqwest")]
+use super::message::{Content, ContentPart};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -28,8 +32,8 @@ pub trait MaybeSend {}
 #[cfg(target_arch = "wasm32")]
 impl<T: ?Sized> MaybeSend for T {}
 
-/// Strategy to keep the history in check, e.g. a `SlidingWindow` of messages, a token budget
-/// using the `usage` of responses, or a summary of what is forgotten.
+/// Strategy to keep the history in check, e.g. the default `Compactor`, which has the model
+/// summarize it, or a token budget using the `usage` of responses.
 ///
 /// It is implemented with an `async fn`, e.g.
 /// ```
@@ -49,8 +53,7 @@ impl<T: ?Sized> MaybeSend for T {}
 /// }
 /// ```
 ///
-/// To combine strategies, e.g. a token budget with a cap on messages, hold a `SlidingWindow` in
-/// your handler and call its `handle()` from yours.
+/// To combine strategies, hold one handler in another and call its `handle()` from yours.
 pub trait OverflowHandler: MaybeSend {
     /// Called after each reply is added to the session, with the response it came in, see
     /// `Session::add_completion()`. Forget messages from the beginning using
@@ -65,26 +68,106 @@ pub trait OverflowHandler: MaybeSend {
     ) -> impl Future<Output = ()> + MaybeSend;
 }
 
-/// Default `OverflowHandler`. Keeps the last `limit` messages of any role. More are forgotten at
-/// once if needed to keep the history valid, i.e. tool calls along with their results.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SlidingWindow {
-    pub limit: usize,
+/// Default `OverflowHandler`. Once a reply takes the conversation past `limit` tokens, the model
+/// summarizes everything before the last prompt, which is then forgotten, and the summary is put
+/// at the start of that prompt. So the last turn is kept whole, and the next summary takes this
+/// one in.
+///
+/// Servers with prompt caching serve most of each request from cache: between summaries, messages
+/// are only added, so each request starts with the one before it, and the summary is asked for
+/// with the same system prompt, tools and history. Forgetting the oldest messages after every
+/// reply would change the start of the history each time instead.
+///
+/// - The size is `usage.total_tokens` of the reply, so a response without `usage` is never
+///   compacted. `AI` asks for it in streams too, see `AI::include_usage()`.
+/// - The summary is asked for after the reply arrived, so a streamed reply is all received first,
+///   and the stream ends once the summary is in.
+/// - It needs the client that got the reply, so only replies of `AI::ask()` and `AI::stream()` are
+///   compacted, not ones added with `Session::add_completion()`.
+/// - If the request for the summary fails, nothing is forgotten, and it is asked for again after
+///   the next reply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Compactor {
+    /// Tokens above which the history is summarized. Half the model's context window leaves room
+    /// for the request for the summary, and for the turns after it.
+    pub limit: u64,
+    /// Asks for the summary. Sent as a user message after the history it summarizes, with tool
+    /// calls turned off. Not saved along with the session while it is the default.
+    #[serde(default = "default_prompt", skip_serializing_if = "is_default_prompt")]
+    pub prompt: String,
 }
-impl SlidingWindow {
-    pub fn new(limit: usize) -> Self {
-        Self { limit }
+const DEFAULT_PROMPT: &str = "Summarize our conversation so far, so that it can go on from your \
+summary alone. Keep what I asked and why, what I told you about myself and my situation, the \
+facts, figures and sources found for me, what was decided, and what is still open, leaving out \
+what didn't come up. If our conversation starts with a summary, keep what still matters from it \
+too. Write only the summary.";
+fn default_prompt() -> String {
+    DEFAULT_PROMPT.into()
+}
+fn is_default_prompt(prompt: &str) -> bool {
+    prompt == DEFAULT_PROMPT
+}
+impl Compactor {
+    /// Summarizes the history above `limit` tokens, with the default prompt.
+    pub fn new(limit: u64) -> Self {
+        Self {
+            limit,
+            prompt: default_prompt(),
+        }
     }
 }
-/// No limit, every message is kept.
-impl Default for SlidingWindow {
+/// Summarizes the history above 64,000 tokens, half of a 128K context window.
+impl Default for Compactor {
     fn default() -> Self {
-        Self::new(usize::MAX)
+        Self::new(64_000)
     }
 }
-impl OverflowHandler for SlidingWindow {
-    async fn handle(&mut self, history: &mut HistoryTrimmer<'_>, _: &ChatCompletion) {
-        while history.len() > self.limit && history.forget_oldest().is_some() {}
+impl OverflowHandler for Compactor {
+    async fn handle(&mut self, history: &mut HistoryTrimmer<'_>, response: &ChatCompletion) {
+        #[cfg(feature = "reqwest")]
+        self.compact(history, response).await;
+        #[cfg(not(feature = "reqwest"))]
+        let _ = (history, response);
+    }
+}
+#[cfg(feature = "reqwest")]
+impl Compactor {
+    async fn compact(&self, history: &mut HistoryTrimmer<'_>, response: &ChatCompletion) {
+        let Some(ai) = history.ai else {
+            return;
+        };
+        let tokens = response
+            .usage
+            .as_ref()
+            .map_or(0, |usage| usage.total_tokens);
+        // Nothing is before the last turn if it starts the history.
+        let start = last_turn_start(history.history());
+        if tokens <= self.limit || start == 0 {
+            return;
+        }
+        let mut earlier: VecDeque<Message> = history.history().range(..start).cloned().collect();
+        earlier.push_back(Message::User(UserMessage::new(self.prompt.clone())));
+        let summary = match ai.ask_without_tools(&earlier).await {
+            Ok(completion) if completion.message().tool_calls.is_empty() => {
+                completion.text().trim().to_owned()
+            }
+            _ => return,
+        };
+        if summary.is_empty() {
+            return;
+        }
+        // Changed only after the last `.await`, see `OverflowHandler::handle()`.
+        let kept = history.len() - start;
+        while history.len() > kept && history.forget_oldest().is_some() {}
+        if let Some(Message::User(prompt)) = history.get_mut(0) {
+            let summary = format!(
+                "<summary_of_earlier_conversation>\n{summary}\n</summary_of_earlier_conversation>"
+            );
+            match &mut prompt.content {
+                Content::Text(text) => text.insert_str(0, &format!("{summary}\n\n")),
+                Content::Parts(parts) => parts.insert(0, ContentPart::Text { text: summary }),
+            }
+        }
     }
 }
 
@@ -94,6 +177,17 @@ fn is_invalid_start(message: &Message) -> bool {
         Message::Tool(_) => true,
         Message::Assistant(reply) => !reply.tool_calls.is_empty(),
         Message::User(_) => false,
+    }
+}
+/// Position of the last prompt: the first of the user messages last in a row. 0 if there is none.
+fn last_turn_start(history: &VecDeque<Message>) -> usize {
+    let is_prompt = |message: &Message| matches!(message, Message::User(_));
+    match history.iter().rposition(is_prompt) {
+        Some(last_prompt) => history
+            .range(..last_prompt)
+            .rposition(|message| !is_prompt(message))
+            .map_or(0, |reply| reply + 1),
+        None => 0,
     }
 }
 fn forget_oldest(history: &mut VecDeque<Message>) -> Option<Message> {
@@ -115,6 +209,9 @@ fn forget_oldest(history: &mut VecDeque<Message>) -> Option<Message> {
 pub struct HistoryTrimmer<'a> {
     history: &'a mut VecDeque<Message>,
     message_number: usize,
+    /// Client the reply came from, to ask for a summary. `None` for `Session::add_completion()`.
+    #[cfg(feature = "reqwest")]
+    ai: Option<&'a AI>,
 }
 impl HistoryTrimmer<'_> {
     pub fn history(&self) -> &VecDeque<Message> {
@@ -149,30 +246,31 @@ impl HistoryTrimmer<'_> {
 
 /// Conversation history, sent with each request. Replies are added to it.
 ///
-/// After each reply, its `OverflowHandler` decides what is forgotten, e.g. a `SlidingWindow` of
-/// messages or a token budget.
+/// After each reply, its `OverflowHandler` decides what is forgotten, e.g. the default
+/// `Compactor`, which has the model summarize it.
 ///
 /// # Serde
 /// The overflow handler is serialized along with the history, so its state is restored too. A
 /// session must be deserialized with the same handler type it was serialized with.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Session<H = SlidingWindow> {
+pub struct Session<H = Compactor> {
     history: VecDeque<Message>,
     message_number: usize,
     remember_reply: bool,
     overflow_handler: H,
 }
-/// A session keeping every message, see `SlidingWindow::default()`.
+/// A session kept in check by `Compactor::default()`.
 impl Default for Session {
     fn default() -> Self {
-        Self::new(SlidingWindow::default())
+        Self::new(Compactor::default())
     }
 }
 impl<H: OverflowHandler> Session<H> {
     /// A session whose history is kept in check by `overflow_handler`.
     ///
     /// # Example
-    /// `Session::new(SlidingWindow::new(10))` keeps the last 10 messages.
+    /// `Session::new(Compactor::new(32_000))` has the model summarize the history above 32,000
+    /// tokens.
     pub fn new(overflow_handler: H) -> Self {
         Self {
             history: VecDeque::new(),
@@ -256,16 +354,7 @@ impl<H> Session<H> {
     ///
     /// Returns the removed messages, oldest first.
     pub fn forget_last_turn(&mut self) -> Vec<Message> {
-        let is_prompt = |message: &Message| matches!(message, Message::User(_));
-        let start = match self.history.iter().rposition(is_prompt) {
-            Some(last_prompt) => self
-                .history
-                .range(..last_prompt)
-                .rposition(|message| !is_prompt(message))
-                .map_or(0, |reply| reply + 1),
-            None => 0,
-        };
-        let removed = self.history.split_off(start);
+        let removed = self.history.split_off(last_turn_start(&self.history));
         self.message_number = self.message_number.saturating_sub(removed.len());
         removed.into()
     }
@@ -389,12 +478,25 @@ impl<H: OverflowHandler> Session<H> {
     /// Adds the reply of `response` as `remember_reply` says, then runs the `OverflowHandler`.
     ///
     /// `AI::ask()` and `AI::stream()` call it, so it is only needed for responses received
-    /// another way.
+    /// another way. The handler gets no client then, so `Compactor` doesn't summarize.
     pub async fn add_completion(&mut self, response: &ChatCompletion) {
         self.add_reply(response.message().clone());
         let mut history = HistoryTrimmer {
             history: &mut self.history,
             message_number: self.message_number,
+            #[cfg(feature = "reqwest")]
+            ai: None,
+        };
+        self.overflow_handler.handle(&mut history, response).await;
+    }
+    /// `add_completion()` of a reply from `ai`, which the handler can ask for a summary.
+    #[cfg(feature = "reqwest")]
+    pub(crate) async fn add_completion_from(&mut self, ai: &AI, response: &ChatCompletion) {
+        self.add_reply(response.message().clone());
+        let mut history = HistoryTrimmer {
+            history: &mut self.history,
+            message_number: self.message_number,
+            ai: Some(ai),
         };
         self.overflow_handler.handle(&mut history, response).await;
     }
