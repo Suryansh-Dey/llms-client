@@ -15,8 +15,6 @@ use bytes::Bytes;
 #[cfg(feature = "reqwest")]
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Deserializer, Serialize};
-#[cfg(feature = "reqwest")]
-use serde_json::map::Entry;
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 #[cfg(feature = "reqwest")]
@@ -39,8 +37,8 @@ pub struct Delta {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tool_calls: Vec<ToolCallDelta>,
     /// All other fields with a value, e.g. `extra_content` of Gemini, which comes in the last
-    /// delta. Merged into `AssistantMessage::extra`: lists are appended, like `reasoning_details`
-    /// of OpenRouter, which comes in pieces, and other values keep the first.
+    /// delta. Merged into `AssistantMessage::extra`: lists are appended and other values keep the
+    /// first. Fragments of a block of OpenRouter's `reasoning_details` are joined into one entry.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -192,22 +190,6 @@ impl Reply {
                 text.get_or_insert_default().push_str(delta);
             }
         }
-        /// Lists are appended, other values keep the first, as some servers repeat them.
-        fn merge(fields: &mut Map<String, Value>, delta: &Map<String, Value>) {
-            for (key, value) in delta {
-                match fields.entry(key) {
-                    Entry::Vacant(field) => {
-                        field.insert(value.clone());
-                    }
-                    Entry::Occupied(mut field) => {
-                        if let (Value::Array(items), Value::Array(more)) = (field.get_mut(), value)
-                        {
-                            items.extend_from_slice(more);
-                        }
-                    }
-                }
-            }
-        }
         append(&mut self.message.content, &delta.content);
         merge(&mut self.message.extra, &delta.extra);
         append(&mut self.message.reasoning, &delta.reasoning);
@@ -262,6 +244,65 @@ impl Reply {
             extra: Map::new(),
         }
     }
+}
+/// Merges fields of a delta. Lists are appended, other values keep the first, as some servers
+/// repeat them. Fragments of a block of `reasoning_details` are joined, see `join_fragment()`.
+#[cfg(feature = "reqwest")]
+fn merge(fields: &mut Map<String, Value>, delta: &Map<String, Value>) {
+    for (key, value) in delta {
+        let Value::Array(more) = value else {
+            fields.entry(key).or_insert_with(|| value.clone());
+            continue;
+        };
+        let Value::Array(items) = fields
+            .entry(key)
+            .or_insert_with(|| Value::Array(Vec::new()))
+        else {
+            continue;
+        };
+        for item in more {
+            let joined = key == "reasoning_details"
+                && items
+                    .last_mut()
+                    .is_some_and(|last| join_fragment(last, item));
+            if !joined {
+                items.push(item.clone());
+            }
+        }
+    }
+}
+/// OpenRouter streams each block of `reasoning_details` in fragments, which repeat the block's
+/// `type`, `index` and `format`. Joins `fragment` into `block` if both have the same `type` and
+/// `index`: its `text`, `summary` or `data` is appended, and other fields fill those missing or
+/// `null`, e.g. `signature` in the last fragment. Returns false if it is another block.
+#[cfg(feature = "reqwest")]
+fn join_fragment(block: &mut Value, fragment: &Value) -> bool {
+    let (Value::Object(block), Value::Object(fragment)) = (block, fragment) else {
+        return false;
+    };
+    let same = |key| {
+        block
+            .get(key)
+            .is_some_and(|value| Some(value) == fragment.get(key))
+    };
+    let other_id = matches!(
+        (block.get("id"), fragment.get("id")),
+        (Some(Value::String(id)), Some(Value::String(other))) if id != other
+    );
+    if !same("type") || !same("index") || other_id {
+        return false;
+    }
+    for (key, value) in fragment {
+        let field = block.entry(key).or_insert(Value::Null);
+        if field.is_null() {
+            field.clone_from(value);
+        } else if let (Value::String(text), Value::String(more)) = (field, value)
+            && matches!(key.as_str(), "text" | "summary" | "data")
+        {
+            text.push_str(more);
+        }
+    }
+    true
 }
 
 #[cfg(feature = "reqwest")]

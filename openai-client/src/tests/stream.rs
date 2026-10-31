@@ -310,21 +310,37 @@ async fn extra_fields_are_kept() {
 }
 
 #[tokio::test]
-async fn extra_lists_are_appended() {
-    // Like OpenRouter, which streams `reasoning_details` in pieces, to be concatenated in order
-    let piece = |text| json!([{"type": "reasoning.text", "text": text, "index": 0}]);
+async fn extra_lists_are_appended_and_reasoning_fragments_joined() {
+    // Like OpenRouter, which streams each block of `reasoning_details` in fragments, and the
+    // signature in the last one
+    let fragment = |kind, index, text: &str, signature: Value| json!({"type": kind, "format": "unknown", "index": index, "text": text, "signature": signature});
+    let citation = json!([{"type": "url_citation", "url": "https://example.com"}]);
     let body = [
-        event(json!({"reasoning": "Let me ", "reasoning_details": piece("Let me ")})),
-        event(json!({"reasoning": "think", "reasoning_details": piece("think")})),
-        event(json!({"content": "Done", "reasoning_details": []})),
+        event(json!({"reasoning_details": [
+            fragment("reasoning.text", 0, "Let ", Value::Null),
+            fragment("reasoning.text", 0, "me ", Value::Null),
+        ]})),
+        event(
+            json!({"reasoning_details": [fragment("reasoning.text", 0, "think", json!("c2ln"))]}),
+        ),
+        event(json!({"reasoning_details": [fragment("reasoning.text", 1, "Again", Value::Null)]})),
+        event(json!({"reasoning_details": [fragment("reasoning.summary", 1, "Sum", Value::Null)]})),
+        event(json!({"content": "Done", "reasoning_details": [], "annotations": citation})),
+        event(json!({"annotations": citation})),
     ]
     .concat();
     let mut session = session();
     read(chat_stream(&mut session, vec![body.into_bytes()])).await;
-    let details = &reply(&session).extra["reasoning_details"];
-    assert_eq!(details[0]["text"], "Let me ");
-    assert_eq!(details[1]["text"], "think");
-    assert_eq!(details.as_array().unwrap().len(), 2);
+    let extra = &reply(&session).extra;
+    assert_eq!(
+        extra["reasoning_details"],
+        json!([
+            fragment("reasoning.text", 0, "Let me think", json!("c2ln")),
+            fragment("reasoning.text", 1, "Again", Value::Null),
+            fragment("reasoning.summary", 1, "Sum", Value::Null),
+        ])
+    );
+    assert_eq!(extra["annotations"].as_array().unwrap().len(), 2);
 }
 
 #[tokio::test]
